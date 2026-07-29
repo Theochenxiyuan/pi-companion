@@ -1,0 +1,282 @@
+{
+  "$schemaVersion": 1,
+  "typography": {
+    "families": {
+      "sans": {
+        "css": "\"Segoe UI Variable Text\", \"Segoe UI\", sans-serif",
+        "wpf": "Segoe UI Variable Text, Segoe UI"
+      },
+      "mono": {
+        "css": "\"Cascadia Mono\", \"Consolas\", monospace",
+        "wpf": "Cascadia Mono, Consolas"
+      },
+      "brand": {
+        "css": "\"Georgia\", serif",
+        "wpf": "Georgia"
+      },
+      "symbol": {
+        "css": "\"Segoe UI Symbol\", sans-serif",
+        "wpf": "Segoe UI Symbol"
+      }
+    },
+    "sizes": {
+      "micro": 12,
+      "caption": 13,
+      "bodySm": 14,
+      "body": 15,
+      "bodyLg": 16,
+      "titleSm": 17,
+      "titleMd": 19,
+      "titleLg": 21,
+      "display": 28,
+      "glyphSm": 16,
+      "glyphMd": 20,
+      "glyphLg": 24,
+      "brandLg": 32
+    },
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "medium": 550,
+      "semibold": 600,
+      "bold": 700
+    },
+    "lineHeights": {
+      "tight": 1.3,
+      "control": 1.35,
+      "body": 1.55,
+      "reading": 1.68
+    }
+  },
+  "dimensions": {
+    "spacing": {
+      "0": 0,
+      "1": 4,
+      "2": 8,
+      "3": 12,
+      "4": 16,
+      "5": 20,
+      "6": 24,
+      "8": 32,
+      "10": 40,
+      "12": 48
+    },
+    "radii": {
+      "xs": 4,
+      "sm": 6,
+      "md": 8,
+      "lg": 10,
+      "xl": 12,
+      "round": 9999
+    },
+    "controlHeights": {
+      "sm": 28,
+      "md": 34,
+      "lg": 40
+    },
+    "focusRing": {
+      "width": 2,
+      "offset": 2
+    },
+    "motionDurations": {
+      "fast": 120,
+      "normal": 180,
+      "slow": 240
+    },
+    "zIndices": {
+      "popover": 1000,
+      "dialog": 1100,
+      "toast": 1200
+    }
+  },
+  "semanticRoles": {
+    "bgCanvas": "tone-1",
+    "bgSidebar": "tone-2",
+    "bgSurface": "tone-3",
+    "bgElevated": "tone-4",
+    "bgHover": "tone-5",
+    "bgActive": "tone-6",
+    "borderSubtle": "tone-6",
+    "borderDefault": "tone-8",
+    "borderStrong": "tone-9",
+    "focusRing": "tone-9",
+    "textPrimary": "tone-15",
+    "textSecondary": "tone-12",
+    "textTertiary": "tone-11",
+    "textDisabled": "tone-10",
+    "textInverse": "tone-1",
+    "textBright": "tone-16",
+    "accent": "tone-16",
+    "accentHover": "tone-14",
+    "scrollbarThumb": "tone-8",
+    "scrollbarThumbHover": "tone-9"
+  },
+  "themes": {
+    "dark": {
+      "colorScheme": "dark",
+      "tones": [
+        "#0b0b0b",
+        "#101010",
+        "#171717",
+        "#1d1d1d",
+        "#242424",
+        "#292929",
+        "#303030",
+        "#3a3a3a",
+        "#555555",
+        "#737373",
+        "#858585",
+        "#a0a0a0",
+        "#bdbdbd",
+        "#d7d7d7",
+        "#ededed",
+        "#f4f4f4"
+      ],
+      "status": {
+        "success": {
+          "surface": "#15271c",
+          "surfaceEmphasis": "#203026",
+          "border": "#3d5144",
+          "solid": "#4f725c",
+          "muted": "#68766d",
+          "default": "#72a987",
+          "emphasis": "#8db99a",
+          "text": "#9bd0ae",
+          "textStrong": "#c7d8cc"
+        },
+        "warning": {
+          "surface": "#17140f",
+          "surfaceEmphasis": "#292317",
+          "border": "#594b2f",
+          "default": "#b59a68",
+          "text": "#d2b477",
+          "textStrong": "#f0cd8e"
+        },
+        "danger": {
+          "surface": "#1b1313",
+          "surfaceEmphasis": "#2b1919",
+          "border": "#593737",
+          "borderStrong": "#744343",
+          "muted": "#9d7b7b",
+          "default": "#b87878",
+          "text": "#d18c8c",
+          "textStrong": "#e4a2a2"
+        },
+        "info": {
+          "surface": "#121d28",
+          "default": "#91a5b8",
+          "text": "#a9c3df"
+        }
+      },
+      "workspace": {
+        "blue": "#60a5fa",
+        "indigo": "#818cf8",
+        "violet": "#a78bfa",
+        "pink": "#f472b6",
+        "red": "#f87171",
+        "orange": "#fb923c",
+        "green": "#4ade80",
+        "teal": "#2dd4bf"
+      },
+      "effects": {
+        "overlaySubtle": "rgb(0 0 0 / 48%)",
+        "overlay": "rgb(0 0 0 / 64%)",
+        "overlayStrong": "rgb(0 0 0 / 72%)",
+        "overlaySolid": "rgb(11 11 11 / 88%)",
+        "highlightSubtle": "rgb(255 255 255 / 7%)",
+        "controlInkMuted": "rgb(20 20 20 / 28%)",
+        "successHalo": "rgb(114 169 135 / 11%)"
+      },
+      "desktop": {
+        "shadow": "#050505",
+        "glassWindow": "#f20b0b0b",
+        "glassPanel": "#b20b0b0b",
+        "accentHalo": "#20f4f4f4",
+        "warningTint": "#22b59a68"
+      }
+    },
+    "light": {
+      "colorScheme": "light",
+      "tones": [
+        "#f7f7f7",
+        "#f2f2f2",
+        "#ffffff",
+        "#fafafa",
+        "#eeeeee",
+        "#e6e6e6",
+        "#dcdcdc",
+        "#c9c9c9",
+        "#b5b5b5",
+        "#8a8a8a",
+        "#737373",
+        "#5f5f5f",
+        "#4c4c4c",
+        "#353535",
+        "#202020",
+        "#111111"
+      ],
+      "status": {
+        "success": {
+          "surface": "#eaf5ed",
+          "surfaceEmphasis": "#dceee2",
+          "border": "#9fc5aa",
+          "solid": "#4f725c",
+          "muted": "#55705e",
+          "default": "#2f6f45",
+          "emphasis": "#3f7d54",
+          "text": "#255d38",
+          "textStrong": "#153d24"
+        },
+        "warning": {
+          "surface": "#fff7e8",
+          "surfaceEmphasis": "#f7ead0",
+          "border": "#d3b46f",
+          "default": "#8b641f",
+          "text": "#6e4f16",
+          "textStrong": "#4b350d"
+        },
+        "danger": {
+          "surface": "#fff0f0",
+          "surfaceEmphasis": "#f8dddd",
+          "border": "#d9a3a3",
+          "borderStrong": "#c27b7b",
+          "muted": "#8a6262",
+          "default": "#a94747",
+          "text": "#873636",
+          "textStrong": "#5e2424"
+        },
+        "info": {
+          "surface": "#edf5fb",
+          "default": "#4e7694",
+          "text": "#315c7b"
+        }
+      },
+      "workspace": {
+        "blue": "#2563eb",
+        "indigo": "#4f46e5",
+        "violet": "#7c3aed",
+        "pink": "#db2777",
+        "red": "#dc2626",
+        "orange": "#c2410c",
+        "green": "#15803d",
+        "teal": "#0f766e"
+      },
+      "effects": {
+        "overlaySubtle": "rgb(0 0 0 / 48%)",
+        "overlay": "rgb(0 0 0 / 64%)",
+        "overlayStrong": "rgb(0 0 0 / 72%)",
+        "overlaySolid": "rgb(11 11 11 / 88%)",
+        "highlightSubtle": "rgb(0 0 0 / 5%)",
+        "controlInkMuted": "rgb(247 247 247 / 34%)",
+        "successHalo": "rgb(47 111 69 / 11%)"
+      },
+      "desktop": {
+        "shadow": "#202020",
+        "glassWindow": "#f2f7f7f7",
+        "glassPanel": "#d9ffffff",
+        "accentHalo": "#20202020",
+        "warningTint": "#228b641f"
+      }
+    }
+  }
+}

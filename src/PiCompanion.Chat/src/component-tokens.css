@@ -1,0 +1,35 @@
+/* Generated from design/design-tokens.json by scripts/generate-design-tokens.mjs. Do not edit by hand. */
+:root {
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-round: 9999px;
+
+  --control-height-sm: 28px;
+  --control-height-md: 34px;
+  --control-height-lg: 40px;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  --motion-duration-fast: 120ms;
+  --motion-duration-normal: 180ms;
+  --motion-duration-slow: 240ms;
+
+  --z-index-popover: 1000;
+  --z-index-dialog: 1100;
+  --z-index-toast: 1200;
+}

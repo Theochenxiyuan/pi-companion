@@ -1,0 +1,134 @@
+<Window x:Class="PiCompanion.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Pi Companion — 智能体对话"
+        Width="1240"
+        Height="820"
+        MinWidth="940"
+        MinHeight="520"
+        SizeToContent="Manual"
+        WindowStartupLocation="CenterScreen"
+        Closing="OnClosing"
+        Loaded="OnLoaded">
+    <Window.Resources>
+        <ContextMenu x:Key="ChatMoreMenu"
+                     x:Shared="False"
+                     MinWidth="176"
+                     Padding="4"
+                     Background="{DynamicResource SurfaceBrush}"
+                     BorderBrush="{DynamicResource StrokeBrush}"
+                     BorderThickness="1">
+            <ContextMenu.Template>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.42" Color="{StaticResource ColorShadow}" />
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True"
+                                    KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </ContextMenu.Template>
+            <ContextMenu.Resources>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Padding" Value="12,8" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                    <Setter Property="Cursor" Value="Hand" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Border x:Name="ItemBorder"
+                                        Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="6">
+                                    <TextBlock Text="{TemplateBinding Header}"
+                                               Foreground="{TemplateBinding Foreground}" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsHighlighted" Value="True">
+                                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ContextMenu.Resources>
+            <MenuItem Header="显示 / 隐藏任务监视器" Click="OnToggleMonitorClick" />
+            <MenuItem Header="退出 Pi Companion"
+                      Margin="0,3,0,0"
+                      Foreground="{DynamicResource DangerBrush}"
+                      Click="OnExitClick" />
+        </ContextMenu>
+    </Window.Resources>
+
+    <Grid Background="{DynamicResource WindowBrush}" ClipToBounds="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="18,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource AccentBrush}">
+                        <TextBlock Text="π" FontFamily="{StaticResource TypographyFontBrand}" FontSize="{StaticResource TypographySizeTitleLarge}" FontWeight="{StaticResource TypographyWeightBold}" Foreground="{DynamicResource TextInverseBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="Pi Companion" Margin="11,0,0,0" VerticalAlignment="Center"
+                               FontWeight="{StaticResource TypographyWeightSemibold}" FontSize="{StaticResource TypographySizeBody}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="智能体对话" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" FontSize="{StaticResource TypographySizeBody}" FontWeight="{StaticResource TypographyWeightSemibold}"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+                <Button Grid.Column="2"
+                        Width="36"
+                        Height="34"
+                        Padding="0"
+                        Content="☰"
+                        FontFamily="{StaticResource TypographyFontSymbol}"
+                        FontSize="{StaticResource TypographySizeTitleMedium}"
+                        ToolTip="更多"
+                        ContextMenu="{StaticResource ChatMoreMenu}"
+                        Style="{StaticResource GhostButton}"
+                        VerticalAlignment="Center"
+                        Click="OnMoreClick" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" MinHeight="0" ClipToBounds="True">
+            <wv2:WebView2 x:Name="ChatWebView"
+                          MinHeight="0"
+                          Visibility="Hidden"
+                          AllowExternalDrop="True" />
+
+            <Border x:Name="LoadingPanel" Background="{DynamicResource WindowBrush}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border Width="54" Height="54" CornerRadius="18" Background="{DynamicResource RaisedBrush}">
+                        <TextBlock Text="π" FontFamily="{StaticResource TypographyFontBrand}" FontSize="{StaticResource TypographySizeBrandLarge}" Foreground="{DynamicResource AccentHoverBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="LoadingTitle" Text="正在准备智能体对话" Margin="0,18,0,0"
+                               FontSize="{StaticResource TypographySizeTitleSmall}" FontWeight="{StaticResource TypographyWeightSemibold}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="LoadingDetail" Text="启动 WebView2 并加载本地 Vue 应用" Margin="0,7,0,0"
+                               FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" />
+                    <Button x:Name="RetryButton" Content="重试" Margin="0,18,0,0" Visibility="Collapsed"
+                            Click="OnRetryClick" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

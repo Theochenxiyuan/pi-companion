@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>PiCompanion.Desktop</AssemblyName>
+    <RootNamespace>PiCompanion.Desktop</RootNamespace>
+    <PiCompanionFormalRelease Condition="'$(PiCompanionFormalRelease)' == ''">false</PiCompanionFormalRelease>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PiCompanion.Application\PiCompanion.Application.csproj" />
+    <ProjectReference Include="..\PiCompanion.Core\PiCompanion.Core.csproj" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="ChatAssets\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.Extension\pi-companion.mjs"
+             Link="PiExtension\pi-companion.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.Extension\pi-settings.mjs"
+             Link="PiExtension\pi-settings.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.Extension\pi-models-config.mjs"
+             Link="PiExtension\pi-models-config.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs"
+             Link="PiExtension\pi-web-search.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs.LEGAL.txt"
+             Link="PiExtension\pi-web-search.mjs.LEGAL.txt"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md"
+             Link="THIRD-PARTY-NOTICES.md"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="ValidateChatAssets" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('ChatAssets\index.html')" Text="Agent Chat assets are missing. Run npm ci and npm run build in src/PiCompanion.Chat first." />
+    <Error Condition="!Exists('..\PiCompanion.Extension\pi-companion.mjs')" Text="Pi Companion Extension is missing." />
+    <Error Condition="!Exists('..\PiCompanion.Extension\pi-settings.mjs')" Text="Pi settings adapter is missing." />
+    <Error Condition="!Exists('..\PiCompanion.Extension\pi-models-config.mjs')" Text="Pi models config adapter is missing." />
+    <Error Condition="!Exists('..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs')" Text="Bundled Web Search Extension is missing. Run npm ci and npm run build in src/PiCompanion.WebSearchExtension first." />
+    <Error Condition="!Exists('..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs.LEGAL.txt')" Text="Bundled Web Search Extension legal notices are missing." />
+    <Error Condition="!Exists('..\..\THIRD-PARTY-NOTICES.md')" Text="Third-party notices are missing." />
+  </Target>
+  <Target Name="ValidateGeneratedDesignTokens" BeforeTargets="BeforeBuild">
+    <Exec Command="node &quot;$(MSBuildProjectDirectory)\..\..\scripts\generate-design-tokens.mjs&quot; --check" />
+  </Target>
+  <Target Name="WriteDevelopmentRuntimeMarker" AfterTargets="Build" Condition="'$(PiCompanionFormalRelease)' != 'true'">
+    <WriteLinesToFile File="$(TargetDir)PiCompanion.Development"
+                      Lines="Development builds use the locally installed Pi runtime."
+                      Overwrite="true" />
+  </Target>
+  <Target Name="RemoveDevelopmentRuntimeMarker" AfterTargets="Build" Condition="'$(PiCompanionFormalRelease)' == 'true'">
+    <Delete Files="$(TargetDir)PiCompanion.Development" />
+  </Target>
+</Project>

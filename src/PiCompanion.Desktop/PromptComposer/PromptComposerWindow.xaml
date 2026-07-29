@@ -1,0 +1,478 @@
+<Window x:Class="PiCompanion.Desktop.PromptComposer.PromptComposerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="快捷任务入口"
+        Width="580"
+        Height="640"
+        MinWidth="580"
+        MinHeight="640"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        PreviewKeyDown="OnPreviewKeyDown"
+        Closing="OnClosing">
+    <Border Margin="10"
+            Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource StrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="14">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.38" Color="{StaticResource ColorShadow}" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="64" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,0,1">
+                <Grid Background="Transparent" MouseLeftButtonDown="OnTitleBarMouseDown">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                        <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource AccentBrush}">
+                            <TextBlock Text="π" FontFamily="{StaticResource TypographyFontBrand}" FontSize="{StaticResource TypographySizeTitleLarge}" FontWeight="{StaticResource TypographyWeightBold}" Foreground="{DynamicResource TextInverseBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Margin="11,0,0,0">
+                            <TextBlock Text="快捷任务入口" FontSize="{StaticResource TypographySizeTitleSmall}" FontWeight="{StaticResource TypographyWeightSemibold}" />
+                            <TextBlock Text="来自资源管理器的目录任务" Margin="0,2,0,0" FontSize="{StaticResource TypographySizeCaption}"
+                                       Foreground="{DynamicResource TextMutedBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Content="×" Style="{StaticResource GhostButton}" Margin="0,0,10,0"
+                            FontSize="{StaticResource TypographySizeTitleLarge}" Click="OnCancelClick" ToolTip="取消 (Esc)" />
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="24,18,24,24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="工作目录" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Border Margin="0,7,0,0" Padding="12,10" CornerRadius="8"
+                            Background="{DynamicResource RaisedBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                        <DockPanel>
+                            <TextBlock Text="⌂" FontSize="{StaticResource TypographySizeBody}" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,9,0" />
+                            <TextBlock x:Name="WorkingDirectoryText" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Margin="0,14,0,0">
+                    <TextBlock Text="附件" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Border Margin="0,7,0,0" Height="52" Padding="10,8" CornerRadius="8"
+                             Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                        <Grid x:Name="AttachmentContentHost"
+                              ClipToBounds="True"
+                              SizeChanged="OnAttachmentHostSizeChanged">
+                            <TextBlock x:Name="EmptyAttachmentText"
+                                       Text="未选择附件，将使用当前目录作为上下文"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextMutedBrush}" />
+                            <Grid x:Name="AttachmentContentPanel" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ItemsControl x:Name="AttachmentItems"
+                                              Grid.Column="0"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"
+                                              ClipToBounds="True">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Margin" Value="0,0,8,0" />
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="AttachmentChip"
+                                                    Width="164"
+                                                    Height="34"
+                                                    Padding="7,4"
+                                                    CornerRadius="6"
+                                                    Background="{DynamicResource RaisedBrush}"
+                                                    BorderBrush="{DynamicResource StrokeBrush}"
+                                                    BorderThickness="1">
+                                                <Border.ToolTip>
+                                                    <ToolTip>
+                                                        <TextBlock Text="{Binding Path}"
+                                                                   MaxWidth="410"
+                                                                   TextWrapping="Wrap" />
+                                                    </ToolTip>
+                                                </Border.ToolTip>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Kind}"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="{StaticResource TypographySizeMicro}"
+                                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding DisplayName}"
+                                                               Margin="7,0,5,0"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               FontSize="{StaticResource TypographySizeCaption}"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="!"
+                                                               Margin="0,0,3,0"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="{StaticResource TypographySizeMicro}"
+                                                               FontWeight="{StaticResource TypographyWeightBold}"
+                                                               Foreground="{DynamicResource DangerBrush}"
+                                                               ToolTip="附件不可用">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <Button Grid.Column="3"
+                                                            Content="×"
+                                                            Tag="{Binding Path}"
+                                                            Width="20"
+                                                            Height="22"
+                                                            Padding="0"
+                                                            Style="{StaticResource GhostButton}"
+                                                            Click="OnRemoveAttachmentClick"
+                                                            ToolTip="移除附件" />
+                                                </Grid>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <Trigger SourceName="AttachmentChip" Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="AttachmentChip" Property="BorderBrush" Value="{DynamicResource StrokeStrongBrush}" />
+                                                </Trigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border x:Name="AttachmentOverflowBadge"
+                                        Grid.Column="1"
+                                        Width="44"
+                                        Height="34"
+                                        Padding="6,4"
+                                        CornerRadius="6"
+                                        Background="{DynamicResource ElevatedBrush}"
+                                        BorderBrush="{DynamicResource StrokeBrush}"
+                                        BorderThickness="1"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="AttachmentOverflowText"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="{StaticResource TypographySizeCaption}"
+                                               FontWeight="{StaticResource TypographyWeightSemibold}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <Grid Grid.Row="2" Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="任务描述" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Grid Grid.Row="1" Margin="0,7,0,0">
+                        <TextBox x:Name="PromptTextBox"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontSize="{StaticResource TypographySizeBody}"
+                                 MinHeight="128"
+                                 Text="" />
+                        <TextBlock Text="Ctrl + Enter 开始任务"
+                                   IsHitTestVisible="False"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,12,10"
+                                   FontSize="{StaticResource TypographySizeCaption}"
+                                   Foreground="{DynamicResource TextMutedBrush}" />
+                        <Popup x:Name="SkillSuggestionPopup"
+                               PlacementTarget="{Binding ElementName=PromptTextBox}"
+                               Placement="Top"
+                               VerticalOffset="-7"
+                               AllowsTransparency="True"
+                               StaysOpen="False">
+                            <Border Width="520"
+                                    MaxHeight="286"
+                                    Padding="6"
+                                    Background="{DynamicResource ElevatedBrush}"
+                                    BorderBrush="{DynamicResource StrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="9">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.34" Color="{StaticResource ColorShadow}" />
+                                </Border.Effect>
+                                <DockPanel>
+                                    <TextBlock x:Name="SkillSuggestionStatus"
+                                               DockPanel.Dock="Bottom"
+                                               Margin="9,6,9,5"
+                                               Text="选择后将插入标准 /skill: 技能调用"
+                                               FontSize="{StaticResource TypographySizeCaption}"
+                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                    <ListBox x:Name="SkillSuggestionList"
+                                             MaxHeight="228"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="9,7" />
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                                                   FontWeight="{StaticResource TypographyWeightSemibold}" />
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   Margin="0,2,0,0"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontSize="{StaticResource TypographySizeCaption}"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding KindLabel}"
+                                                               Margin="12,0,0,0"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="{StaticResource TypographySizeCaption}"
+                                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </DockPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </Grid>
+
+                <Grid Grid.Row="3" Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="模型" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <Grid Margin="0,7,0,0">
+                            <ComboBox x:Name="ModelComboBox"
+                                      Tag="Searchable"
+                                      SelectedValuePath="Reference"
+                                      DropDownOpened="OnModelDropDownOpened"
+                                      DropDownClosed="OnModelDropDownClosed"
+                                      SelectionChanged="OnModelSelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}"
+                                                   ToolTip="{Binding Tooltip}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem"
+                                           BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                        <Setter Property="Focusable" Value="False" />
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                                <ComboBox.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}"
+                                                           Margin="10,8,8,4"
+                                                           FontSize="{StaticResource TypographySizeCaption}"
+                                                           FontWeight="{StaticResource TypographyWeightSemibold}"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ComboBox.GroupStyle>
+                            </ComboBox>
+                            <TextBlock x:Name="ModelPlaceholderText"
+                                       Margin="11,0,30,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="{StaticResource TypographySizeBodySmall}"
+                                       Visibility="Collapsed" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="推理等级" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <Grid Margin="0,7,0,0">
+                            <ComboBox x:Name="ThinkingComboBox" />
+                            <TextBlock x:Name="ThinkingPlaceholderText"
+                                       Margin="11,0,30,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="{StaticResource TypographySizeBodySmall}"
+                                       Visibility="Collapsed" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text="权限" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <ComboBox x:Name="PermissionComboBox"
+                                  Margin="0,7,0,0"
+                                  SelectionChanged="OnPermissionSelectionChanged">
+                            <ComboBoxItem Content="只读" Tag="read-only" />
+                            <ComboBoxItem Content="标准访问"
+                                          Tag="standard"
+                                          ToolTip="允许工作区内普通文件修改；Shell、敏感操作和工作区外访问会请求授权" />
+                            <ComboBoxItem Tag="full-access"
+                                          ToolTip="允许在当前 Windows 用户权限范围内访问任意本地路径并执行命令，不再请求授权">
+                                <TextBlock Text="完全访问" Foreground="{DynamicResource DangerBrush}" />
+                            </ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="4" Margin="0,20,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ValidationText" VerticalAlignment="Center" FontSize="{StaticResource TypographySizeCaption}"
+                               Foreground="{DynamicResource DangerBrush}" />
+                    <Button Grid.Column="1" Content="转到智能体对话" Style="{StaticResource SecondaryButton}"
+                            Click="OnOpenChatClick" />
+                    <Button Grid.Column="3" Content="开始任务  ↵" Foreground="{DynamicResource TextInverseBrush}"
+                            IsDefault="True" Click="OnStartClick" />
+                </Grid>
+            </Grid>
+
+            <Thumb Grid.Row="1"
+                   Width="20"
+                   Height="20"
+                   Margin="0,0,6,6"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Bottom"
+                   Cursor="SizeNWSE"
+                   Panel.ZIndex="10"
+                   DragDelta="OnResizeGripDragDelta">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent">
+                            <Path Data="M 5,15 L 15,5 M 10,15 L 15,10"
+                                  Stroke="{DynamicResource TextMutedBrush}"
+                                  StrokeThickness="1.25"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round" />
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+
+            <Border x:Name="FullAccessConfirmationOverlay"
+                    Grid.RowSpan="2"
+                    Panel.ZIndex="100"
+                    Background="{DynamicResource GlassPanelBrush}"
+                    CornerRadius="13"
+                    Visibility="Collapsed">
+                <Border Width="430"
+                        Padding="22"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource ElevatedBrush}"
+                        BorderBrush="{DynamicResource DangerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="24" ShadowDepth="7" Opacity="0.46" Color="{StaticResource ColorShadow}" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <Border Width="34"
+                                Height="34"
+                                HorizontalAlignment="Left"
+                                Background="{DynamicResource DangerSurfaceBrush}"
+                                BorderBrush="{DynamicResource DangerBrush}"
+                                BorderThickness="1"
+                                CornerRadius="17">
+                            <TextBlock Text="!"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource DangerBrush}"
+                                       FontSize="{StaticResource TypographySizeTitleSmall}"
+                                       FontWeight="{StaticResource TypographyWeightBold}" />
+                        </Border>
+                        <TextBlock Margin="0,14,0,0"
+                                   Text="启用完全访问？"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   FontSize="{StaticResource TypographySizeTitleSmall}"
+                                   FontWeight="{StaticResource TypographyWeightSemibold}" />
+                        <TextBlock Margin="0,9,0,0"
+                                   Text="此任务将能在当前 Windows 用户权限范围内访问任意本地路径并执行命令，不再逐次请求授权。"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                   LineHeight="20" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Text="这不会获得管理员权限，并且只对即将发送的这个任务生效。请仅在你信任任务内容时启用。"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="{StaticResource TypographySizeCaption}"
+                                   LineHeight="19" />
+                        <StackPanel Margin="0,20,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button Content="取消"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,0"
+                                    Click="OnCancelFullAccessClick" />
+                            <Button Content="启用完全访问"
+                                    Background="{DynamicResource DangerBrush}"
+                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                    Click="OnConfirmFullAccessClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

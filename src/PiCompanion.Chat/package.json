@@ -1,0 +1,33 @@
+{
+  "name": "@pi-companion/chat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run tokens:check && vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:acceptance": "vitest run",
+    "tokens:generate": "node ../../scripts/generate-design-tokens.mjs",
+    "tokens:check": "node ../../scripts/generate-design-tokens.mjs --check"
+  },
+  "dependencies": {
+    "@he-tree/vue": "2.10.5",
+    "dompurify": "3.4.12",
+    "marked": "18.0.6",
+    "pinia": "4.0.2",
+    "reka-ui": "2.10.1",
+    "vue": "3.5.40"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.1.5",
+    "vitest": "^4.1.10",
+    "vue-tsc": "3.3.7"
+  }
+}

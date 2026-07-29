@@ -1,0 +1,37 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.0.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiCompanion.Core", "src\PiCompanion.Core\PiCompanion.Core.csproj", "{1A4D7BF8-4116-4425-B271-BD9CE57C07F5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiCompanion.Application", "src\PiCompanion.Application\PiCompanion.Application.csproj", "{F6EBDF9E-B496-4335-9D07-035E6DD7AD49}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiCompanion.Desktop", "src\PiCompanion.Desktop\PiCompanion.Desktop.csproj", "{7C433F48-8389-4AF7-872B-D0561543821B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiCompanion.Core.Tests", "tests\PiCompanion.Core.Tests\PiCompanion.Core.Tests.csproj", "{DD2838BC-861A-4EA3-808E-A9462AC14EBF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1A4D7BF8-4116-4425-B271-BD9CE57C07F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A4D7BF8-4116-4425-B271-BD9CE57C07F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A4D7BF8-4116-4425-B271-BD9CE57C07F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A4D7BF8-4116-4425-B271-BD9CE57C07F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6EBDF9E-B496-4335-9D07-035E6DD7AD49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6EBDF9E-B496-4335-9D07-035E6DD7AD49}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6EBDF9E-B496-4335-9D07-035E6DD7AD49}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6EBDF9E-B496-4335-9D07-035E6DD7AD49}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C433F48-8389-4AF7-872B-D0561543821B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C433F48-8389-4AF7-872B-D0561543821B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C433F48-8389-4AF7-872B-D0561543821B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C433F48-8389-4AF7-872B-D0561543821B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD2838BC-861A-4EA3-808E-A9462AC14EBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD2838BC-861A-4EA3-808E-A9462AC14EBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD2838BC-861A-4EA3-808E-A9462AC14EBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD2838BC-861A-4EA3-808E-A9462AC14EBF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,27 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/node_modules/
+src/PiCompanion.Desktop/ChatAssets/
+src/PiCompanion.WebSearchExtension/dist/
+.vs/
+.idea/
+*.user
+*.suo
+*.log
+artifacts/
+
+# Local runtimes, state, credentials, and packaging secrets
+**/PiRuntime/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pfx
+*.p12
+*.pem
+*.key
