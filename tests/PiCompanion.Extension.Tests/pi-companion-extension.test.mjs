@@ -747,7 +747,8 @@ test("permission modes enforce read-only, standard, and full access semantics", 
 			deniedOutsideUi.context,
 		)).block, true);
 		assert.match(outsidePrompt, /工作区外访问请求/u);
-		assert.match(outsidePrompt, new RegExp(outsideTarget.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+		const canonicalOutsideTarget = resolveToolTarget(outsideTarget, root);
+		assert.match(outsidePrompt, new RegExp(canonicalOutsideTarget.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
 
 		const allowedOutsideUi = uiContext(async () => permissionChoices.allowTask);
 		assert.equal(await standard.handlers.get("tool_call")(
@@ -949,7 +950,7 @@ test("new files create a recoverable non-existent baseline record", async () => 
 			path.join(backupDirectory, "manifests", "test-run.jsonl"),
 			"utf8",
 		).trim());
-		assert.equal(record.originalPath, path.resolve(target));
+		assert.equal(record.originalPath, resolveToolTarget(target, root));
 		assert.equal(record.existed, false);
 		assert.equal(record.sha256, undefined);
 	} finally {
