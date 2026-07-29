@@ -6,9 +6,9 @@ Pi Companion 尚未发布稳定版本。安全修复目前只针对 `main` 分�
 
 ## Reporting a vulnerability
 
-请优先使用 GitHub 仓库 **Security** 页面中的 **Report a vulnerability** 私下提交报告。不要在公开 Issue、Discussion 或 Pull Request 中披露漏洞细节、利用代码、凭据或个人数据。
+如果 GitHub 仓库 **Security** 页面提供 **Report a vulnerability**，请通过该入口私下提交报告。当前没有该入口时，请先通过维护者的 GitHub 个人资料请求一个私下沟通渠道，并只提供不敏感的概要。
 
-如果仓库尚未启用 Private Vulnerability Reporting，请先通过维护者的 GitHub 个人资料请求一个私下沟通渠道，并只提供不敏感的概要。
+不要在公开 Issue、Discussion 或 Pull Request 中披露漏洞细节、利用代码、凭据或个人数据。
 
 报告中请尽量包括：
 

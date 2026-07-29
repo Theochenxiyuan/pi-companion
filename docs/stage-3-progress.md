@@ -1,5 +1,7 @@
 # 阶段 3：真实 Pi RPC（实现进度）
 
+> 历史交付快照：本文记录阶段 3 完成时的 Pi 合约、测试和限制，不代表当前 `main`。当前入口见 [`docs/README.md`](README.md)。
+
 ## 已完成的垂直切片
 
 阶段 3 已从 `DemoAgentBackend` 切换到真实 `PiRpcBackend`。Explorer 或 Agent Chat 提交的任务会在工作目录内启动独立 Pi RPC 进程；当前只开放 `read`、`grep`、`find` 和 `ls`，因此这一切片只支持只读分析。

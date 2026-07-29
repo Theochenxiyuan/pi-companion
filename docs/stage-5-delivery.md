@@ -1,5 +1,7 @@
 # 阶段 5：完整 Agent Chat
 
+> 历史交付快照：本文记录阶段 5 完成时的界面、协议、测试和限制，不代表当前 `main`。当前入口见 [`docs/README.md`](README.md)。
+
 ## 交付结论
 
 阶段 5 已完成。Agent Chat 不再只是当前 Run 的监视界面，而是 Task 的主要工作区：用户可以新建任务、恢复完整多 Run 会话、管理历史与回收站、检索任务、继续已完成任务，并在 Chat 输入区直接管理附件。Monitor 与 Chat 继续共享同一 `TaskProjection`，没有建立第二套运行状态。

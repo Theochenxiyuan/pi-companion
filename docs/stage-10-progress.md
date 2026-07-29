@@ -43,6 +43,6 @@
 - 空工作区可以跨重启保留；创建、删除或清理任务不会再决定工作区是否存在。
 - 工作区卡片的 `+` 通过稳定 Workspace ID 解析目录并打开新任务，不接受前端直接注入目录。
 - Monitor 标题选择器会按等待交互、运行中、排队中的优先级展示全部活动任务，并补充最近 5 个任务；选择后复用全局任务选中状态，Chat 与 Monitor 保持同步。
-- 最新 Release 验证：Web Search Extension 2/2、Chat 145/145、Pi Companion Extension 22/22、Core 166/166 通过；.NET Release、x64 Explorer Command 与 COM 冒烟测试通过，`PiCompanion.Development 0.4.0.0` 覆盖安装后状态为 `Ok`。
+- 当前 CI 验证（2026-07-30，`5b0f06e`）：Web Search Extension 2/2、Chat 197/197、Pi Companion Extension 28/28、Core 215/215 通过；.NET Release、x64 Explorer Command 与 COM 冒烟测试通过。当前 CI 不注册本机开发包。
 
 Monitor 同时展示多个任务状态、同一仓库的隔离 worktree 并发，以及用户可配置的并发上限仍留作后续增强。

@@ -16,7 +16,7 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 - 支持只读、标准访问和按任务开启的完全访问权限。
 - 支持简体中文和英语界面。
 
-更完整的产品边界与技术设计见 [产品计划与技术规格](docs/pi-companion-product-technical-plan.md)。当前实现进展记录在 [`docs/`](docs/) 目录中。
+更完整的产品边界与技术设计见 [产品计划与技术规格](docs/pi-companion-product-technical-plan.md)。当前说明与历史阶段记录的区别见 [文档索引](docs/README.md)。
 
 ## 项目状态
 
@@ -44,7 +44,7 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 在 PowerShell 中运行：
 
 ```powershell
-git clone <repository-url>
+git clone https://github.com/Theochenxiyuan/pi-companion.git
 Set-Location pi-companion
 .\scripts\build.ps1 -Configuration Release
 ```

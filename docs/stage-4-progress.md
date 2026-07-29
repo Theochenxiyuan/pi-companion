@@ -1,5 +1,7 @@
 # 阶段 4：权限、提问和方向调整（实现进度）
 
+> 历史交付快照：本文记录阶段 4 完成时的权限模型、测试和限制，不代表当前 `main`。当前入口见 [`docs/README.md`](README.md)。
+
 ## 已完成的 MVP 垂直切片
 
 阶段 4 已把 Pi RPC 从只读分析扩展为受应用策略保护的本地 Agent。桌面进程只通过显式 `--extension` 加载随应用发布的 `PiExtension\pi-companion.mjs`，同时继续用 `--no-extensions` 禁止发现用户或项目中的其他 Extension。Extension 缺失时 Run 明确失败，不会退回到无权限拦截的执行模式。

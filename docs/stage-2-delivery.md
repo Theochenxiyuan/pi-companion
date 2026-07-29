@@ -1,5 +1,7 @@
 # 阶段 2：Explorer 到 Composer
 
+> 历史交付快照：本文记录阶段 2 完成时的实现、测试和限制，不代表当前 `main`。当前入口见 [`docs/README.md`](README.md)。
+
 ## 交付结果
 
 阶段 2 已打通完整激活链路：Windows 11 File Explorer 通过原生 x64 `IExplorerCommand` 提供 `Ask Pi Companion`，收集工作目录、选中项、鼠标坐标和 Explorer 窗口句柄；请求优先写入当前用户专属 Named Pipe，桌面端收到后在目标显示器工作区内把 Prompt Composer 放到鼠标附近。没有现有实例时，扩展使用受限的一次性激活文件启动桌面应用，文件读取后立即删除。

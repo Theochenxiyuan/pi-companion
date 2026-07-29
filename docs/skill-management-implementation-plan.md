@@ -21,7 +21,7 @@
 - 工作区 Pi 信任边界。
 - `skills` CLI Junction 兼容识别与简化展示。
 
-Bridge protocol version 为 55。
+Skill Bridge contract 由 Desktop 与 Vue 的协议常量共同约束，并有跨项目一致性测试；精确版本以当前源码为准，不在本归档说明中重复维护。
 
 ## 后续边界
 

@@ -2,13 +2,13 @@
 
 > 文档状态：实施基线
 > 版本：0.4
-> 更新日期：2026-07-29
+> 更新日期：2026-07-30
 > 目标平台：Windows 11 x64
 > 目标阶段：MVP → Feature-complete Alpha → Feature-complete Beta → 正式发布（1.0）
 
 ## 1. 文档目的
 
-本文档定义 Pi Companion 的产品范围、用户工作流、技术架构、模块边界、运行协议、数据模型、安全策略、质量要求和分阶段交付计划。它是后续设计、开发、测试和验收的共同基线。
+本文档定义 Pi Companion 的产品范围、用户工作流、技术架构、模块边界、运行协议、数据模型、安全策略、质量要求和分阶段交付计划。它是后续设计、开发、测试和验收的共同基线。没有明确标为“计划”“目标”或“待验证”的内容应与当前 `main` 保持一致；精确协议版本、依赖版本和测试数量以源码、lockfile 与当前 CI 为准。
 
 实施过程中允许通过 Architecture Decision Record（ADR）修订技术细节，但以下核心方向默认保持稳定：
 
@@ -194,7 +194,7 @@ Monitor 和 Chat 负责显示请求及收集答案，实际允许或阻止操作
 | 层 | 选型 | 说明 |
 |---|---|---|
 | Windows 桌面外壳 | C#、.NET 10、WPF | 多窗口、透明窗口、托盘和 Win32 互操作 |
-| Windows 能力 | Windows App SDK 稳定版、Win32 | AppWindow、激活、显示器、DPI、窗口层级 |
+| Windows 能力 | Win32、Windows SDK | DWM、激活、显示器、DPI、窗口层级、注册表和 Job Object |
 | Agent Chat | Vue 3、TypeScript、Vite | 内容密集型聊天与证据界面 |
 | Chat 状态 | Pinia | 只保存 UI 投影，不作为任务权威状态 |
 | Chat 宿主 | 标准 WebView2 | 嵌入 WPF，优先保证窗口缩放流畅度；加载态与 WebView 不重叠 |
@@ -204,16 +204,16 @@ Monitor 和 Chat 负责显示请求及收集答案，实际允许或阻止操作
 | 数据库 | SQLite、Microsoft.Data.Sqlite | 本地任务、事件、历史与证据 |
 | 进程管理 | Windows Job Object | 终止完整子进程树和资源管理 |
 | 桌面 IPC | Named Pipe | Explorer 激活和未来进程拆分 |
-| 日志 | Serilog | 本地结构化滚动日志和诊断导出 |
-| 安装 | MSIX、代码签名 | COM 扩展注册、更新和卸载 |
+| 日志 | 应用自有 UTF-8 文件日志 | Pi stderr、元数据诊断、保留期限和诊断导出 |
+| 开发安装 | 未签名稀疏 MSIX | 当前用户 Explorer COM 注册与重复覆盖验证 |
 
 版本策略：
 
 - .NET 使用当前受支持的 LTS 基线。
-- Windows App SDK 使用实施时的稳定版本并锁定。
 - Pi Runtime 随正式应用私有发布并锁定兼容版本。
 - 带 `PiCompanion.Development` 标记的开发构建优先使用本机全局安装的 Pi；正式发布构建不调用用户全局 Pi。
 - npm 和 NuGet 依赖均使用 lockfile。
+- 正式 MSIX、代码签名、更新和卸载仍是发布阶段目标，不属于当前开发安装能力。
 
 ## 7. 系统架构
 
@@ -227,29 +227,29 @@ flowchart LR
     APP --> STORE[("SQLite Event Store")]
     APP --> SCHED["Run Scheduler"]
     SCHED --> PM["Pi Process Manager"]
-    PM -->|"JSONL stdin/stdout"| PI["Private Pi RPC Process"]
+    PM -->|"JSONL stdin/stdout"| PI["Pi RPC Process"]
     PI --> EXT["Pi Companion Extension"]
     PI --> MODEL["Model Provider"]
     APP --> EVID["Evidence & Recovery"]
 ```
 
-### 7.1 MVP 进程边界
+### 7.1 当前进程边界
 
-MVP 包含以下进程：
+当前实现包含以下进程：
 
 1. `PiCompanion.Desktop.exe`
    - 托盘常驻进程。
-   - 持有 Prompt Composer、Monitor、Agent Chat 和设置窗口。
+   - 持有 Prompt Composer、Monitor 和 Agent Chat；设置中心显示在 Agent Chat 内。
    - 管理数据库、调度器和 Pi 子进程。
 2. `PiCompanion.ExplorerCommand.dll`
    - 由 Windows Shell 通过 COM 扩展机制调用。
    - 只解析选择项和发送激活请求。
 3. Pi RPC 子进程
-   - 按正在执行的任务创建。
+   - 按正在执行的 Run 创建。
    - 在任务工作目录中运行。
    - 加入 Windows Job Object。
 
-MVP 调度器默认 `MaxConcurrentRuns = 1`。架构按“一次运行对应一个 Pi 子进程”设计，以便后续增加并发；正式版并发方案在对应阶段开始前确定。
+当前调度器固定 `MaximumConcurrentRuns = 2`。一次 Run 对应一个 Pi 子进程；同一 Task 和同一规范化工作目录保持串行，不同工作目录与独立 General Chat 托管目录可以并发。并发上限暂不开放给用户配置。
 
 ## 8. 模块职责
 
@@ -765,15 +765,14 @@ Vue 3
 TypeScript
 Vite
 Pinia
-VueUse
-Virtual Scroller
-markdown-it
+Reka UI
+marked
 DOMPurify
-Shiki
-Monaco Editor 或 CodeMirror 6
+@he-tree/vue
+项目内 VirtualList 与证据/Diff 渲染组件
 ```
 
-Monaco 与 CodeMirror 的最终选择在阶段 6 根据包体积、Diff 能力和 WebView2 性能验证决定。
+当前不引入 Monaco 或 CodeMirror。Markdown、代码块、文件 Diff 和证据使用项目内组件渲染，避免为只读审查界面引入完整编辑器运行时。
 
 ### 16.2 左侧栏
 
@@ -974,43 +973,71 @@ DetectedFramework
 
 ## 20. 设置规格
 
-### General
+设置中心当前按“应用、工作流、数据、PI”四组展示九个页面。
+
+### 常规
 
 - Windows 启动时运行。
 - 关闭主窗口后保持托盘运行。
 - 语言。
 - 主题：深色、浅色或跟随 Windows 系统设置。
-- 日志级别。
+- Agent Chat 界面缩放。
 
-### Monitor
+### 通知
+
+- 完成、失败/停止和等待用户操作通知。
+- 提示音。
+- 仅在应用位于后台时通知。
+
+### 任务监视器
 
 - 显示位置。
-- 是否始终显示。
+- 启动时是否显示。
+- 是否始终置顶。
 - 自动收起时间。
 - 动画开关。
+
+### 任务
+
+- 最近任务数量和副标题。
+- AI 标题、AI 总结及其模型。
+- 任务完成后的 Monitor/Chat 行为。
+- 本地待发送区的自动开始与倒计时。
+
+### 工作区
+
+- 默认权限模式。
+- 文件变化默认展开状态。
+- Git 状态自动刷新间隔。
+
+### 存储与诊断
+
+- 任务、回收站和日志保留期限。
+- 数据和日志目录。
+- 日志级别。
+- 清理缓存和导出诊断包。
+
+### 回收站
+
+- 搜索、筛选、恢复和永久删除任务。
+- 清空回收站。
 
 ### Agent
 
 - 默认模型。
 - 默认推理等级。
-- 自动压缩。
-- 自动重试。
-- 默认权限模式。
+- 自动压缩与 Token 策略。
+- 自动重试与退避策略。
+- Steer/Follow-up 发送方式。
 - Pi Runtime 版本和状态。
 
-### Accounts
+### Provider
 
 - Provider 状态。
-- API Key 设置。
+- API Key 与 OAuth。
 - 登录和退出。
-- 凭据验证。
-
-### Data
-
-- 数据和日志目录。
-- 清理缓存。
-- 导出诊断包。
-- 清空回收站。
+- 自定义 Provider 创建与编辑。
+- 模型启用范围和搜索能力状态。
 
 ## 21. 性能与资源目标
 
@@ -1495,7 +1522,6 @@ Explorer 右键
 - Composer 的精确默认尺寸和快捷键组合。
 - Monitor 的精确尺寸和默认屏幕位置；Picker、形态和内容高度过渡不作为 1.0 发布前目标。
 - Monitor “始终常驻”是否默认关闭。
-- Monaco 与 CodeMirror 6 的最终选择。
 - 支持的首批 Provider 登录流程。
 - Shell 只读命令允许列表。
 - 非 Git 大目录的变化扫描上限。
@@ -1508,7 +1534,6 @@ Explorer 右键
 
 - [Pi RPC Mode](https://pi.dev/docs/latest/rpc)
 - [Pi Extensions](https://pi.dev/docs/latest/extensions)
-- [Windows App SDK: Manage app windows](https://learn.microsoft.com/en-us/windows/apps/develop/ui/manage-app-windows)
 - [WPF windows overview](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/windows/)
 - [WebView2 in WPF apps](https://learn.microsoft.com/en-us/microsoft-edge/webview2/platforms/wpf)
 - [Integrate a packaged desktop app with File Explorer](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/integrate-packaged-app-with-file-explorer)
