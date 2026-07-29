@@ -132,6 +132,16 @@ internal static class DesktopLocalizer
     public static void Apply(DependencyObject root)
     {
         ApplyCurrent(root);
+
+        // A ContentPresenter renders string content with template-generated text elements.
+        // The owning ContentControl is localized above; walking into the generated text
+        // would cache the translated value as its "original" and make it survive a
+        // later language switch.
+        if (root is ContentPresenter { Content: string })
+        {
+            return;
+        }
+
         foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
         {
             Apply(child);

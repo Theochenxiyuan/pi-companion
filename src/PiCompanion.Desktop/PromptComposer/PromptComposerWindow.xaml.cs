@@ -82,7 +82,9 @@ public partial class PromptComposerWindow : Window
 
     public void RefreshLocalization()
     {
+        var thinkingLevel = GetComboBoxValue(ThinkingComboBox);
         DesktopLocalizer.Apply(this);
+        UpdateThinkingOptions(thinkingLevel);
         UpdateAttachmentState();
         UpdatePiSelectionState();
     }
@@ -843,13 +845,13 @@ public partial class PromptComposerWindow : Window
 
     private static string ThinkingLevelLabel(string level) => level switch
     {
-        "off" => "None",
-        "minimal" => "Minimal",
-        "low" => "Low",
-        "medium" => "Medium",
-        "high" => "High",
-        "xhigh" => "Xhigh",
-        "max" => "Max",
+        "off" => DesktopLocalizer.Text("无", "None"),
+        "minimal" => DesktopLocalizer.Text("最低", "Minimal"),
+        "low" => DesktopLocalizer.Text("低", "Low"),
+        "medium" => DesktopLocalizer.Text("中", "Medium"),
+        "high" => DesktopLocalizer.Text("高", "High"),
+        "xhigh" => DesktopLocalizer.Text("很高", "Xhigh"),
+        "max" => DesktopLocalizer.Text("最高", "Max"),
         _ => level,
     };
 
