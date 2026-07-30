@@ -1307,7 +1307,7 @@ function authLabel(provider: PiProviderInfo) {
                           @click="refreshModelCatalog"
                         ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a7 7 0 1 0 1 6" /><path d="M19 4v4h-4" /></svg></UiButton>
                       </div>
-                      <small class="provider-model-explainer">{{ t('控制模型是否出现在任务的模型选择器中；隐藏不会删除模型或退出账号。') }}</small>
+                      <small class="provider-model-explainer">{{ t('控制模型是否出现在任务的模型选择器中。') }}</small>
                       <small class="provider-model-status">{{ modelScopeWriteInFlight ? t('正在保存到 Pi…') : modelScopeDirty ? t('等待保存…') : t('已显示 {count} 个', { count: selectedProviderEnabledCount }) }}</small>
                     </div>
                     <div>

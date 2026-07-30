@@ -310,7 +310,7 @@ describe('stage 7 settings modal', () => {
     expect(wrapper.get('.provider-web-search-badge').text()).toContain('自带网络搜索')
     expect(wrapper.get('.provider-web-search-badge').text()).not.toContain('实验性')
     expect(wrapper.get('.provider-web-search-badge').attributes('title')).toBe('此 Provider 的部分模型支持原生网络搜索，具体可用性取决于所选模型、API 版本和账号权限；Pi Companion 不保证所有模型均可使用。')
-    expect(wrapper.get('.provider-model-explainer').text()).toContain('隐藏不会删除模型或退出账号')
+    expect(wrapper.get('.provider-model-explainer').text()).toBe('控制模型是否出现在任务的模型选择器中。')
     expect(wrapper.find('.provider-list-capability').exists()).toBe(false)
     expect(wrapper.findAll('.provider-model-meta .web-search')).toHaveLength(0)
     expect(wrapper.findAll('.provider-model-items article').every(model => !model.attributes('title')?.includes('网络搜索'))).toBe(true)

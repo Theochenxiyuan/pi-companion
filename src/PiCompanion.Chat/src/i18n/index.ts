@@ -688,7 +688,7 @@ const english: Record<string, string> = {
   '正在保存到 Pi…': 'Saving to Pi…',
   '等待保存…': 'Waiting to save…',
   '已显示 {count} 个': 'Showing {count}',
-  '控制模型是否出现在任务的模型选择器中；隐藏不会删除模型或退出账号。': 'Choose which models appear in task model pickers. Hiding a model does not delete it or sign you out.',
+  '控制模型是否出现在任务的模型选择器中。': 'Choose which models appear in task model pickers.',
   'Pi 至少需要保留一个启用模型': 'Pi requires at least one enabled model',
   '全部隐藏': 'Hide all',
   '全部显示': 'Show all',
