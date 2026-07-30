@@ -74,6 +74,9 @@ public sealed class PiProjectTrustService
     }
 
     public PiProjectTrustSnapshot Trust(string workspacePath)
+        => SetDecision(workspacePath, trusted: true);
+
+    public PiProjectTrustSnapshot SetDecision(string workspacePath, bool trusted)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspacePath);
         var canonicalWorkspace = CanonicalizeDirectory(workspacePath);
@@ -88,7 +91,7 @@ public sealed class PiProjectTrustService
                 entries.Remove(existingKey);
             }
 
-            entries[canonicalWorkspace] = true;
+            entries[canonicalWorkspace] = trusted;
             WriteEntries(entries);
             return true;
         });

@@ -109,7 +109,7 @@ public sealed class PiConfigurationServiceTests : IDisposable
 
     private static PiConfigurationSnapshot CreateSnapshot(string runtimePath) => new(
         Available: true,
-        Version: "0.82.0",
+        Version: "0.83.0",
         RuntimePath: runtimePath,
         DefaultModel: "openai-codex/gpt-5.6-sol",
         DefaultThinkingLevel: "xhigh",

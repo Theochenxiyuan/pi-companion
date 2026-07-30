@@ -37,6 +37,16 @@ describe('UI component boundaries', () => {
     expect(violations.map(path => relative(sourceRoot, path))).toEqual([])
   })
 
+  it('portals dialogs outside application layout containers and keeps their shell interactive', () => {
+    const dialog = readFileSync(resolve(uiRoot, 'UiDialog.vue'), 'utf8')
+    const styles = readFileSync(resolve(sourceRoot, 'ui-components.css'), 'utf8')
+    const layerRule = styles.match(/\.ui-dialog-layer\s*\{(?<declarations>[^}]*)\}/u)
+
+    expect(dialog).toContain('DialogPortal')
+    expect(dialog).toContain('<DialogPortal')
+    expect(layerRule?.groups?.declarations).toContain('pointer-events: auto')
+  })
+
   it('keeps scoped dialog shell classes global across the UiDialog boundary', () => {
     const settings = readFileSync(resolve(sourceRoot, 'components/SettingsModal.vue'), 'utf8')
     const skillManager = readFileSync(resolve(sourceRoot, 'components/SkillManagementModal.vue'), 'utf8')

@@ -13,6 +13,9 @@ globalThis.cancelAnimationFrame ??= (handle: number) => window.clearTimeout(hand
 
 config.global.stubs = {
   ...config.global.stubs,
+  DialogPortal: {
+    template: '<slot />',
+  },
   UiButton: false,
   UiDialog: false,
   UiInput: false,

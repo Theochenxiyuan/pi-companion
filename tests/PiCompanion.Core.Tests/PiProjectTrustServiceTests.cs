@@ -74,6 +74,30 @@ public sealed class PiProjectTrustServiceTests
         }
     }
 
+    [Fact]
+    public void SetDecision_PersistsAnExplicitDecline()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var profile = Directory.CreateDirectory(Path.Combine(root, "profile")).FullName;
+            var workspace = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var service = new PiProjectTrustService(profile);
+
+            var declined = service.SetDecision(workspace, trusted: false);
+
+            Assert.Equal("declined", declined.Status);
+            Assert.False(declined.Inherited);
+            Assert.Equal(workspace, declined.DecisionPath);
+            using var document = JsonDocument.Parse(File.ReadAllText(declined.TrustStorePath));
+            Assert.False(document.RootElement.GetProperty(workspace).GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTemporaryDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"pi-companion-trust-{Guid.NewGuid():N}");

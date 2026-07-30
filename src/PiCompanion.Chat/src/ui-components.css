@@ -100,8 +100,21 @@
   animation: ui-spin var(--motion-duration-slow) linear infinite;
 }
 
-.ui-dialog-overlay {
+.ui-dialog-layer {
   isolation: isolate;
+  pointer-events: auto;
+}
+
+.ui-dialog-overlay {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.ui-dialog-content {
+  position: relative;
+  z-index: 1;
+  grid-area: 1 / 1;
 }
 
 .ui-menu-content {

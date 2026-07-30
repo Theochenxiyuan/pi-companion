@@ -35,7 +35,7 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 - Node.js 24 和 npm 11；
 - Visual Studio 2022 Build Tools，并安装 x64 C++ 工具链；
 - Microsoft Edge WebView2 Runtime；
-- 开发运行时需要 Pi RPC 0.82.0 Runtime，以及所选模型服务的有效账号或 API Key。
+- 开发运行时需要 Pi RPC 0.83.0 Runtime，以及所选模型服务的有效账号或 API Key。
 
 依赖版本由 `global.json`、npm lockfile 和 NuGet lockfile 固定。
 

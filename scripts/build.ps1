@@ -16,7 +16,7 @@ $dotnetCommand = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else 
 
 Push-Location $webSearchExtensionDirectory
 try {
-    & npm ci --legacy-peer-deps
+    & npm ci
     if ($LASTEXITCODE -ne 0) { throw "Web Search Extension npm ci failed with exit code $LASTEXITCODE." }
 
     & npm run build

@@ -13,7 +13,7 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 57;
+    public const int ProtocolVersion = 58;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
@@ -25,10 +25,11 @@ internal static class BridgeContracts
         IReadOnlyList<TaskHistoryEntry> recycleBinTasks,
         ComposerDraft? draft,
         SettingsSnapshotDto settings,
-        Func<Guid, RunEvidenceSnapshot>? evidenceResolver = null) => new(
+        Func<Guid, RunEvidenceSnapshot>? evidenceResolver = null,
+        Func<string, PiProjectTrustSnapshot>? projectTrustResolver = null) => new(
         projection is null ? null : CreateTask(projection, conversation, evidenceResolver),
         projection?.LastSequence ?? 0,
-        workspaces.Select(CreateWorkspace).ToArray(),
+        workspaces.Select(workspace => CreateWorkspace(workspace, projectTrustResolver)).ToArray(),
         recentTasks.Select(CreateHistoryTask).ToArray(),
         historyTasks.Select(CreateHistoryTask).ToArray(),
         historyHasMore,
@@ -53,7 +54,7 @@ internal static class BridgeContracts
             "open-current-task", "general-chat", "published-artifacts",
             "independent-workspaces", "workspace-new-task",
             "skill-native-discovery", "skill-content-fingerprints", "skill-pi-removal",
-            "skill-local-direct-import", "skill-workspace-trust",
+            "skill-local-direct-import", "skill-workspace-trust", "workspace-trust-preflight",
         });
 
     public static SkillsLoadedDto CreateSkillsLoaded(
@@ -313,24 +314,34 @@ internal static class BridgeContracts
         IReadOnlyList<TaskHistoryEntry> recentTasks,
         IReadOnlyList<TaskHistoryEntry> historyTasks,
         bool historyHasMore,
-        IReadOnlyList<TaskHistoryEntry> recycleBinTasks) => new(
-        workspaces.Select(CreateWorkspace).ToArray(),
+        IReadOnlyList<TaskHistoryEntry> recycleBinTasks,
+        Func<string, PiProjectTrustSnapshot>? projectTrustResolver = null) => new(
+        workspaces.Select(workspace => CreateWorkspace(workspace, projectTrustResolver)).ToArray(),
         recentTasks.Select(CreateHistoryTask).ToArray(),
         historyTasks.Select(CreateHistoryTask).ToArray(),
         historyHasMore,
         recycleBinTasks.Select(CreateHistoryTask).ToArray());
 
-    public static WorkspaceHistoryEntryDto CreateWorkspace(WorkspaceHistoryEntry workspace) => new(
-        workspace.Id,
-        workspace.Name,
-        workspace.WorkingDirectory,
-        workspace.CreatedAt,
-        workspace.UpdatedAt,
-        workspace.TaskCount,
-        workspace.HasActiveTask,
-        workspace.IconKey,
-        workspace.ColorKey,
-        workspace.DisplayName);
+    public static WorkspaceHistoryEntryDto CreateWorkspace(
+        WorkspaceHistoryEntry workspace,
+        Func<string, PiProjectTrustSnapshot>? projectTrustResolver = null)
+    {
+        var trust = projectTrustResolver?.Invoke(workspace.WorkingDirectory);
+        return new WorkspaceHistoryEntryDto(
+            workspace.Id,
+            workspace.Name,
+            workspace.WorkingDirectory,
+            workspace.CreatedAt,
+            workspace.UpdatedAt,
+            workspace.TaskCount,
+            workspace.HasActiveTask,
+            workspace.IconKey,
+            workspace.ColorKey,
+            workspace.DisplayName,
+            trust?.Status ?? "undecided",
+            trust?.DecisionPath,
+            trust?.Inherited ?? false);
+    }
 
     public static TaskHistoryEntryDto CreateHistoryTask(TaskHistoryEntry task) => new(
         task.TaskId,
@@ -592,6 +603,18 @@ internal sealed record TrustSkillWorkspaceRequestDto(
     string RequestId,
     Guid WorkspaceId);
 
+internal sealed record SetWorkspaceTrustDecisionRequestDto(
+    string RequestId,
+    Guid WorkspaceId,
+    bool Trusted);
+
+internal sealed record WorkspaceTrustDecisionCompletedDto(
+    string RequestId,
+    bool Succeeded,
+    string Message,
+    Guid WorkspaceId,
+    string Status);
+
 internal sealed record RemoveSkillInstallationRequestDto(
     string RequestId,
     string InstallationId,
@@ -791,7 +814,10 @@ internal sealed record WorkspaceHistoryEntryDto(
     bool HasActiveTask,
     string IconKey,
     string ColorKey,
-    string? DisplayName);
+    string? DisplayName,
+    string TrustStatus,
+    string? TrustDecisionPath,
+    bool TrustInherited);
 
 internal sealed record TaskHistoryEntryDto(
     Guid Id,

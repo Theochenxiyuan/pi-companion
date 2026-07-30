@@ -62,8 +62,12 @@
                 </Style>
             </ContextMenu.Resources>
             <MenuItem Header="显示 / 隐藏任务监视器" Click="OnToggleMonitorClick" />
+            <Separator Margin="4,3" />
+            <MenuItem Header="对话显示：摘要" Tag="summary" Click="OnConversationDetailClick" />
+            <MenuItem Header="对话显示：标准" Tag="normal" Click="OnConversationDetailClick" />
+            <MenuItem Header="对话显示：详细" Tag="verbose" Click="OnConversationDetailClick" />
+            <Separator Margin="4,3" />
             <MenuItem Header="退出 Pi Companion"
-                      Margin="0,3,0,0"
                       Foreground="{DynamicResource DangerBrush}"
                       Click="OnExitClick" />
         </ContextMenu>

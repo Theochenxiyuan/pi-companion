@@ -14,6 +14,7 @@ import type {
   LocalMessageAttachmentsSelected,
   LoadSkillsRequest,
   RemoveSkillInstallationRequest,
+  SetWorkspaceTrustDecisionRequest,
   PiModelInfo,
   PiCustomProviderInfo,
   PiThinkingLevel,
@@ -48,6 +49,8 @@ import type {
   WorkspaceGitHistorySnapshot,
   WorkspaceGitSnapshot,
   WorkspaceIconKey,
+  WorkspaceHistoryEntry,
+  WorkspaceTrustDecisionCompleted,
 } from '@/types/bridge'
 import CommitDiffDialog from '@/components/CommitDiffDialog.vue'
 import ComposerPanel from '@/components/ComposerPanel.vue'
@@ -84,7 +87,6 @@ const store = useTaskStore()
 const { locale, setLocale, t } = useI18n()
 const prompt = ref('')
 const promptDraftTaskId = ref<string | null>(null)
-const viewMode = ref<'summary' | 'normal' | 'verbose'>('normal')
 const selectedModel = ref('')
 const selectedThinkingLevel = ref<PiThinkingLevel>('high')
 const selectedPermissionMode = ref<PermissionMode>('standard')
@@ -122,6 +124,15 @@ const skillRemovalPendingId = ref<string | null>(null)
 const skillTrustPendingWorkspaceId = ref<string | null>(null)
 const skillTrustResult = ref<SkillWorkspaceTrustCompleted | null>(null)
 const skillTrustConfirmationWorkspaceId = ref<string | null>(null)
+const workspaceTrustDialogWorkspaceId = ref<string | null>(null)
+const workspaceTrustDecisionPending = ref(false)
+const pendingWorkspaceRun = ref<{
+  type: 'SendPrompt' | 'StartDemo'
+  payload: Record<string, unknown>
+  clearDraftAfterPost: boolean
+} | null>(null)
+let workspaceTrustRequestSequence = 0
+let workspaceTrustRequestId: string | null = null
 const skillImportSource = ref<SkillImportSource | null>(null)
 const skillImportPreparation = ref<SkillImportPreparation | null>(null)
 const skillImportResult = ref<SkillImportCompleted | null>(null)
@@ -167,15 +178,7 @@ let skillImportRequestId: string | null = null
 let skillImportRequestSequence = 0
 let skillTrustRequestId: string | null = null
 let skillTrustRequestSequence = 0
-const viewModeModel = computed({
-  get: () => viewMode.value,
-  set: (value: string) => { viewMode.value = value as typeof viewMode.value },
-})
-const viewModeOptions = computed(() => [
-  { value: 'summary', label: t('摘要') },
-  { value: 'normal', label: t('标准') },
-  { value: 'verbose', label: t('详细') },
-])
+const viewMode = computed(() => settingsSnapshot.value.values.general.conversationDetailLevel)
 const enabledPiModels = computed(() => {
   const enabled = settingsSnapshot.value.pi.enabledModels
   if (enabled === null) return settingsSnapshot.value.pi.models
@@ -362,9 +365,9 @@ const {
   beginResize: beginInspectorResize,
 } = useSidebarResize({
   collapsed: inspectorCollapsed,
-  defaultWidth: 300,
-  minimumWidth: 250,
-  maximumWidth: 400,
+  defaultWidth: 340,
+  minimumWidth: 300,
+  maximumWidth: 560,
   storageKey: 'pi-companion.inspector-width',
   cssVariable: '--inspector-width',
   edge: 'right',
@@ -414,6 +417,25 @@ const conversationSkillsWorkspace = computed(() => {
   const normalized = directory.trim().replace(/\//g, '\\').replace(/\\+$/, '').toLocaleLowerCase('en-US')
   return store.workspaces.find(workspace =>
     workspace.workingDirectory.trim().replace(/\//g, '\\').replace(/\\+$/, '').toLocaleLowerCase('en-US') === normalized) ?? null
+})
+const workspaceTrustDialogWorkspace = computed(() => {
+  const workspaceId = workspaceTrustDialogWorkspaceId.value
+  if (!workspaceId) return null
+  return store.workspaces.find(workspace => workspace.id === workspaceId) ?? null
+})
+const conversationWorkspaceTrustStatus = computed(() =>
+  conversationSkillsWorkspace.value?.trustStatus ?? 'trusted')
+const conversationWorkspaceTrustLabel = computed(() => {
+  const workspace = conversationSkillsWorkspace.value
+  if (!workspace) return ''
+  const status = workspace.trustStatus ?? 'trusted'
+  if (workspace.trustInherited) {
+    if (status === 'trusted') return t('继承信任')
+    if (status === 'declined') return t('继承不信任')
+  }
+  if (status === 'trusted') return t('已信任')
+  if (status === 'declined') return t('不信任')
+  return t('尚未选择信任')
 })
 const canViewConversationSkills = computed(() =>
   isGeneralChat.value || Boolean(conversationSkillsWorkspace.value))
@@ -806,12 +828,54 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   }
 }
 
+function requestWorkspaceRun(
+  type: 'SendPrompt' | 'StartDemo',
+  payload: Record<string, unknown>,
+  clearDraftAfterPost = false,
+) {
+  const workspace = conversationSkillsWorkspace.value
+  if (workspace && (workspace.trustStatus ?? 'trusted') === 'undecided') {
+    pendingWorkspaceRun.value = { type, payload, clearDraftAfterPost }
+    workspaceTrustDialogWorkspaceId.value = workspace.id
+    return
+  }
+
+  postBridgeMessage(type, payload)
+  if (clearDraftAfterPost) clearComposerDraft()
+}
+
+function openWorkspaceTrust(workspace: WorkspaceHistoryEntry) {
+  pendingWorkspaceRun.value = null
+  workspaceTrustDialogWorkspaceId.value = workspace.id
+}
+
+function cancelWorkspaceTrustDecision() {
+  if (workspaceTrustDecisionPending.value) return
+  workspaceTrustDialogWorkspaceId.value = null
+  pendingWorkspaceRun.value = null
+}
+
+function setWorkspaceTrustDecision(trusted: boolean) {
+  const workspace = workspaceTrustDialogWorkspace.value
+  if (!workspace || workspaceTrustDecisionPending.value) return
+  workspaceTrustRequestSequence += 1
+  const requestId = `workspace-trust-${Date.now()}-${workspaceTrustRequestSequence}`
+  workspaceTrustRequestId = requestId
+  workspaceTrustDecisionPending.value = true
+  const request: SetWorkspaceTrustDecisionRequest = {
+    requestId,
+    workspaceId: workspace.id,
+    trusted,
+  }
+  postBridgeMessage('SetWorkspaceTrustDecision', { ...request })
+}
+
 function startDemo(mode: 'Success' | 'InteractiveSuccess' | 'Failure', text: string) {
   if (!hasWorkingDirectory.value) {
     selectWorkingDirectory()
     return
   }
-  postBridgeMessage('StartDemo', {
+  requestWorkspaceRun('StartDemo', {
     prompt: text,
     mode,
     workingDirectory: store.draft?.workingDirectory,
@@ -977,14 +1041,15 @@ function submit() {
   if (store.currentTask && store.isActive) {
     postBridgeMessage('QueueLocalMessage', { message: outgoingMessage })
   } else {
-    postBridgeMessage('SendPrompt', {
+    requestWorkspaceRun('SendPrompt', {
       prompt: outgoingMessage,
       mode: 'InteractiveSuccess',
       workingDirectory: store.draft?.workingDirectory,
       model: selectedModel.value,
       thinkingLevel: thinkingLevelPayload.value,
       permissionMode: selectedPermissionMode.value,
-    })
+    }, true)
+    return
   }
 
   clearComposerDraft()
@@ -1233,6 +1298,40 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
       skillTrustResult.value = result
     }
     return
+  } else if (message.type === 'WorkspaceTrustDecisionCompleted') {
+    const result = message.payload as WorkspaceTrustDecisionCompleted
+    if (result.requestId === workspaceTrustRequestId) {
+      workspaceTrustDecisionPending.value = false
+      if (result.succeeded) {
+        store.workspaces = store.workspaces.map(workspace =>
+          workspace.id === result.workspaceId
+            ? {
+                ...workspace,
+                trustStatus: result.status,
+                trustDecisionPath: workspace.workingDirectory,
+                trustInherited: false,
+              }
+            : workspace)
+        skillsSnapshot.value = null
+        const pendingRun = pendingWorkspaceRun.value
+        workspaceTrustDialogWorkspaceId.value = null
+        pendingWorkspaceRun.value = null
+        transientNotice.value = {
+          id: `workspace-trust-${Date.now()}`,
+          message: result.message,
+          succeeded: true,
+        }
+        if (pendingRun) {
+          window.queueMicrotask(() => {
+            postBridgeMessage(pendingRun.type, pendingRun.payload)
+            if (pendingRun.clearDraftAfterPost) clearComposerDraft()
+          })
+        }
+      } else {
+        store.bridgeError = result.message
+      }
+    }
+    return
   } else if (message.type === 'SkillImportSourceInspected') {
     const result = message.payload as SkillImportSourceInspected
     if (result.requestId === skillImportRequestId) {
@@ -1303,6 +1402,10 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     if (skillTrustPendingWorkspaceId.value) {
       skillTrustPendingWorkspaceId.value = null
       skillsError.value = (message.payload as { message?: string }).message ?? t('工作区信任失败')
+    }
+    if (workspaceTrustDecisionPending.value) {
+      workspaceTrustDecisionPending.value = false
+      store.bridgeError = (message.payload as { message?: string }).message ?? t('工作区信任失败')
     }
     if (skillImportPhase.value) {
       skillImportPhase.value = null
@@ -2128,7 +2231,7 @@ function createPreviewSettingsSnapshot(): SettingsSnapshot {
   ]
   return {
     values: {
-      general: { launchAtLogin: false, keepRunningInTray: true, language: 'zh-CN', theme: 'dark', logLevel: 'information', uiScalePercent: 100, gitAutoRefreshSeconds: 0 },
+      general: { launchAtLogin: false, keepRunningInTray: true, language: 'zh-CN', theme: 'dark', logLevel: 'information', uiScalePercent: 100, gitAutoRefreshSeconds: 0, conversationDetailLevel: 'normal' },
       monitor: { position: 'top-right', showOnStartup: true, alwaysOnTop: true, autoCollapseSeconds: 8, animationsEnabled: true },
       tasks: { aiTitleEnabled: true, aiTitleModel: 'openai-codex/gpt-5.6-luna', aiSummaryEnabled: true, aiSummaryModel: 'openai-codex/gpt-5.6-luna', aiMetadataModel: 'openai-codex/gpt-5.6-luna', recentTaskCount: 5, recentTaskSubtitle: 'workspace', permissionMode: 'standard', fileChangesExpandedByDefault: false, completionBehavior: 'keep-expanded', autoStartLocalQueueEnabled: false, autoStartLocalQueueDelaySeconds: 15 },
       agent: { defaultModel: 'openai-codex/gpt-5.6-sol', defaultThinkingLevel: 'xhigh', autoCompact: true, autoRetry: true, compactionReserveTokens: 16384, compactionKeepRecentTokens: 20000, retryMaxRetries: 3, retryBaseDelayMilliseconds: 2000, retryMaxDelayMilliseconds: 60000, steeringMode: 'one-at-a-time', followUpMode: 'one-at-a-time' },
@@ -2137,7 +2240,7 @@ function createPreviewSettingsSnapshot(): SettingsSnapshot {
     },
     pi: {
       available: true,
-      version: '0.82.0',
+      version: '0.83.0',
       runtimePath: 'C:\\PiRuntime\\dist\\cli.js',
       defaultModel: 'openai-codex/gpt-5.6-sol',
       defaultThinkingLevel: 'xhigh',
@@ -2185,7 +2288,10 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
     }"
     :style="workspaceStyle"
   >
-    <div class="workspace-content" :inert="settingsOpen || editingLocalMessage || editingWorkspace ? true : undefined">
+    <div
+      class="workspace-content"
+      :inert="settingsOpen || editingLocalMessage || editingWorkspace || workspaceTrustDialogWorkspace ? true : undefined"
+    >
     <WorkspaceSidebar
       :recent-tasks="visibleRecentTasks"
       :workspaces="store.workspaces"
@@ -2237,6 +2343,17 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
         </div>
         <div class="topbar-actions">
           <UiButton
+            v-if="conversationSkillsWorkspace"
+            class="workspace-trust-badge"
+            :class="`trust-${conversationWorkspaceTrustStatus}`"
+            type="button"
+            :title="t('查看或更改工作区信任')"
+            @click="openWorkspaceTrust(conversationSkillsWorkspace)"
+          >
+            <span aria-hidden="true">{{ conversationWorkspaceTrustStatus === 'trusted' ? '✓' : conversationWorkspaceTrustStatus === 'declined' ? '–' : '?' }}</span>
+            {{ conversationWorkspaceTrustLabel }}
+          </UiButton>
+          <UiButton
             v-if="canViewConversationSkills"
             class="topbar-skill-button"
             type="button"
@@ -2247,15 +2364,6 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 4.5a2.8 2.8 0 1 1 5.6 0V7H17v2.2a2.8 2.8 0 1 1 0 5.6V17h-2.2a2.8 2.8 0 1 1-5.6 0H7v-2.2a2.8 2.8 0 1 1 0-5.6V7h2.2z" /></svg>
             <span>{{ t('技能') }}</span>
           </UiButton>
-          <div class="view-mode">
-            <span>{{ t('显示') }}</span>
-            <UiSelect
-              v-model="viewModeModel"
-              :ariaLabelText="t('对话详情级别')"
-              :options="viewModeOptions"
-              align="end"
-            />
-          </div>
           <UiButton
             class="sidebar-toggle inspector-toggle"
             type="button"
@@ -2507,11 +2615,50 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
     </UiDialog>
 
     <UiDialog
+      v-if="workspaceTrustDialogWorkspace"
+      :title="t('工作区信任')"
+      overlay-class="dialog-backdrop"
+      content-class="task-dialog skill-trust-confirm-dialog workspace-trust-dialog"
+      alert
+      :close-on-backdrop="false"
+      @close="cancelWorkspaceTrustDecision"
+    >
+        <h2>{{ t('是否信任“{name}”？', { name: workspaceTrustDialogWorkspace.name }) }}</h2>
+        <p>{{ t('信任后，Pi 可以加载此工作区提供的项目设置、技能和系统提示。这些内容可能改变智能体的行为。') }}</p>
+        <p>{{ t('工作区信任不会改变文件访问或命令执行权限；这些仍由任务权限模式控制。') }}</p>
+        <p v-if="workspaceTrustDialogWorkspace.trustInherited && workspaceTrustDialogWorkspace.trustDecisionPath">
+          {{ t('当前决定继承自：{path}', { path: workspaceTrustDialogWorkspace.trustDecisionPath }) }}
+        </p>
+        <code>{{ workspaceTrustDialogWorkspace.workingDirectory }}</code>
+        <div class="dialog-actions">
+          <UiButton type="button" :disabled="workspaceTrustDecisionPending" @click="cancelWorkspaceTrustDecision">
+            {{ t('取消') }}
+          </UiButton>
+          <UiButton
+            type="button"
+            :disabled="workspaceTrustDecisionPending"
+            @click="setWorkspaceTrustDecision(false)"
+          >
+            {{ t(pendingWorkspaceRun ? '不信任并开始' : '设为不信任') }}
+          </UiButton>
+          <UiButton
+            class="primary"
+            type="button"
+            :disabled="workspaceTrustDecisionPending"
+            @click="setWorkspaceTrustDecision(true)"
+          >
+            {{ t(workspaceTrustDecisionPending ? '正在保存…' : pendingWorkspaceRun ? '信任并开始' : '信任工作区') }}
+          </UiButton>
+        </div>
+    </UiDialog>
+
+    <UiDialog
       v-if="skillTrustConfirmationWorkspace"
       :title="t('信任此工作区？')"
       overlay-class="dialog-backdrop"
       content-class="task-dialog skill-trust-confirm-dialog"
       alert
+      :close-on-backdrop="false"
       @close="skillTrustConfirmationWorkspaceId = null"
     >
         <h2>{{ t('信任“{name}”？', { name: skillTrustConfirmationWorkspace.name }) }}</h2>

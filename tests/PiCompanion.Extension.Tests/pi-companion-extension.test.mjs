@@ -65,7 +65,7 @@ function uiContext(select) {
 	};
 }
 
-test("ask_user prefers Pi 0.82 strict JSON Schema sampling", () => {
+test("ask_user prefers Pi 0.83 strict JSON Schema sampling", () => {
 	const root = temporaryDirectory();
 	try {
 		const { tools } = loadExtension(root);

@@ -51,8 +51,4 @@ describe('typography design tokens', () => {
     expect(appSelect).toContain('font-weight: var(--font-weight-regular)')
   })
 
-  it('reserves enough width for English view-mode labels at every layout size', () => {
-    expect(globalStyles.match(/\.view-mode \.app-select \{ width: 104px;/gu)).toHaveLength(2)
-    expect(globalStyles).not.toContain('.view-mode .app-select { width: 66px; }')
-  })
 })

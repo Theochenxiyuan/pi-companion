@@ -1480,6 +1480,11 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
 
         startInfo.ArgumentList.Add("--mode");
         startInfo.ArgumentList.Add("rpc");
+        startInfo.ArgumentList.Add(
+            request.ScopeKind == TaskScopeKind.Workspace &&
+            string.Equals(workspaceTrustStatus, "trusted", StringComparison.Ordinal)
+                ? "--approve"
+                : "--no-approve");
         startInfo.ArgumentList.Add("--session-dir");
         startInfo.ArgumentList.Add(_sessionDirectory);
         var webSearchSupport = PiWebSearchCapabilities.ResolveModelReference(request.Model);

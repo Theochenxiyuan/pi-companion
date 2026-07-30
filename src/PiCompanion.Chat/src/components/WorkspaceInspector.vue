@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { BaseTree } from '@he-tree/vue'
 import '@he-tree/vue/style/default.css'
-import { UiButton, UiInput } from '@/components/ui'
+import { UiButton, UiInput, UiMenu, UiMenuItem } from '@/components/ui'
 import WorkspaceGitPanel from '@/components/WorkspaceGitPanel.vue'
 import ContextSessionPanel from '@/components/ContextSessionPanel.vue'
 import type {
@@ -92,6 +92,7 @@ const emit = defineEmits<{
 
 const query = ref('')
 const includeIgnored = ref(false)
+const searchOptionsOpen = ref(false)
 const treeNodes = ref<WorkspaceTreeNode[]>([])
 const displayedNodes = ref<WorkspaceTreeNode[]>([])
 const openPaths = new Set<string>()
@@ -298,6 +299,11 @@ function refreshFilesAndGit() {
   emit('refreshGit')
 }
 
+function setIncludeIgnored(value: boolean) {
+  includeIgnored.value = value
+  searchOptionsOpen.value = false
+}
+
 function forwardGitUpdate(strategy: 'merge' | 'rebase', sourceBranch: string) {
   emit('updateGitBranch', strategy, sourceBranch)
 }
@@ -502,16 +508,45 @@ function ignoreSourceText(source: string | null) {
           <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5" /><path d="m12.2 12.2 4 4" /></svg>
           <UiInput v-model="query" type="search" :placeholder="t('搜索文件…')" :disabled="!hasWorkspace" />
         </label>
-        <UiButton
-          class="ignored-search-toggle"
-          type="button"
-          :class="{ active: includeIgnored }"
-          :title="t(includeIgnored ? '搜索包含忽略文件' : '搜索跳过忽略文件')"
-          :aria-label="t('包含忽略文件')"
-          :aria-pressed="includeIgnored"
-          :disabled="!hasWorkspace"
-          @click="includeIgnored = !includeIgnored"
-        >{{ t('忽略') }}</UiButton>
+        <UiMenu
+          v-model="searchOptionsOpen"
+          class="file-search-options"
+          content-class="file-search-options-menu"
+          :aria-label="t('更多搜索选项')"
+          align="end"
+        >
+          <template #trigger>
+            <UiButton
+              class="file-search-options-trigger"
+              type="button"
+              :title="t('更多搜索选项')"
+              :aria-label="t('更多搜索选项')"
+              :disabled="!hasWorkspace"
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <circle cx="4" cy="10" r="1" />
+                <circle cx="10" cy="10" r="1" />
+                <circle cx="16" cy="10" r="1" />
+              </svg>
+            </UiButton>
+          </template>
+          <UiMenuItem
+            role="menuitemradio"
+            :aria-checked="!includeIgnored"
+            @select="setIncludeIgnored(false)"
+          >
+            <span class="file-search-option-check" aria-hidden="true">{{ includeIgnored ? '' : '✓' }}</span>
+            <span>{{ t('排除忽略项') }}</span>
+          </UiMenuItem>
+          <UiMenuItem
+            role="menuitemradio"
+            :aria-checked="includeIgnored"
+            @select="setIncludeIgnored(true)"
+          >
+            <span class="file-search-option-check" aria-hidden="true">{{ includeIgnored ? '✓' : '' }}</span>
+            <span>{{ t('包含忽略项') }}</span>
+          </UiMenuItem>
+        </UiMenu>
         <UiButton type="button" :title="t('刷新文件和 Git 状态')" :aria-label="t('刷新文件和 Git 状态')" :disabled="!hasWorkspace || loadingRoot" @click="refreshFilesAndGit">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 7a6 6 0 1 0 .2 5M16 3v4h-4" /></svg>
         </UiButton>
@@ -601,12 +636,12 @@ function ignoreSourceText(source: string | null) {
       role="separator"
       :aria-label="t('调整右侧栏宽度')"
       aria-orientation="vertical"
-      :aria-valuemin="250"
-      :aria-valuemax="400"
+      :aria-valuemin="300"
+      :aria-valuemax="560"
       :aria-valuenow="width"
       tabindex="0"
       @pointerdown="emit('beginResize', $event)"
-      @dblclick="emit('setWidth', 300)"
+      @dblclick="emit('setWidth', 340)"
       @keydown.left.prevent="emit('setWidth', width + 12)"
       @keydown.right.prevent="emit('setWidth', width - 12)"
     ></div>

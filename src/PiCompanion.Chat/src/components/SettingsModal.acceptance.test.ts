@@ -8,7 +8,7 @@ afterEach(() => setLocale('zh-CN'))
 
 const snapshot: SettingsSnapshot = {
   values: {
-    general: { launchAtLogin: false, keepRunningInTray: true, language: 'zh-CN', theme: 'dark', logLevel: 'information', uiScalePercent: 100, gitAutoRefreshSeconds: 0 },
+    general: { launchAtLogin: false, keepRunningInTray: true, language: 'zh-CN', theme: 'dark', logLevel: 'information', uiScalePercent: 100, gitAutoRefreshSeconds: 0, conversationDetailLevel: 'normal' },
     monitor: { position: 'top-right', showOnStartup: true, alwaysOnTop: true, autoCollapseSeconds: 8, animationsEnabled: true },
     tasks: { aiTitleEnabled: true, aiTitleModel: 'openai-codex/gpt-5.6-luna', aiSummaryEnabled: true, aiSummaryModel: 'openai-codex/gpt-5.6-luna', aiMetadataModel: 'openai-codex/gpt-5.6-luna', recentTaskCount: 5, recentTaskSubtitle: 'workspace', permissionMode: 'standard', fileChangesExpandedByDefault: false, completionBehavior: 'keep-expanded', autoStartLocalQueueEnabled: false, autoStartLocalQueueDelaySeconds: 15 },
     agent: { defaultModel: 'openai-codex/gpt-5.6-sol', defaultThinkingLevel: 'xhigh', autoCompact: true, autoRetry: true, compactionReserveTokens: 16384, compactionKeepRecentTokens: 20000, retryMaxRetries: 3, retryBaseDelayMilliseconds: 2000, retryMaxDelayMilliseconds: 60000, steeringMode: 'one-at-a-time', followUpMode: 'one-at-a-time' },
@@ -17,7 +17,7 @@ const snapshot: SettingsSnapshot = {
   },
   pi: {
     available: true,
-    version: '0.82.0',
+    version: '0.83.0',
     runtimePath: 'C:\\PiRuntime\\dist\\cli.js',
     defaultModel: 'openai-codex/gpt-5.6-sol',
     defaultThinkingLevel: 'xhigh',
@@ -95,6 +95,18 @@ describe('stage 7 settings modal', () => {
 
     await wrapper.get('button[aria-label="恢复默认界面缩放"]').trigger('click')
     expect(wrapper.get('.scale-value').text()).toBe('100%')
+  })
+
+  it('persists the conversation display preference from General settings', async () => {
+    const wrapper = mount(SettingsModal, { props: { snapshot } })
+
+    expect(wrapper.get('button[aria-label="对话详情级别"]').text()).toBe('标准')
+    await wrapper.get('button[aria-label="对话详情级别"]').trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === '详细')!.trigger('click')
+
+    await vi.waitFor(() => expect(wrapper.emitted('saveCompanion')?.at(-1)?.[0]).toMatchObject({
+      general: { conversationDetailLevel: 'verbose' },
+    }))
   })
 
   it('configures workspace defaults and local Git auto-refresh', async () => {
@@ -265,14 +277,14 @@ describe('stage 7 settings modal', () => {
     expect(wrapper.get('.agent-model-row').text()).toContain('默认模型与推理等级')
     expect(wrapper.find('button[aria-label="默认权限模式"]').exists()).toBe(false)
     expect(wrapper.get('.settings-scroll').text()).toContain('GPT-5.6 Sol')
-    expect(wrapper.get('.runtime-card').text()).toContain('Pi 0.82.0')
+    expect(wrapper.get('.runtime-card').text()).toContain('Pi 0.83.0')
     await wrapper.get('[role="switch"][aria-label="自动重试"]').trigger('click')
     await wrapper.get('.settings-primary').trigger('click')
     expect(wrapper.emitted('saveAgent')?.[0]?.[0]).toMatchObject({ autoRetry: false })
     await wrapper.setProps({ action: { message: 'Pi Agent 设置已保存。', succeeded: true, operation: 'pi-agent-save' } })
-    await wrapper.setProps({ snapshot: { ...snapshot, pi: { ...snapshot.pi, version: '0.82.1' } } })
-    expect(wrapper.get('.runtime-card').text()).toContain('Pi 0.82.1')
-    expect(wrapper.get('.settings-runtime-mini').text()).toContain('v0.82.1')
+    await wrapper.setProps({ snapshot: { ...snapshot, pi: { ...snapshot.pi, version: '0.83.1' } } })
+    expect(wrapper.get('.runtime-card').text()).toContain('Pi 0.83.1')
+    expect(wrapper.get('.settings-runtime-mini').text()).toContain('v0.83.1')
     await wrapper.get('button[aria-label="默认模型"]').trigger('click')
     expect(wrapper.get('.app-select-group-label').text()).toBe('OpenAI Codex')
     expect(wrapper.get('[role="option"]').attributes('title')).toContain('上下文窗口：272,000 tokens')

@@ -1,4 +1,4 @@
-export const bridgeProtocolVersion = 57
+export const bridgeProtocolVersion = 58
 
 export type PermissionMode = 'read-only' | 'standard' | 'full-access'
 export type TaskScopeKind = 'Workspace' | 'GeneralChat'
@@ -13,6 +13,7 @@ export interface GeneralSettings {
   logLevel: 'error' | 'warning' | 'information' | 'debug'
   uiScalePercent: number
   gitAutoRefreshSeconds: 0 | 5 | 10 | 30 | 60
+  conversationDetailLevel: 'summary' | 'normal' | 'verbose'
 }
 
 export interface MonitorSettings {
@@ -239,6 +240,20 @@ export interface LoadSkillsRequest {
 export interface TrustSkillWorkspaceRequest {
   requestId: string
   workspaceId: string
+}
+
+export interface SetWorkspaceTrustDecisionRequest {
+  requestId: string
+  workspaceId: string
+  trusted: boolean
+}
+
+export interface WorkspaceTrustDecisionCompleted {
+  requestId: string
+  succeeded: boolean
+  message: string
+  workspaceId: string
+  status: 'trusted' | 'declined' | 'undecided'
 }
 
 export interface RemoveSkillInstallationRequest {
@@ -782,6 +797,9 @@ export interface WorkspaceHistoryEntry {
   iconKey?: WorkspaceIconKey
   colorKey?: WorkspaceColorKey
   displayName?: string | null
+  trustStatus?: 'trusted' | 'declined' | 'undecided'
+  trustDecisionPath?: string | null
+  trustInherited?: boolean
 }
 
 export type WorkspaceIconKey =

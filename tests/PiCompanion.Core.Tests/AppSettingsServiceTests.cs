@@ -17,7 +17,7 @@ public sealed class AppSettingsServiceTests
             var service = new AppSettingsService(store, Path.Combine(root, "logs"));
 
             var saved = service.Save(new PiCompanionSettings(
-                new GeneralSettings(true, false, "invalid", "SYSTEM", "DEBUG", 999, 99),
+                new GeneralSettings(true, false, "invalid", "SYSTEM", "DEBUG", 999, 99, "invalid"),
                 new MonitorSettings("bottom-left", false, false, 999, false),
                 new TaskSettings(true, "  openai-codex/gpt-5.6-luna  ", false, "  openai-codex/gpt-5.6-terra  ", 99,
                     PermissionMode: "full-access",
@@ -36,6 +36,7 @@ public sealed class AppSettingsServiceTests
             Assert.Equal("debug", saved.General.LogLevel);
             Assert.Equal(200, saved.General.UiScalePercent);
             Assert.Equal(0, saved.General.GitAutoRefreshSeconds);
+            Assert.Equal("normal", saved.General.ConversationDetailLevel);
             Assert.Equal(300, saved.Monitor.AutoCollapseSeconds);
             Assert.Equal("openai-codex/gpt-5.6-terra", saved.Tasks.AiTitleModel);
             Assert.False(saved.Tasks.AiSummaryEnabled);
@@ -97,6 +98,20 @@ public sealed class AppSettingsServiceTests
         };
 
         Assert.Equal(theme, settings.Normalize().General.Theme);
+    }
+
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("normal")]
+    [InlineData("verbose")]
+    public void Save_AcceptsSupportedConversationDetailLevels(string detailLevel)
+    {
+        var settings = PiCompanionSettings.Default with
+        {
+            General = PiCompanionSettings.Default.General with { ConversationDetailLevel = detailLevel },
+        };
+
+        Assert.Equal(detailLevel, settings.Normalize().General.ConversationDetailLevel);
     }
 
     [Fact]

@@ -97,7 +97,7 @@ public sealed record SkillDiagnostic(
     string? WorkspaceName = null);
 
 /// <summary>
-/// Read-only discovery for Pi 0.82 native skill locations. This service never
+/// Read-only discovery for Pi 0.83 native skill locations. This service never
 /// creates, changes, copies, or removes skill files.
 /// </summary>
 public sealed class SkillDiscoveryService
@@ -531,7 +531,7 @@ public sealed class SkillDiscoveryService
             }
             catch (Exception exception) when (IsFileSystemException(exception))
             {
-                // Pi 0.82 treats unreadable ignore files as best-effort.
+                // Pi 0.83 treats unreadable ignore files as best-effort.
             }
         }
 
@@ -1132,7 +1132,7 @@ public sealed class SkillDiscoveryService
         loser.Diagnostics.Add(new SkillDiagnostic(
             "name-collision",
             "warning",
-            $"{context}中的 name \"{loser.Name}\" 冲突；Pi 0.82 保留优先级更高的 {winner.FilePath}。",
+            $"{context}中的 name \"{loser.Name}\" 冲突；Pi 0.83 保留优先级更高的 {winner.FilePath}。",
             loser.FilePath,
             winner.FilePath,
             workspace?.Id,

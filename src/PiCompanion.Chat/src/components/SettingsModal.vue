@@ -221,6 +221,11 @@ const themeOptions = computed<UiSelectOption[]>(() => [
   { value: 'light', label: t('浅色') },
   { value: 'dark', label: t('深色') },
 ])
+const conversationDetailOptions = computed<UiSelectOption[]>(() => [
+  { value: 'summary', label: t('摘要') },
+  { value: 'normal', label: t('标准') },
+  { value: 'verbose', label: t('详细') },
+])
 const logLevelOptions = computed<UiSelectOption[]>(() => [
   { value: 'error', label: t('错误') },
   { value: 'warning', label: t('警告') },
@@ -1017,6 +1022,10 @@ function authLabel(provider: PiProviderInfo) {
               </div>
               <div class="settings-row"><span><strong>{{ t('语言') }}</strong></span><UiSelect v-model="draft.general.language" :ariaLabelText="t('语言')" :options="languageOptions" /></div>
               <div class="settings-row"><span><strong>{{ t('主题') }}</strong></span><UiSelect v-model="draft.general.theme" :ariaLabelText="t('主题')" :options="themeOptions" /></div>
+              <div class="settings-row">
+                <span><strong>{{ t('对话显示风格') }}</strong><small>{{ t('控制思考过程与工具调用在对话中的展开程度。') }}</small></span>
+                <UiSelect v-model="draft.general.conversationDetailLevel" :ariaLabelText="t('对话详情级别')" :options="conversationDetailOptions" />
+              </div>
             </section>
           </template>
 

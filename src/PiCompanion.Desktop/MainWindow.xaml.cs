@@ -191,9 +191,15 @@ public partial class MainWindow : Window
 
         DiscardDraft();
         _draft = draft;
+        if (!string.IsNullOrWhiteSpace(draft.WorkingDirectory) &&
+            Directory.Exists(draft.WorkingDirectory))
+        {
+            _coordinator.CreateWorkspace(draft.WorkingDirectory);
+        }
         ShowAndActivate();
         if (_bridgeReady)
         {
+            PostTaskCollections();
             PostMessage("DraftLoaded", draft);
         }
     }
@@ -458,6 +464,9 @@ public partial class MainWindow : Window
                     break;
                 case "TrustSkillWorkspace":
                     await TrustSkillWorkspaceAsync(payload);
+                    break;
+                case "SetWorkspaceTrustDecision":
+                    await SetWorkspaceTrustDecisionAsync(payload);
                     break;
                 case "RemoveSkillInstallation":
                     await RemoveSkillInstallationAsync(payload);
@@ -839,7 +848,8 @@ public partial class MainWindow : Window
             _coordinator.RecycleBinTasks,
             draft,
             BridgeContracts.CreateSettingsSnapshot(_settings.Current, _piConfigurationSnapshot),
-            _coordinator.GetRunEvidence);
+            _coordinator.GetRunEvidence,
+            _piProjectTrust.GetStatus);
     }
 
     private async Task PostSkillsAsync(JsonElement payload)
@@ -890,6 +900,7 @@ public partial class MainWindow : Window
         {
             await Task.Run(() => _piProjectTrust.Trust(workspace.WorkingDirectory));
             _coordinator.InvalidateRuntimeResources(workspace.WorkingDirectory);
+            PostTaskCollections();
             var refreshedWorkspaces = GetSkillWorkspaces();
             var snapshot = await Task.Run(() =>
                 _skillDiscovery.Discover(refreshedWorkspaces));
@@ -917,6 +928,63 @@ public partial class MainWindow : Window
                     exception.Message,
                     request.WorkspaceId,
                     snapshot));
+        }
+    }
+
+    private async Task SetWorkspaceTrustDecisionAsync(JsonElement payload)
+    {
+        var request = payload.Deserialize<SetWorkspaceTrustDecisionRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("工作区信任决定请求无效。");
+        if (string.IsNullOrWhiteSpace(request.RequestId) ||
+            request.WorkspaceId == Guid.Empty)
+        {
+            throw new InvalidOperationException("工作区信任决定请求缺少必要字段。");
+        }
+
+        var workspace = _coordinator.Workspaces.FirstOrDefault(candidate =>
+            candidate.Id == request.WorkspaceId);
+        if (workspace is null)
+        {
+            PostMessage(
+                "WorkspaceTrustDecisionCompleted",
+                new WorkspaceTrustDecisionCompletedDto(
+                    request.RequestId,
+                    false,
+                    "目标工作区不存在或已不可用。",
+                    request.WorkspaceId,
+                    "undecided"));
+            return;
+        }
+
+        try
+        {
+            var trust = await Task.Run(() =>
+                _piProjectTrust.SetDecision(workspace.WorkingDirectory, request.Trusted));
+            _coordinator.InvalidateRuntimeResources(workspace.WorkingDirectory);
+            PostTaskCollections();
+            PostMessage(
+                "WorkspaceTrustDecisionCompleted",
+                new WorkspaceTrustDecisionCompletedDto(
+                    request.RequestId,
+                    true,
+                    request.Trusted
+                        ? $"已信任工作区“{workspace.Name}”。"
+                        : $"已将工作区“{workspace.Name}”设为不信任。",
+                    request.WorkspaceId,
+                    trust.Status));
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or IOException or
+                UnauthorizedAccessException or InvalidDataException)
+        {
+            PostMessage(
+                "WorkspaceTrustDecisionCompleted",
+                new WorkspaceTrustDecisionCompletedDto(
+                    request.RequestId,
+                    false,
+                    exception.Message,
+                    request.WorkspaceId,
+                    "undecided"));
         }
     }
 
@@ -1547,7 +1615,8 @@ public partial class MainWindow : Window
             _coordinator.RecentTasks,
             historyPage.Items,
             historyPage.HasMore,
-            _coordinator.RecycleBinTasks));
+            _coordinator.RecycleBinTasks,
+            _piProjectTrust.GetStatus));
     }
 
     private void CreateWorkspace()
@@ -1642,6 +1711,7 @@ public partial class MainWindow : Window
         }
 
         var current = _coordinator.Current;
+        _coordinator.CreateWorkspace(dialog.FolderName);
         _draft = new ComposerDraft(
             dialog.FolderName,
             ReadOptionalString(payload, "prompt") ?? string.Empty,
@@ -1649,6 +1719,7 @@ public partial class MainWindow : Window
             ReadOptionalString(payload, "thinkingLevel") ?? current?.ThinkingLevel ?? ResolveDefaultThinkingLevel(),
             _draft?.Attachments ?? [],
             ReadOptionalString(payload, "permissionMode") ?? _draft?.PermissionMode ?? current?.PermissionMode ?? ResolveDefaultPermissionMode());
+        PostTaskCollections();
         PostMessage("DraftLoaded", _draft);
     }
 
@@ -2699,6 +2770,7 @@ public partial class MainWindow : Window
 
         button.ContextMenu.PlacementTarget = button;
         DesktopLocalizer.Apply(button.ContextMenu);
+        RefreshConversationDetailMenu(button.ContextMenu);
         button.ContextMenu.Placement = PlacementMode.Custom;
         button.ContextMenu.CustomPopupPlacementCallback = PlaceMoreMenu;
         button.ContextMenu.IsOpen = true;
@@ -2715,6 +2787,53 @@ public partial class MainWindow : Window
     ];
 
     private void OnToggleMonitorClick(object sender, RoutedEventArgs e) => _toggleMonitor();
+
+    private void OnConversationDetailClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.MenuItem { Tag: string detailLevel } ||
+            detailLevel is not ("summary" or "normal" or "verbose"))
+        {
+            return;
+        }
+
+        var current = _settings.Current;
+        if (string.Equals(current.General.ConversationDetailLevel, detailLevel, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var saved = _settings.Save(current with
+        {
+            General = current.General with { ConversationDetailLevel = detailLevel },
+        });
+        _applySettings(saved);
+        if (_bridgeReady)
+        {
+            PostSettingsSnapshot();
+        }
+    }
+
+    private void RefreshConversationDetailMenu(System.Windows.Controls.ContextMenu menu)
+    {
+        var selected = _settings.Current.General.ConversationDetailLevel ?? "normal";
+        foreach (var item in menu.Items.OfType<System.Windows.Controls.MenuItem>())
+        {
+            if (item.Tag is not string detailLevel ||
+                detailLevel is not ("summary" or "normal" or "verbose"))
+            {
+                continue;
+            }
+
+            var label = detailLevel switch
+            {
+                "summary" => DesktopLocalizer.Text("摘要", "Summary"),
+                "verbose" => DesktopLocalizer.Text("详细", "Detailed"),
+                _ => DesktopLocalizer.Text("标准", "Standard"),
+            };
+            var check = string.Equals(selected, detailLevel, StringComparison.Ordinal) ? "✓" : "　";
+            item.Header = $"{check} {DesktopLocalizer.Text("对话显示", "Conversation display")}: {label}";
+        }
+    }
 
     private void OnExitClick(object sender, RoutedEventArgs e) => _exit();
 

@@ -74,6 +74,8 @@ public sealed class PiRpcBackendTests
             Assert.Equal([Path.GetFullPath(directSkill)], files);
             var arguments = JsonSerializer.Deserialize<string[]>(
                 File.ReadAllText(Path.Combine(root, "sessions", "fake-args.json"))) ?? [];
+            Assert.Contains("--approve", arguments);
+            Assert.DoesNotContain("--no-approve", arguments);
             Assert.DoesNotContain("--no-skills", arguments);
             Assert.DoesNotContain("--skill", arguments);
             var promptIndex = Array.IndexOf(arguments, "--append-system-prompt");
@@ -136,6 +138,8 @@ public sealed class PiRpcBackendTests
             Assert.DoesNotContain(Path.GetFullPath(workspaceSkillRoot), roots);
             var arguments = JsonSerializer.Deserialize<string[]>(
                 File.ReadAllText(Path.Combine(root, "sessions", "fake-args.json"))) ?? [];
+            Assert.Contains("--no-approve", arguments);
+            Assert.DoesNotContain("--approve", arguments);
             var promptIndex = Array.IndexOf(arguments, "--append-system-prompt");
             Assert.True(promptIndex >= 0 && promptIndex + 1 < arguments.Length);
             Assert.Contains("当前工作区未受 Pi 信任", arguments[promptIndex + 1]);

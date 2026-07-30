@@ -14,6 +14,30 @@ describe('desktop bridge protocol contract', () => {
     expect(desktopVersion).toBe(bridgeProtocolVersion)
   })
 
+  it('persists conversation detail and exposes mutually exclusive native shortcuts', () => {
+    const appSettings = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Application/Settings/AppSettings.cs',
+    ), 'utf8')
+    const mainWindowXaml = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/MainWindow.xaml',
+    ), 'utf8')
+    const mainWindow = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/MainWindow.xaml.cs',
+    ), 'utf8')
+
+    expect(appSettings).toContain('string? ConversationDetailLevel = "normal"')
+    expect(appSettings).toContain('["summary", "normal", "verbose"]')
+    expect(mainWindowXaml).toContain('Tag="summary" Click="OnConversationDetailClick"')
+    expect(mainWindowXaml).toContain('Tag="normal" Click="OnConversationDetailClick"')
+    expect(mainWindowXaml).toContain('Tag="verbose" Click="OnConversationDetailClick"')
+    expect(mainWindow).toContain('General = current.General with { ConversationDetailLevel = detailLevel }')
+    expect(mainWindow).toContain('PostSettingsSnapshot();')
+    expect(mainWindow).toContain('var check = string.Equals(selected, detailLevel, StringComparison.Ordinal) ? "✓" : "　";')
+  })
+
   it('contracts grouped native discovery, guarded removal, and direct local import', () => {
     const desktopContracts = readFileSync(resolve(
       process.cwd(),
@@ -32,7 +56,8 @@ describe('desktop bridge protocol contract', () => {
       '../PiCompanion.Application/Tasks/PiTaskMetadataGenerator.cs',
     ), 'utf8')
 
-    expect(bridgeProtocolVersion).toBe(57)
+    expect(bridgeProtocolVersion).toBe(58)
+    expect(mainWindow).toContain('case "SetWorkspaceTrustDecision":')
     expect(mainWindow).toContain('case "LoadSkills":')
     expect(mainWindow).toContain('case "TrustSkillWorkspace":')
     expect(mainWindow).toContain('case "RemoveSkillInstallation":')
@@ -60,6 +85,7 @@ describe('desktop bridge protocol contract', () => {
     expect(mainWindow).toContain('new SkillDiscoveryWorkspace(')
     expect(desktopContracts).toContain('internal sealed record LoadSkillsRequestDto(')
     expect(desktopContracts).toContain('internal sealed record TrustSkillWorkspaceRequestDto(')
+    expect(desktopContracts).toContain('internal sealed record SetWorkspaceTrustDecisionRequestDto(')
     expect(desktopContracts).toContain('internal sealed record SkillsLoadedDto(')
     expect(desktopContracts).toContain('internal sealed record DiscoveredSkillDto(')
     expect(desktopContracts).toContain('internal sealed record SkillContentVariantDto(')

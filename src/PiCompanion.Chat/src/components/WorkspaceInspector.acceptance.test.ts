@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { BaseTree } from '@he-tree/vue'
+import { nextTick } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import WorkspaceInspector from './WorkspaceInspector.vue'
 import type { WorkspaceDirectoryListing, WorkspaceFileEntry, WorkspaceGitSnapshot } from '@/types/bridge'
@@ -204,14 +205,31 @@ describe('WorkspaceInspector', () => {
       false,
     ])
 
-    await wrapper.get('button[aria-label="包含忽略文件"]').trigger('click')
+    const searchOptions = wrapper.get('button[aria-label="更多搜索选项"]')
+    await searchOptions.trigger('click')
+    await nextTick()
+    const ignoredOptions = wrapper.findAll('.file-search-options-menu [role="menuitemradio"]')
+    expect(ignoredOptions).toHaveLength(2)
+    expect(ignoredOptions[0].text()).toContain('✓')
+    expect(ignoredOptions[0].text()).toContain('排除忽略项')
+    expect(ignoredOptions[0].attributes('aria-checked')).toBe('true')
+    expect(ignoredOptions[1].text()).toContain('包含忽略项')
+    expect(ignoredOptions[1].attributes('aria-checked')).toBe('false')
+
+    await ignoredOptions[1].trigger('click')
     await vi.advanceTimersByTimeAsync(260)
-    expect(wrapper.get('button[aria-label="包含忽略文件"]').attributes('aria-pressed')).toBe('true')
     expect(wrapper.emitted('search')?.at(-1)).toEqual([
       expect.any(String),
       'dependency',
       true,
     ])
+
+    await searchOptions.trigger('click')
+    await nextTick()
+    const activeIgnoredOptions = wrapper.findAll('.file-search-options-menu [role="menuitemradio"]')
+    expect(activeIgnoredOptions[0].attributes('aria-checked')).toBe('false')
+    expect(activeIgnoredOptions[1].attributes('aria-checked')).toBe('true')
+    expect(activeIgnoredOptions[1].text()).toContain('✓')
 
     wrapper.unmount()
     vi.useRealTimers()
@@ -359,12 +377,12 @@ describe('WorkspaceInspector', () => {
     })
 
     const resizer = wrapper.get('.inspector-resizer')
-    expect(resizer.attributes('aria-valuemin')).toBe('250')
-    expect(resizer.attributes('aria-valuemax')).toBe('400')
+    expect(resizer.attributes('aria-valuemin')).toBe('300')
+    expect(resizer.attributes('aria-valuemax')).toBe('560')
     expect(resizer.attributes('aria-valuenow')).toBe('300')
     await resizer.trigger('dblclick')
     await resizer.trigger('keydown', { key: 'ArrowLeft' })
 
-    expect(wrapper.emitted('setWidth')).toEqual([[300], [312]])
+    expect(wrapper.emitted('setWidth')).toEqual([[340], [312]])
   })
 })

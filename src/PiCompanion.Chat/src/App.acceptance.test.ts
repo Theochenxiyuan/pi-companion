@@ -319,6 +319,109 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.getComponent(SkillsView).props('snapshot')).toEqual(trusted)
   })
 
+  it('requires an explicit workspace trust choice before the first task and then resumes it', async () => {
+    const postMessage = vi.fn()
+    let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
+    window.chrome = {
+      webview: {
+        postMessage,
+        addEventListener(_type, listener) { bridgeListener = listener },
+        removeEventListener() {},
+      },
+    }
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()] },
+    })
+    mountedWrappers.push(wrapper)
+    const workingDirectory = 'D:\\Dev\\desktop_software\\pi-companion'
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'InitializeSnapshot',
+        payload: {
+          currentTask: null,
+          lastSequence: 0,
+          workspaces: [{
+            id: 'preview-workspace',
+            name: 'pi-companion',
+            workingDirectory,
+            createdAt: '2026-07-31T00:00:00.000Z',
+            updatedAt: '2026-07-31T00:00:00.000Z',
+            taskCount: 0,
+            hasActiveTask: false,
+            trustStatus: 'undecided',
+            trustDecisionPath: null,
+            trustInherited: false,
+          }],
+          recentTasks: [],
+          historyTasks: [],
+          recycleBinTasks: [],
+          draft: {
+            workingDirectory,
+            prompt: '',
+            model: 'openai-codex/gpt-5.6-sol',
+            thinkingLevel: 'high',
+            permissionMode: 'standard',
+            attachments: [],
+          },
+          capabilities: ['workspace-trust-preflight'],
+        } satisfies InitializeSnapshot,
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+
+    expect(wrapper.get('.workspace-trust-badge').text()).toContain('尚未选择信任')
+    await wrapper.get('.composer > textarea').setValue('Inspect the project')
+    await wrapper.get('.send-button').trigger('click')
+    expect(postMessage.mock.calls.some(([message]) => message.type === 'SendPrompt')).toBe(false)
+    expect(wrapper.get('.workspace-trust-dialog').text()).toContain('是否信任“pi-companion”？')
+    expect(wrapper.get('.workspace-trust-dialog').text()).toContain('不会改变文件访问或命令执行权限')
+    await wrapper.get('.workspace-trust-dialog').trigger('mousedown')
+    expect(wrapper.find('.workspace-trust-dialog').exists()).toBe(true)
+    await wrapper.get('.dialog-backdrop > .ui-dialog-overlay').trigger('mousedown')
+    expect(wrapper.find('.workspace-trust-dialog').exists()).toBe(true)
+
+    await wrapper.get('.workspace-trust-dialog .primary').trigger('click')
+    const decision = postMessage.mock.calls
+      .map(call => call[0])
+      .find(message => message.type === 'SetWorkspaceTrustDecision')
+    expect(decision).toEqual(expect.objectContaining({
+      protocolVersion: bridgeProtocolVersion,
+      payload: {
+        requestId: expect.stringMatching(/^workspace-trust-/),
+        workspaceId: 'preview-workspace',
+        trusted: true,
+      },
+    }))
+
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'WorkspaceTrustDecisionCompleted',
+        payload: {
+          requestId: decision.payload.requestId,
+          succeeded: true,
+          message: '已信任工作区“pi-companion”。',
+          workspaceId: 'preview-workspace',
+          status: 'trusted',
+        },
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('.workspace-trust-dialog').exists()).toBe(false)
+    expect(wrapper.get('.app-toast').text()).toContain('已信任工作区')
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'SendPrompt',
+      payload: expect.objectContaining({
+        prompt: 'Inspect the project',
+        workingDirectory,
+      }),
+    }))
+  })
+
   it('opens the same workspace skill manager modal from the conversation and All Tasks', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
@@ -879,7 +982,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.find('.settings-modal').exists()).toBe(true)
 
     const appearanceSelects = wrapper.findAll('.settings-row .app-select-trigger')
-    expect(appearanceSelects).toHaveLength(2)
+    expect(appearanceSelects).toHaveLength(3)
 
     await appearanceSelects[0].trigger('click')
     const languageMenu = wrapper.get('.app-select-menu')

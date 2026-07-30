@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogOverlay,
+  DialogPortal,
   DialogRoot,
   DialogTitle,
 } from 'reka-ui'
@@ -56,22 +57,25 @@ function handleBackdropMouseDown(event: MouseEvent) {
 
 <template>
   <DialogRoot :open="open" :modal="true" @update:open="handleOpenChange">
-    <DialogOverlay class="ui-dialog-overlay" :class="overlayClass" @mousedown="handleBackdropMouseDown">
-      <DialogContent
-        v-bind="$attrs"
-        class="ui-dialog-content"
-        :class="contentClass"
-        :role="alert ? 'alertdialog' : 'dialog'"
-        aria-modal="true"
-        @pointer-down-outside="handlePointerDownOutside"
-        @escape-key-down="handleEscape"
-      >
-        <DialogTitle as="span" class="ui-visually-hidden">{{ title }}</DialogTitle>
-        <DialogDescription as="span" class="ui-visually-hidden">
-          {{ description }}
-        </DialogDescription>
-        <slot />
-      </DialogContent>
-    </DialogOverlay>
+    <DialogPortal>
+      <div class="ui-dialog-layer" :class="overlayClass">
+        <DialogOverlay class="ui-dialog-overlay" @mousedown="handleBackdropMouseDown" />
+        <DialogContent
+          v-bind="$attrs"
+          class="ui-dialog-content"
+          :class="contentClass"
+          :role="alert ? 'alertdialog' : 'dialog'"
+          aria-modal="true"
+          @pointer-down-outside="handlePointerDownOutside"
+          @escape-key-down="handleEscape"
+        >
+          <DialogTitle as="span" class="ui-visually-hidden">{{ title }}</DialogTitle>
+          <DialogDescription as="span" class="ui-visually-hidden">
+            {{ description }}
+          </DialogDescription>
+          <slot />
+        </DialogContent>
+      </div>
+    </DialogPortal>
   </DialogRoot>
 </template>

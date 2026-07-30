@@ -19,7 +19,8 @@ public sealed record PiCompanionSettings(
             Theme: "dark",
             LogLevel: "information",
             UiScalePercent: 100,
-            GitAutoRefreshSeconds: 0),
+            GitAutoRefreshSeconds: 0,
+            ConversationDetailLevel: "normal"),
         new MonitorSettings(
             Position: "top-right",
             ShowOnStartup: true,
@@ -73,7 +74,8 @@ public sealed record PiCompanionSettings(
             general.UiScalePercent <= 0
                 ? Default.General.UiScalePercent
                 : Math.Clamp(general.UiScalePercent, 50, 200),
-            NormalizeGitAutoRefreshSeconds(general.GitAutoRefreshSeconds)),
+            NormalizeGitAutoRefreshSeconds(general.GitAutoRefreshSeconds),
+            NormalizeChoice(general.ConversationDetailLevel, ["summary", "normal", "verbose"], "normal")),
         new MonitorSettings(
             NormalizeChoice(monitor.Position, ["top-left", "top-right", "bottom-left", "bottom-right", "last-position"], "top-right"),
             monitor.ShowOnStartup,
@@ -161,7 +163,8 @@ public sealed record GeneralSettings(
     string Theme,
     string LogLevel,
     int UiScalePercent = 100,
-    int GitAutoRefreshSeconds = 0);
+    int GitAutoRefreshSeconds = 0,
+    string? ConversationDetailLevel = "normal");
 
 public sealed record MonitorSettings(
     string Position,
