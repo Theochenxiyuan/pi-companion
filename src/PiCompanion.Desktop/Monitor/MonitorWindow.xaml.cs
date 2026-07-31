@@ -67,7 +67,6 @@ public partial class MonitorWindow : Window
     private Guid? _skillCompletionTaskId;
     private string? _lastAutoExpandedInteractionId;
     private MonitorSettings _settings = PiCompanionSettings.Default.Monitor;
-    private bool _aiSummaryEnabled = PiCompanionSettings.Default.Tasks.AiSummaryEnabled;
     private readonly DispatcherTimer _autoCollapseTimer;
 
     internal MonitorWindow(
@@ -135,12 +134,11 @@ public partial class MonitorWindow : Window
 
     public bool AllowClose { get; set; }
 
-    public void ApplySettings(MonitorSettings settings, TaskSettings taskSettings)
+    public void ApplySettings(MonitorSettings settings)
     {
         var positionChanged = !string.Equals(_settings.Position, settings.Position, StringComparison.Ordinal);
         var animationsChanged = _settings.AnimationsEnabled != settings.AnimationsEnabled;
         _settings = settings;
-        _aiSummaryEnabled = taskSettings.AiSummaryEnabled;
         Topmost = settings.AlwaysOnTop;
         _autoCollapseTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, settings.AutoCollapseSeconds));
         if (positionChanged)
@@ -230,11 +228,7 @@ public partial class MonitorWindow : Window
             _skillCompletion.Invalidate();
         }
 
-        var isAiSummaryLoading =
-            projection is not null &&
-            projection.Status is RunStatus.Completed or RunStatus.Failed or RunStatus.Interrupted &&
-            _aiSummaryEnabled &&
-            string.IsNullOrWhiteSpace(projection.Summary);
+        var isAiSummaryLoading = projection?.AiSummaryStatus == AiSummaryStatus.Generating;
         UpdateAiSummaryLoadingState(isAiSummaryLoading);
 
         if (projection is null)
@@ -395,11 +389,11 @@ public partial class MonitorWindow : Window
     private void RenderResult(TaskProjection projection)
     {
         ResultPanel.Visibility = Visibility.Visible;
-        var resultSummary = _aiSummaryEnabled
-            ? string.IsNullOrWhiteSpace(projection.Summary)
+        var resultSummary = !string.IsNullOrWhiteSpace(projection.Summary)
+            ? projection.Summary
+            : projection.AiSummaryStatus == AiSummaryStatus.Generating
                 ? string.Empty
-                : projection.Summary
-            : BuildLatestAgentMessageSummary(projection);
+                : BuildLatestAgentMessageSummary(projection);
         ResultSummary.Text = resultSummary;
         ResultSummary.Visibility = !string.IsNullOrWhiteSpace(resultSummary)
             ? Visibility.Visible

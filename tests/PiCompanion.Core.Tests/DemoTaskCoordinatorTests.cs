@@ -688,15 +688,67 @@ public sealed class DemoTaskCoordinatorTests
             Assert.Equal("provider/metadata-model", generator.SummaryModel);
             Assert.Equal("AI generated title", coordinator.Current?.Title);
             Assert.Equal("AI generated run summary", coordinator.Current?.Summary);
+            Assert.Equal(AiSummaryStatus.Available, coordinator.Current?.AiSummaryStatus);
             var restored = Assert.Single(store.RestoreTaskRuns(coordinator.Current!.TaskId));
             Assert.Equal("AI generated title", restored.Title);
             Assert.Equal("AI generated run summary", restored.Summary);
+            Assert.Equal(AiSummaryStatus.Available, restored.AiSummaryStatus);
         }
         finally
         {
             SqliteConnection.ClearAllPools();
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task AiSummaryStatus_IsGeneratingOnlyWhileTheGeneratorIsRunning()
+    {
+        var generator = new ControlledSummaryMetadataGenerator();
+        using var coordinator = new TaskCoordinator(
+            new DemoAgentBackend(TimeSpan.Zero),
+            metadataGenerator: generator,
+            taskSettingsResolver: () => new TaskSettings(
+                false,
+                string.Empty,
+                true,
+                "provider/summary-model"));
+        var generating = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.ProjectionChanged += projection =>
+        {
+            if (projection is null)
+            {
+                return;
+            }
+
+            if (projection.AiSummaryStatus == AiSummaryStatus.Generating)
+            {
+                generating.TrySetResult();
+            }
+            else if (projection.AiSummaryStatus == AiSummaryStatus.Failed)
+            {
+                failed.TrySetResult();
+            }
+        };
+
+        await coordinator.StartAsync(
+            "Summarize this run",
+            Path.GetTempPath(),
+            "run-model",
+            "high",
+            DemoRunMode.Success,
+            TestContext.Current.CancellationToken);
+        await generating.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AiSummaryStatus.Generating, coordinator.Current?.AiSummaryStatus);
+        Assert.Empty(coordinator.Current?.Summary ?? string.Empty);
+
+        generator.CompleteSummary(null);
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AiSummaryStatus.Failed, coordinator.Current?.AiSummaryStatus);
+        Assert.Empty(coordinator.Current?.Summary ?? string.Empty);
     }
 
     [Fact]
@@ -1089,6 +1141,31 @@ public sealed class DemoTaskCoordinatorTests
             SummaryModel = model;
             return Task.FromResult<string?>(summary);
         }
+
+        public Task<string?> GenerateCommitMessageAsync(
+            CommitMessageSource source,
+            string model,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+    }
+
+    private sealed class ControlledSummaryMetadataGenerator : ITaskMetadataGenerator
+    {
+        private readonly TaskCompletionSource<string?> _summary = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void CompleteSummary(string? summary) => _summary.TrySetResult(summary);
+
+        public Task<string?> GenerateTitleAsync(
+            string prompt,
+            string model,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task<string?> GenerateRunSummaryAsync(
+            RunSummarySource source,
+            string model,
+            CancellationToken cancellationToken = default) =>
+            _summary.Task.WaitAsync(cancellationToken);
 
         public Task<string?> GenerateCommitMessageAsync(
             CommitMessageSource source,

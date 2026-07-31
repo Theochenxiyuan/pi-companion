@@ -1,4 +1,6 @@
-export const bridgeProtocolVersion = 58
+export const bridgeProtocolVersion = 60
+
+export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 
 export type PermissionMode = 'read-only' | 'standard' | 'full-access'
 export type TaskScopeKind = 'Workspace' | 'GeneralChat'
@@ -67,6 +69,11 @@ export interface DataRetentionSettings {
   logDays: number
 }
 
+export interface ModelVisibilitySettings {
+  hiddenModelReferences: string[]
+  legacyPiScopeMigrationCompleted: boolean
+}
+
 export interface PiCompanionSettings {
   general: GeneralSettings
   monitor: MonitorSettings
@@ -74,6 +81,7 @@ export interface PiCompanionSettings {
   agent: AgentSettings
   notifications: NotificationSettings
   dataRetention: DataRetentionSettings
+  modelVisibility: ModelVisibilitySettings
 }
 
 export interface PiProviderInfo {
@@ -135,6 +143,7 @@ export interface PiConfigurationSnapshot {
   followUpMode: 'one-at-a-time' | 'all'
   providers: PiProviderInfo[]
   models: PiModelInfo[]
+  // Legacy Pi scope used only for one-time Companion visibility migration.
   enabledModels: string[] | null
   customProviders: PiCustomProviderInfo[]
   modelsConfigRevision: string | null
@@ -628,6 +637,7 @@ export interface TaskSnapshot {
   status: string
   statusText: string
   summary: string
+  aiSummaryStatus?: AiSummaryStatus
   activityStatus?: string | null
   assistantText: string | null
   finalAnswer: string | null
@@ -663,6 +673,7 @@ export interface TaskRunSnapshot {
   status: string
   statusText: string
   summary: string
+  aiSummaryStatus?: AiSummaryStatus
   activityStatus?: string | null
   assistantText: string | null
   finalAnswer: string | null
@@ -781,6 +792,7 @@ export interface TaskHistoryEntry {
   status: string
   statusText: string
   summary: string
+  aiSummaryStatus?: AiSummaryStatus
   updatedAt: string
   deletedAt: string | null
   workspaceId?: string | null
@@ -868,6 +880,7 @@ export interface TaskDelta {
   status: string
   statusText: string
   summary: string
+  aiSummaryStatus?: AiSummaryStatus
   activityStatus?: string | null
   assistantText: string | null
   finalAnswer: string | null

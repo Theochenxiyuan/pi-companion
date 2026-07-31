@@ -44,14 +44,82 @@
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="MenuItem">
-                                <Border x:Name="ItemBorder"
-                                        Padding="{TemplateBinding Padding}"
-                                        Background="{TemplateBinding Background}"
-                                        CornerRadius="6">
-                                    <TextBlock Text="{TemplateBinding Header}"
-                                               Foreground="{TemplateBinding Foreground}" />
-                                </Border>
+                                <Grid>
+                                    <Border x:Name="ItemBorder"
+                                            Padding="{TemplateBinding Padding}"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Path x:Name="SubmenuArrowLeft"
+                                                  Grid.Column="0"
+                                                  Width="5"
+                                                  Height="8"
+                                                  Margin="0,0,10,0"
+                                                  VerticalAlignment="Center"
+                                                  Data="M 4 0 L 0 4 L 4 8"
+                                                  Stroke="{TemplateBinding Foreground}"
+                                                  StrokeThickness="1.25"
+                                                  Visibility="Collapsed" />
+                                            <Path x:Name="SubmenuArrowRight"
+                                                  Grid.Column="2"
+                                                  Width="5"
+                                                  Height="8"
+                                                  Margin="10,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  Data="M 0 0 L 4 4 L 0 8"
+                                                  Stroke="{TemplateBinding Foreground}"
+                                                  StrokeThickness="1.25"
+                                                  Visibility="Collapsed" />
+                                            <Path x:Name="SelectionCheck"
+                                                  Grid.Column="0"
+                                                  Width="8"
+                                                  Height="7"
+                                                  Margin="0,0,10,0"
+                                                  VerticalAlignment="Center"
+                                                  Data="M 0 3 L 3 6 L 8 0"
+                                                  Stroke="{TemplateBinding Foreground}"
+                                                  StrokeThickness="1.5"
+                                                  Visibility="Collapsed" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{TemplateBinding Header}"
+                                                       Foreground="{TemplateBinding Foreground}" />
+                                        </Grid>
+                                    </Border>
+                                    <Popup x:Name="PART_Popup"
+                                           AllowsTransparency="True"
+                                           Focusable="False"
+                                           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                           Placement="Left"
+                                           PopupAnimation="None">
+                                        <Border x:Name="SubmenuBorder"
+                                                MinWidth="132"
+                                                Margin="4,0"
+                                                Padding="4"
+                                                Background="{DynamicResource SurfaceBrush}"
+                                                BorderBrush="{DynamicResource StrokeBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.42" Color="{StaticResource ColorShadow}" />
+                                            </Border.Effect>
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                        </Border>
+                                    </Popup>
+                                </Grid>
                                 <ControlTemplate.Triggers>
+                                    <Trigger Property="HasItems" Value="True">
+                                        <Setter TargetName="SubmenuArrowLeft" Property="Visibility" Value="Visible" />
+                                        <Setter TargetName="SubmenuArrowRight" Property="Visibility" Value="Visible" />
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="SelectionCheck" Property="Visibility" Value="Visible" />
+                                    </Trigger>
                                     <Trigger Property="IsHighlighted" Value="True">
                                         <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBrush}" />
                                     </Trigger>
@@ -62,10 +130,11 @@
                 </Style>
             </ContextMenu.Resources>
             <MenuItem Header="显示 / 隐藏任务监视器" Click="OnToggleMonitorClick" />
-            <Separator Margin="4,3" />
-            <MenuItem Header="对话显示：摘要" Tag="summary" Click="OnConversationDetailClick" />
-            <MenuItem Header="对话显示：标准" Tag="normal" Click="OnConversationDetailClick" />
-            <MenuItem Header="对话显示：详细" Tag="verbose" Click="OnConversationDetailClick" />
+            <MenuItem Header="对话显示">
+                <MenuItem Header="摘要" Tag="summary" IsCheckable="True" Click="OnConversationDetailClick" />
+                <MenuItem Header="标准" Tag="normal" IsCheckable="True" Click="OnConversationDetailClick" />
+                <MenuItem Header="详细" Tag="verbose" IsCheckable="True" Click="OnConversationDetailClick" />
+            </MenuItem>
             <Separator Margin="4,3" />
             <MenuItem Header="退出 Pi Companion"
                       Foreground="{DynamicResource DangerBrush}"

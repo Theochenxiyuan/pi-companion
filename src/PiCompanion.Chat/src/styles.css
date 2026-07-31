@@ -1024,6 +1024,10 @@ body.sidebar-resizing .workspace { transition: none; }
 .run-state-line strong { flex: none; color: var(--color-text-secondary); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 .run-summary-row { display: flex; min-height: 27px; align-items: flex-start; justify-content: space-between; gap: 24px; padding-top: 4px; color: var(--color-text-tertiary); font-size: var(--font-size-body-sm); }
 .run-summary-content { display: flex; width: 75%; min-width: 0; flex: none; align-items: flex-start; gap: 4px; }
+.run-summary-loading { align-items: center; color: var(--color-text-tertiary); }
+.run-summary-loading .file-loading-spinner { width: 12px; height: 12px; }
+.recent-task-hover-summary-loading { display: flex; align-items: center; gap: 7px; }
+.recent-task-hover-summary-loading .file-loading-spinner { width: 12px; height: 12px; }
 .run-summary-label { flex: none; color: var(--color-text-secondary); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 .agent-copy-button { margin: -4px 0 0 auto; }
 .run-summary-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

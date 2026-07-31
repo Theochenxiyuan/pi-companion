@@ -57,7 +57,7 @@ public sealed class DesktopShell : IDisposable
             () => chatWindow?.OpenNewTask(),
             Exit);
         monitorWindow = _monitorWindow;
-        _monitorWindow.ApplySettings(_settings.Current.Monitor, _settings.Current.Tasks);
+        _monitorWindow.ApplySettings(_settings.Current.Monitor);
 
         _chatWindow = new MainWindow(
             coordinator,
@@ -203,7 +203,7 @@ public sealed class DesktopShell : IDisposable
         DesktopLocalizer.Apply(_chatWindow);
         DesktopLocalizer.Apply(_composerWindow);
         DesktopLocalizer.Apply(_monitorWindow);
-        _monitorWindow.ApplySettings(settings.Monitor, settings.Tasks);
+        _monitorWindow.ApplySettings(settings.Monitor);
         _composerWindow.ApplySettings(settings.Agent, settings.Tasks);
         _monitorWindow.RefreshLocalization();
         _composerWindow.RefreshLocalization();

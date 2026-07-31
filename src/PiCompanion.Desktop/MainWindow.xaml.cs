@@ -362,13 +362,13 @@ public partial class MainWindow : Window
                     _bridgeReady = true;
                     if (_piConfiguration.CachedSnapshot is { } cachedPiConfiguration)
                     {
-                        _piConfigurationSnapshot = cachedPiConfiguration;
+                        ApplyPiConfigurationSnapshot(cachedPiConfiguration);
                         PostCurrentSnapshot();
                         _ = _piConfiguration.RefreshSnapshotAsync();
                     }
                     else
                     {
-                        _piConfigurationSnapshot = await _piConfiguration.RefreshSnapshotAsync();
+                        ApplyPiConfigurationSnapshot(await _piConfiguration.RefreshSnapshotAsync());
                         PostCurrentSnapshot();
                     }
                     PostOpenCurrentTask();
@@ -656,13 +656,6 @@ public partial class MainWindow : Window
                         ReadOptionalString(payload, "modelsConfigRevision"));
                     PostSettingsSnapshot(DesktopLocalizer.Text($"自定义 Provider {deletedCustomProviderName} 已删除。", $"Custom provider {deletedCustomProviderName} was deleted."), true);
                     break;
-                case "SavePiEnabledModels":
-                    _piConfigurationSnapshot = await _piConfiguration.SaveEnabledModelsAsync(
-                        payload.TryGetProperty("enabledModels", out var enabledModelsElement) && enabledModelsElement.ValueKind != JsonValueKind.Null
-                            ? enabledModelsElement.EnumerateArray().Select(item => item.GetString() ?? string.Empty).ToArray()
-                            : null);
-                    PostSettingsSnapshot("Pi 模型启用范围已更新。", true);
-                    break;
                 case "OpenPiLogin":
                     var loginProviderId = ReadString(payload, "providerId");
                     if (_piOAuthLoginCancellation is not null)
@@ -825,12 +818,29 @@ public partial class MainWindow : Window
 
         _ = Dispatcher.InvokeAsync(() =>
         {
-            _piConfigurationSnapshot = snapshot;
+            ApplyPiConfigurationSnapshot(snapshot);
             if (_bridgeReady)
             {
                 PostSettingsSnapshot();
             }
         });
+    }
+
+    private void ApplyPiConfigurationSnapshot(PiConfigurationSnapshot snapshot)
+    {
+        _piConfigurationSnapshot = snapshot;
+        if (!snapshot.Available || snapshot.Models.Count == 0)
+        {
+            return;
+        }
+
+        var references = snapshot.Models
+            .Select(model => $"{model.Provider}/{model.Id}")
+            .ToArray();
+        if (_settings.TryMigrateLegacyModelVisibility(references, snapshot.EnabledModels, out var migrated))
+        {
+            _applySettings(migrated);
+        }
     }
 
     private const int TaskHistoryPageSize = 10;
@@ -1507,6 +1517,7 @@ public partial class MainWindow : Window
             Tasks = requested.Tasks,
             Notifications = requested.Notifications,
             DataRetention = requested.DataRetention,
+            ModelVisibility = requested.ModelVisibility,
         });
         _applySettings(saved);
         _coordinator.RefreshLocalQueueAutomation();
@@ -1593,7 +1604,6 @@ public partial class MainWindow : Window
         "AddPiCustomProvider" or
         "UpdatePiCustomProvider" or
         "DeletePiCustomProvider" or
-        "SavePiEnabledModels" or
         "OpenPiLogin" or
         "CancelPiOAuthLogin" or
         "OpenDataDirectory" or
@@ -2047,7 +2057,8 @@ public partial class MainWindow : Window
             projection.RunId,
             projection.Status,
             projection.Title,
-            projection.Summary);
+            projection.Summary,
+            projection.AiSummaryStatus);
         lock (_backgroundTaskVersions)
         {
             if (_backgroundTaskVersions.GetValueOrDefault(projection.TaskId) == version)
@@ -2797,6 +2808,7 @@ public partial class MainWindow : Window
         }
 
         var current = _settings.Current;
+        ((System.Windows.Controls.MenuItem)sender).IsChecked = true;
         if (string.Equals(current.General.ConversationDetailLevel, detailLevel, StringComparison.Ordinal))
         {
             return;
@@ -2816,7 +2828,7 @@ public partial class MainWindow : Window
     private void RefreshConversationDetailMenu(System.Windows.Controls.ContextMenu menu)
     {
         var selected = _settings.Current.General.ConversationDetailLevel ?? "normal";
-        foreach (var item in menu.Items.OfType<System.Windows.Controls.MenuItem>())
+        foreach (var item in EnumerateMenuItems(menu.Items))
         {
             if (item.Tag is not string detailLevel ||
                 detailLevel is not ("summary" or "normal" or "verbose"))
@@ -2830,8 +2842,21 @@ public partial class MainWindow : Window
                 "verbose" => DesktopLocalizer.Text("详细", "Detailed"),
                 _ => DesktopLocalizer.Text("标准", "Standard"),
             };
-            var check = string.Equals(selected, detailLevel, StringComparison.Ordinal) ? "✓" : "　";
-            item.Header = $"{check} {DesktopLocalizer.Text("对话显示", "Conversation display")}: {label}";
+            item.IsChecked = string.Equals(selected, detailLevel, StringComparison.Ordinal);
+            item.Header = label;
+        }
+    }
+
+    private static IEnumerable<System.Windows.Controls.MenuItem> EnumerateMenuItems(
+        System.Windows.Controls.ItemCollection items)
+    {
+        foreach (var item in items.OfType<System.Windows.Controls.MenuItem>())
+        {
+            yield return item;
+            foreach (var descendant in EnumerateMenuItems(item.Items))
+            {
+                yield return descendant;
+            }
         }
     }
 

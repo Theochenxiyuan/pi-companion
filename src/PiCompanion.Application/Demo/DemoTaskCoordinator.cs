@@ -196,7 +196,8 @@ public sealed class TaskCoordinator : IDisposable
                         projection.Status,
                         projection.Summary,
                         projection.Transcript.LastOrDefault()?.Timestamp ?? DateTimeOffset.UtcNow,
-                        ScopeKind: projection.ScopeKind))
+                        ScopeKind: projection.ScopeKind,
+                        AiSummaryStatus: projection.AiSummaryStatus))
                     .OrderByDescending(task => task.UpdatedAt)
                     .ToArray();
             }
@@ -1872,6 +1873,18 @@ public sealed class TaskCoordinator : IDisposable
             return;
         }
 
+        lock (_gate)
+        {
+            if (projection.AiSummaryStatus is AiSummaryStatus.Generating or AiSummaryStatus.Available)
+            {
+                return;
+            }
+
+            projection.BeginAiSummaryGeneration();
+        }
+
+        NotifyTaskChanged(projection);
+
         var source = new RunSummarySource(
             projection.Title,
             projection.Prompt,
@@ -1910,6 +1923,7 @@ public sealed class TaskCoordinator : IDisposable
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(summary))
             {
+                UpdateAiSummaryStatus(taskId, runId, static projection => projection.FailAiSummaryGeneration());
                 return;
             }
 
@@ -1931,11 +1945,31 @@ public sealed class TaskCoordinator : IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            UpdateAiSummaryStatus(taskId, runId, static projection => projection.CancelAiSummaryGeneration());
         }
         catch (Exception)
         {
-            // AI metadata is best-effort; a failed request leaves the AI-only summary empty.
+            UpdateAiSummaryStatus(taskId, runId, static projection => projection.FailAiSummaryGeneration());
         }
+    }
+
+    private void UpdateAiSummaryStatus(Guid taskId, Guid runId, Action<TaskProjection> update)
+    {
+        TaskProjection? changed;
+        lock (_gate)
+        {
+            changed = _taskConversations.TryGetValue(taskId, out var conversation)
+                ? conversation.FirstOrDefault(candidate => candidate.RunId == runId)
+                : null;
+            if (changed is null)
+            {
+                return;
+            }
+
+            update(changed);
+        }
+
+        NotifyTaskChanged(changed);
     }
 
     private static async Task PrewarmMetadataGeneratorAsync(

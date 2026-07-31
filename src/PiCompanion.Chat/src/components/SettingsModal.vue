@@ -39,7 +39,6 @@ const emit = defineEmits<{
   addPiCustomProvider: [provider: PiCustomProviderInfo, apiKey: string, modelsConfigRevision: string | null]
   updatePiCustomProvider: [provider: PiCustomProviderInfo, apiKey: string, modelsConfigRevision: string | null]
   deletePiCustomProvider: [providerId: string, modelsConfigRevision: string | null]
-  savePiEnabledModels: [enabledModels: string[] | null]
   openPiLogin: [providerId: string]
   cancelPiLogin: [providerId: string]
   openDataDirectory: []
@@ -112,13 +111,6 @@ const pendingCustomProviderId = ref('')
 const customProviderIdTouched = ref(false)
 const customProviderError = ref('')
 const customProviderDraft = ref<CustomProviderDraft>(createCustomProviderDraft())
-const modelScopeDraft = ref(createEnabledModelSet(props.snapshot))
-const modelScopeDirty = ref(false)
-const modelScopeWriteInFlight = ref(false)
-const modelScopeRevision = ref(0)
-let sentModelScopeRevision = 0
-let sentModelScope: string[] | null = null
-let modelScopeSaveTimer = 0
 const loggingInProviderId = ref('')
 const pendingHeaderAction = ref<'save' | 'reload' | null>(null)
 const modelCatalogRefreshing = ref(false)
@@ -142,6 +134,7 @@ watch(() => props.snapshot.values, async value => {
     draft.value.tasks = cloneSettings(value).tasks
     draft.value.notifications = cloneSettings(value).notifications
     draft.value.dataRetention = cloneSettings(value).dataRetention
+    draft.value.modelVisibility = cloneSettings(value).modelVisibility
   }
   if (pendingHeaderAction.value !== 'save') {
     draft.value.agent = cloneSettings(value).agent
@@ -159,7 +152,7 @@ watch(
 )
 
 watch(
-  [() => draft.value.general, () => draft.value.monitor, () => draft.value.tasks, () => draft.value.notifications, () => draft.value.dataRetention],
+  [() => draft.value.general, () => draft.value.monitor, () => draft.value.tasks, () => draft.value.notifications, () => draft.value.dataRetention, () => draft.value.modelVisibility],
   () => {
     if (suppressCompanionSave) return
     companionSaveDirty = true
@@ -201,11 +194,14 @@ const visibleGroups = computed(() => {
     .filter(group => group.tabs.length > 0)
 })
 
-const enabledModelReferences = computed(() => modelScopeDraft.value)
-const enabledModels = computed(() => props.snapshot.pi.models.filter(
-  model => enabledModelReferences.value.has(`${model.provider}/${model.id}`),
+const hiddenModelReferences = computed(() => new Set(draft.value.modelVisibility.hiddenModelReferences))
+const visibleModelReferences = computed(() => new Set(props.snapshot.pi.models
+  .map(model => `${model.provider}/${model.id}`)
+  .filter(reference => !hiddenModelReferences.value.has(reference))))
+const visibleModels = computed(() => props.snapshot.pi.models.filter(
+  model => visibleModelReferences.value.has(`${model.provider}/${model.id}`),
 ))
-const modelOptions = computed<UiSelectOption[]>(() => enabledModels.value.map(model => ({
+const modelOptions = computed<UiSelectOption[]>(() => visibleModels.value.map(model => ({
   value: `${model.provider}/${model.id}`,
   label: model.name,
   group: providerName(model.provider),
@@ -345,25 +341,11 @@ const filteredProviderModels = computed(() => {
   if (!query) return selectedProviderModels.value
   return selectedProviderModels.value.filter(model => `${model.name} ${model.id}`.toLocaleLowerCase().includes(query))
 })
-const selectedProviderEnabledCount = computed(() => selectedProviderModels.value.filter(
-  model => enabledModelReferences.value.has(`${model.provider}/${model.id}`),
+const selectedProviderVisibleCount = computed(() => selectedProviderModels.value.filter(
+  model => visibleModelReferences.value.has(`${model.provider}/${model.id}`),
 ).length)
 
-watch([() => props.snapshot.pi.models, () => props.snapshot.pi.enabledModels], () => {
-  const saved = createEnabledModelSet(props.snapshot)
-  const acknowledgesPendingWrite = modelScopeWriteInFlight.value
-    && sameEnabledModelScope(props.snapshot.pi.enabledModels, sentModelScope)
-  if (acknowledgesPendingWrite) {
-    modelScopeWriteInFlight.value = false
-    if (modelScopeRevision.value === sentModelScopeRevision) {
-      modelScopeDirty.value = false
-      modelScopeDraft.value = saved
-    } else {
-      scheduleModelScopeSave(0)
-    }
-  } else if (!modelScopeDirty.value && !modelScopeWriteInFlight.value) {
-    modelScopeDraft.value = saved
-  }
+watch([() => props.snapshot.pi.models, () => draft.value.modelVisibility.hiddenModelReferences], () => {
   ensureConcreteModel()
 }, { deep: true, immediate: true })
 const oauthLoginPhase = computed(() => {
@@ -411,11 +393,6 @@ watch(() => props.action, action => {
     customProviderError.value = action.message
   }
   if (!props.oauthLoginProgress) loggingInProviderId.value = ''
-  if (!action.succeeded && (modelScopeDirty.value || modelScopeWriteInFlight.value)) {
-    modelScopeDirty.value = false
-    modelScopeWriteInFlight.value = false
-    modelScopeDraft.value = createEnabledModelSet(props.snapshot)
-  }
   pendingHeaderAction.value = null
   modelCatalogRefreshing.value = false
 })
@@ -470,26 +447,14 @@ async function restoreCompanionSnapshot() {
   draft.value.tasks = value.tasks
   draft.value.notifications = value.notifications
   draft.value.dataRetention = value.dataRetention
+  draft.value.modelVisibility = value.modelVisibility
   setLocale(value.general.language)
   await nextTick()
   suppressCompanionSave = false
 }
 
-function createEnabledModelSet(snapshot: SettingsSnapshot) {
-  return new Set(snapshot.pi.enabledModels === null
-    ? snapshot.pi.models.map(model => `${model.provider}/${model.id}`)
-    : snapshot.pi.enabledModels)
-}
-
-function sameEnabledModelScope(left: string[] | null, right: string[] | null) {
-  if (left === null || right === null) return left === right
-  if (left.length !== right.length) return false
-  const rightSet = new Set(right)
-  return left.every(reference => rightSet.has(reference))
-}
-
 function ensureConcreteModel() {
-  const references = enabledModels.value.map(model => `${model.provider}/${model.id}`)
+  const references = visibleModels.value.map(model => `${model.provider}/${model.id}`)
   const fallback = references[0] ?? ''
   if (!references.includes(draft.value.agent.defaultModel)) draft.value.agent.defaultModel = fallback
   const currentMetadataModel = draft.value.tasks.aiMetadataModel
@@ -693,45 +658,26 @@ function validateCustomProvider(provider: CustomProviderDraft) {
 
 function saveEnabledModelSet(references: Set<string>) {
   if (!references.size) return
-  modelScopeDraft.value = references
-  modelScopeDirty.value = true
-  modelScopeRevision.value += 1
-  scheduleModelScopeSave()
-}
-
-function scheduleModelScopeSave(delay = 350) {
-  if (modelScopeSaveTimer) window.clearTimeout(modelScopeSaveTimer)
-  modelScopeSaveTimer = window.setTimeout(flushModelScopeSave, delay)
-}
-
-function flushModelScopeSave(force = false) {
-  if (modelScopeSaveTimer) window.clearTimeout(modelScopeSaveTimer)
-  modelScopeSaveTimer = 0
-  if (!modelScopeDirty.value || (modelScopeWriteInFlight.value && (!force || modelScopeRevision.value === sentModelScopeRevision))) return
-  modelScopeWriteInFlight.value = true
-  sentModelScopeRevision = modelScopeRevision.value
-  const allReferences = props.snapshot.pi.models.map(model => `${model.provider}/${model.id}`)
-  sentModelScope = modelScopeDraft.value.size === allReferences.length
-    ? null
-    : allReferences.filter(reference => modelScopeDraft.value.has(reference))
-  emit('savePiEnabledModels', sentModelScope)
+  draft.value.modelVisibility.hiddenModelReferences = props.snapshot.pi.models
+    .map(model => `${model.provider}/${model.id}`)
+    .filter(reference => !references.has(reference))
 }
 
 function toggleProviderModel(reference: string) {
-  const references = new Set(enabledModelReferences.value)
+  const references = new Set(visibleModelReferences.value)
   if (references.has(reference)) references.delete(reference)
   else references.add(reference)
   saveEnabledModelSet(references)
 }
 
 function showAllProviderModels() {
-  const references = new Set(enabledModelReferences.value)
+  const references = new Set(visibleModelReferences.value)
   selectedProviderModels.value.forEach(model => references.add(`${model.provider}/${model.id}`))
   saveEnabledModelSet(references)
 }
 
 function hideAllProviderModels() {
-  const references = new Set(enabledModelReferences.value)
+  const references = new Set(visibleModelReferences.value)
   selectedProviderModels.value.forEach(model => references.delete(`${model.provider}/${model.id}`))
   saveEnabledModelSet(references)
 }
@@ -743,13 +689,11 @@ function formatContextWindow(tokens: number) {
 }
 
 function closeSettings() {
-  flushModelScopeSave(true)
   flushCompanionSave(true)
   emit('close')
 }
 
 onBeforeUnmount(() => {
-  if (modelScopeSaveTimer) window.clearTimeout(modelScopeSaveTimer)
   if (companionSaveTimer) window.clearTimeout(companionSaveTimer)
   flushCompanionSave(true)
 })
@@ -1076,7 +1020,7 @@ function authLabel(provider: PiProviderInfo) {
                 <UiSwitch v-model="draft.tasks.aiTitleEnabled" :aria-label="t('AI 生成任务标题')" />
               </div>
               <div class="settings-row toggle-row">
-                <span><strong>{{ t('AI 生成任务总结') }}</strong><small>{{ t('每轮运行结束后自动提炼结果，方便在任务监视器中快速了解进展。') }}</small></span>
+                <span><strong>{{ t('AI 生成任务总结') }}</strong><small>{{ t('每轮运行结束后自动提炼结果；关闭后不再生成，已有总结仍会保留并显示。') }}</small></span>
                 <UiSwitch v-model="draft.tasks.aiSummaryEnabled" :aria-label="t('AI 生成任务总结')" />
               </div>
               <div class="settings-row">
@@ -1308,11 +1252,11 @@ function authLabel(provider: PiProviderInfo) {
                         ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a7 7 0 1 0 1 6" /><path d="M19 4v4h-4" /></svg></UiButton>
                       </div>
                       <small class="provider-model-explainer">{{ t('控制模型是否出现在任务的模型选择器中。') }}</small>
-                      <small class="provider-model-status">{{ modelScopeWriteInFlight ? t('正在保存到 Pi…') : modelScopeDirty ? t('等待保存…') : t('已显示 {count} 个', { count: selectedProviderEnabledCount }) }}</small>
+                      <small class="provider-model-status">{{ companionSaveState === 'saving' ? t('正在保存到 Companion…') : t('已显示 {count} 个', { count: selectedProviderVisibleCount }) }}</small>
                     </div>
                     <div>
-                      <UiButton type="button" :disabled="selectedProviderEnabledCount === 0 || selectedProviderEnabledCount === enabledModelReferences.size" :title="selectedProviderEnabledCount === enabledModelReferences.size ? t('Pi 至少需要保留一个启用模型') : undefined" @click="hideAllProviderModels">{{ t('全部隐藏') }}</UiButton>
-                      <UiButton type="button" :disabled="selectedProviderEnabledCount === selectedProviderModels.length" @click="showAllProviderModels">{{ t('全部显示') }}</UiButton>
+                      <UiButton type="button" :disabled="selectedProviderVisibleCount === 0 || selectedProviderVisibleCount === visibleModelReferences.size" :title="selectedProviderVisibleCount === visibleModelReferences.size ? t('至少需要保留一个显示模型') : undefined" @click="hideAllProviderModels">{{ t('全部隐藏') }}</UiButton>
+                      <UiButton type="button" :disabled="selectedProviderVisibleCount === selectedProviderModels.length" @click="showAllProviderModels">{{ t('全部显示') }}</UiButton>
                     </div>
                   </header>
                   <label class="provider-model-search">
@@ -1323,7 +1267,7 @@ function authLabel(provider: PiProviderInfo) {
                     <article
                       v-for="model in filteredProviderModels"
                       :key="`${model.provider}/${model.id}`"
-                      :class="{ hidden: !enabledModelReferences.has(`${model.provider}/${model.id}`) }"
+                      :class="{ hidden: !visibleModelReferences.has(`${model.provider}/${model.id}`) }"
                       :title="modelTooltip(model)"
                     >
                       <span><strong>{{ model.name }}</strong><small>{{ model.id }}</small></span>
@@ -1334,11 +1278,11 @@ function authLabel(provider: PiProviderInfo) {
                       </span>
                       <UiButton
                         type="button"
-                        :disabled="enabledModelReferences.has(`${model.provider}/${model.id}`) && enabledModelReferences.size === 1"
-                        :aria-label="t('{action}模型 {name}', { action: t(enabledModelReferences.has(`${model.provider}/${model.id}`) ? '隐藏' : '显示模型操作'), name: model.name })"
+                        :disabled="visibleModelReferences.has(`${model.provider}/${model.id}`) && visibleModelReferences.size === 1"
+                        :aria-label="t('{action}模型 {name}', { action: t(visibleModelReferences.has(`${model.provider}/${model.id}`) ? '隐藏' : '显示模型操作'), name: model.name })"
                         @click="toggleProviderModel(`${model.provider}/${model.id}`)"
                       >
-                        <svg v-if="enabledModelReferences.has(`${model.provider}/${model.id}`)" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                        <svg v-if="visibleModelReferences.has(`${model.provider}/${model.id}`)" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
                         <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 16M10.7 6.1A9 9 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.4 3.1M6.2 7.4A16.6 16.6 0 0 0 2.5 12s3.5 6 9.5 6a9 9 0 0 0 3-.5" /></svg>
                       </UiButton>
                     </article>

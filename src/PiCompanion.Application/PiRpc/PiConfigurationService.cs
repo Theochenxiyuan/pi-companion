@@ -69,6 +69,7 @@ public sealed record PiConfigurationSnapshot(
     string FollowUpMode,
     IReadOnlyList<PiProviderInfo> Providers,
     IReadOnlyList<PiModelInfo> Models,
+    // Read only to migrate model visibility from Companion versions that wrote Pi's global scope.
     IReadOnlyList<string>? EnabledModels,
     IReadOnlyList<PiCustomProviderInfo> CustomProviders,
     string? ModelsConfigRevision,
@@ -198,23 +199,6 @@ public sealed class PiConfigurationService
         string providerId,
         CancellationToken cancellationToken = default) =>
         InvokeAndCacheAsync(new { action = "logout", providerId }, cancellationToken);
-
-    public async Task<PiConfigurationSnapshot> SaveEnabledModelsAsync(
-        IReadOnlyList<string>? enabledModels,
-        CancellationToken cancellationToken = default)
-    {
-        await _piMutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await InvokeAndCacheAsync(
-                new { action = "save-enabled-models", enabledModels },
-                cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _piMutationGate.Release();
-        }
-    }
 
     public async Task<PiConfigurationSnapshot> AddCustomProviderAsync(
         PiCustomProviderInfo provider,

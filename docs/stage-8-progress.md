@@ -76,7 +76,7 @@ Agent 必须在托管工作区完成文件后调用 `publish_artifact`：
 - 每个元数据作业开始前仍调用 `new_session`，随后应用共享模型与 `thinking=off`，因此只复用进程，不复用任务上下文或正式 Agent Session。
 - 超时或取消时中止并回收 Worker；进程异常退出后，下一次请求会自动创建新 Worker。应用退出时由 `TaskCoordinator` 释放专用进程。
 - `%LOCALAPPDATA%\PiCompanion\logs\metadata-worker.jsonl` 记录排队、Worker 就绪、Session 重置和 Provider 生成耗时，不记录用户提示正文。
-- `summary` 仅保存 AI 生成的 Run 总结；Runtime 完成、失败或中断文案保存在独立状态字段中，不再写入 `summary`。AI 总结开启且终态 `summary` 仍为空时，Monitor 显示“正在生成 AI 总结”和加载指示，不回退到 Agent 回答；AI 总结关闭时，Monitor 显示截断后的最新 Agent 回答。Chat 的总结区域仍只在存在有效 `summary` 时显示。
+- `summary` 仅保存 AI 生成的 Run 总结；Runtime 完成、失败或中断文案保存在独立状态字段中，不再写入 `summary`。后续已用显式 AI 总结生命周期替代“终态且为空”的推测：仅 `Generating` 显示加载；失败、取消或未请求时 Monitor 回退到最新 Agent 回答；已有总结始终显示。Chat 仅在真实生成期间显示生成态，并在总结可用后显示内容。
 - Monitor 结果卡片按内容自适应高度，最大高度为 360px；展开窗口跟随内容收缩，最大高度为 620px，并在自动贴边时随高度变化重新对齐。网络搜索正文只保留在聊天记录中，Monitor 保留搜索运行副标题和包含 query 的单行活动记录。
 - 主输入框支持直接粘贴剪贴板中的 PNG/JPEG/GIF/WebP 图片作为附件；图片保存到应用管理目录后复用现有附件发送管线，单张上限 10 MB，普通文字粘贴不受影响。
 - 永久删除直接对话任务或清空回收站前，会先释放占用其隔离工作区的 Pi 当前/预热 worker，再以短暂重试删除目录；持久化记录只在文件清理成功后删除，避免 Windows 文件占用导致半完成状态。

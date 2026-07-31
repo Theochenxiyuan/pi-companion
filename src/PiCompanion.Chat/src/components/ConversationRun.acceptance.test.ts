@@ -28,6 +28,7 @@ function createRun(summary: string): TaskRunSnapshot {
     status: 'Completed',
     statusText: '已完成',
     summary,
+    aiSummaryStatus: summary ? 'Available' : 'NotRequested',
     assistantText: null,
     finalAnswer: null,
     lastSequence: 1,
@@ -88,14 +89,13 @@ describe('ConversationRun summary', () => {
     expect(wrapper.find('.run-summary-stats').exists()).toBe(false)
   })
 
-  it('does not render a summary row when AI summaries are enabled but empty', () => {
+  it('does not render a summary row when no AI summary was requested', () => {
     const wrapper = shallowMount(ConversationRun, {
       props: {
         run: createRun(''),
         viewMode: 'normal',
         needsInteraction: false,
         taskActive: false,
-        aiSummaryEnabled: true,
       },
     })
 
@@ -103,20 +103,33 @@ describe('ConversationRun summary', () => {
     expect(wrapper.text()).not.toContain('总结：')
   })
 
-  it('hides the runtime summary when AI summary generation is disabled', () => {
+  it('keeps an existing summary visible independently of the generation setting', () => {
     const wrapper = shallowMount(ConversationRun, {
       props: {
         run: createRun('Runtime 原始结果'),
         viewMode: 'normal',
         needsInteraction: false,
         taskActive: false,
-        aiSummaryEnabled: false,
       },
     })
 
-    expect(wrapper.find('.run-summary-row').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Runtime 原始结果')
-    expect(wrapper.text()).not.toContain('未开启AI总结')
+    expect(wrapper.get('.run-summary-row').text()).toContain('Runtime 原始结果')
+  })
+
+  it('shows generation progress only for an explicit generating state', () => {
+    const run = createRun('')
+    run.aiSummaryStatus = 'Generating'
+    const wrapper = shallowMount(ConversationRun, {
+      props: {
+        run,
+        viewMode: 'normal',
+        needsInteraction: false,
+        taskActive: false,
+      },
+    })
+
+    expect(wrapper.get('.run-summary-loading').text()).toBe('正在生成 AI 总结')
+    expect(wrapper.find('.run-summary-content .run-summary-text').exists()).toBe(false)
   })
 
   it('shows only non-zero work counters in summary mode', () => {

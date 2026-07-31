@@ -503,6 +503,7 @@ public partial class PromptComposerWindow : Window
 
     public void ApplySettings(AgentSettings settings, TaskSettings taskSettings)
     {
+        ApplyPiSnapshot(_piSnapshot, preserveSelection: true);
         SelectComboBoxValue(ModelComboBox, settings.DefaultModel);
         UpdateThinkingOptions(settings.DefaultThinkingLevel);
         SelectDefaultPermissionMode(taskSettings.PermissionMode);
@@ -532,12 +533,19 @@ public partial class PromptComposerWindow : Window
         var previousModel = preserveSelection ? GetComboBoxValue(ModelComboBox) : null;
         var previousThinkingLevel = preserveSelection ? GetComboBoxValue(ThinkingComboBox) : null;
         _piSnapshot = snapshot;
+        if (snapshot.Available && snapshot.Models.Count > 0)
+        {
+            _settings.TryMigrateLegacyModelVisibility(
+                snapshot.Models.Select(model => $"{model.Provider}/{model.Id}").ToArray(),
+                snapshot.EnabledModels,
+                out _);
+        }
         _modelChoices.Clear();
-        var enabledModels = _piSnapshot.EnabledModels is null
-            ? null
-            : new HashSet<string>(_piSnapshot.EnabledModels, StringComparer.Ordinal);
+        var hiddenModels = new HashSet<string>(
+            _settings.Current.ModelVisibility!.HiddenModelReferences,
+            StringComparer.Ordinal);
         foreach (var model in _piSnapshot.Models.Where(model =>
-                     enabledModels is null || enabledModels.Contains($"{model.Provider}/{model.Id}")))
+                     !hiddenModels.Contains($"{model.Provider}/{model.Id}")))
         {
             var providerName = _piSnapshot.Providers.FirstOrDefault(provider => provider.Id == model.Provider)?.Name ?? model.Provider;
             _modelChoices.Add(new ModelChoice(

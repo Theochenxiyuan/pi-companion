@@ -93,22 +93,6 @@ if (input.action === 'login-oauth') {
     retryMaxDelayMilliseconds: requireInteger(input.retryMaxDelayMilliseconds, 'retryMaxDelayMilliseconds', 0, 3600000),
   })
   settingsManager = pi.SettingsManager.create(process.cwd(), agentDir)
-} else if (input.action === 'save-enabled-models') {
-  if (input.enabledModels !== null && !Array.isArray(input.enabledModels)) {
-    throw new Error('enabledModels must be an array or null.')
-  }
-  const runtime = await createRuntime(false)
-  const available = new Set(runtime.getAvailableSnapshot().map(model => `${model.provider}/${model.id}`))
-  const enabledModels = input.enabledModels === null
-    ? undefined
-    : [...new Set(input.enabledModels.map(value => requireString(value, 'enabledModel')))]
-  if (enabledModels?.some(model => !available.has(model))) {
-    throw new Error('One or more enabled Pi models are not available.')
-  }
-  settingsManager.setEnabledModels(enabledModels?.length === available.size ? undefined : enabledModels)
-  await settingsManager.flush()
-  const errors = settingsManager.drainErrors()
-  if (errors.length > 0) throw errors[0].error ?? new Error(errors[0].message ?? 'Pi model scope write failed.')
 } else if (input.action !== 'snapshot') {
   throw new Error(`Unsupported action: ${String(input.action)}`)
 }
@@ -152,6 +136,7 @@ async function createSnapshot(refreshModels = false) {
     .filter(Boolean)
     .sort((left, right) => left.name.localeCompare(right.name, 'en'))
   const globalSettings = pi.SettingsManager.inMemory(settingsManager.getGlobalSettings())
+  // Companion no longer writes this scope; it is returned only for one-time migration.
   const enabledPatterns = globalSettings.getEnabledModels()
   const enabledModels = enabledPatterns?.length
     ? (await resolveModelScope(enabledPatterns, runtime)).map(item => `${item.model.provider}/${item.model.id}`)

@@ -418,6 +418,31 @@ public sealed class TaskProjectionTests
         Assert.DoesNotContain(projection.Transcript, block => block.Kind == TranscriptBlockKind.Notice);
     }
 
+    [Fact]
+    public void AiSummaryStatus_TracksOnlyTheExplicitGenerationLifecycle()
+    {
+        var projection = new TaskProjection(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test",
+            "C:\\work",
+            "Pi",
+            "high");
+
+        Assert.Equal(AiSummaryStatus.NotRequested, projection.AiSummaryStatus);
+
+        projection.BeginAiSummaryGeneration();
+        Assert.Equal(AiSummaryStatus.Generating, projection.AiSummaryStatus);
+
+        projection.FailAiSummaryGeneration();
+        Assert.Equal(AiSummaryStatus.Failed, projection.AiSummaryStatus);
+
+        projection.BeginAiSummaryGeneration();
+        projection.SetSummary("  Generated   summary.  ");
+        Assert.Equal(AiSummaryStatus.Available, projection.AiSummaryStatus);
+        Assert.Equal("Generated summary.", projection.Summary);
+    }
+
     private static CompanionRunEvent CreateEvent(
         Guid taskId,
         Guid runId,

@@ -27,7 +27,12 @@ public sealed class AppSettingsServiceTests
                 new AgentSettings("  openai-codex/gpt-5.6-sol  ", "max", false, false,
                     512, 999999, 99, 1, 9999999, "all", "invalid"),
                 new NotificationSettings(false, true, false, false, false),
-                new DataRetentionSettings(7, 30, 123)));
+                new DataRetentionSettings(7, 30, 123),
+                new ModelVisibilitySettings([
+                    "  anthropic/claude-sonnet-4-5  ",
+                    "anthropic/claude-sonnet-4-5",
+                    "  ",
+                ])));
 
             Assert.True(saved.General.LaunchAtLogin);
             Assert.False(saved.General.KeepRunningInTray);
@@ -62,9 +67,11 @@ public sealed class AppSettingsServiceTests
             Assert.Equal(7, saved.DataRetention!.TaskHistoryDays);
             Assert.Equal(30, saved.DataRetention.RecycleBinDays);
             Assert.Equal(0, saved.DataRetention.LogDays);
+            Assert.Equal(["anthropic/claude-sonnet-4-5"], saved.ModelVisibility!.HiddenModelReferences);
 
             var restored = new AppSettingsService(store, Path.Combine(root, "logs")).Current;
-            Assert.Equal(saved, restored);
+            Assert.Equal(saved with { ModelVisibility = restored.ModelVisibility }, restored);
+            Assert.Equal(saved.ModelVisibility.HiddenModelReferences, restored.ModelVisibility!.HiddenModelReferences);
         }
         finally
         {
@@ -148,6 +155,66 @@ public sealed class AppSettingsServiceTests
         };
 
         Assert.Equal("last-position", settings.Normalize().Monitor.Position);
+    }
+
+    [Fact]
+    public void LegacySettings_ImportPiEnabledModelsOnceWithoutChangingPiSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PiCompanionTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteRunEventStore(Path.Combine(root, "state.db"));
+            store.SetSettingJson("app.settings.v1", """
+                {
+                  "general": { "launchAtLogin": false, "keepRunningInTray": true, "language": "zh-CN", "theme": "dark", "logLevel": "information", "uiScalePercent": 100, "gitAutoRefreshSeconds": 0, "conversationDetailLevel": "normal" },
+                  "monitor": { "position": "top-right", "showOnStartup": true, "alwaysOnTop": true, "autoCollapseSeconds": 8, "animationsEnabled": true },
+                  "tasks": { "aiTitleEnabled": true, "aiTitleModel": "", "aiSummaryEnabled": true, "aiSummaryModel": "", "recentTaskCount": 5 },
+                  "agent": { "defaultModel": "", "defaultThinkingLevel": "high", "autoCompact": true, "autoRetry": true }
+                }
+                """);
+            var service = new AppSettingsService(store, Path.Combine(root, "logs"));
+            var available = new[] { "openai/gpt-a", "openai/gpt-b", "anthropic/claude-a" };
+
+            Assert.True(service.TryMigrateLegacyModelVisibility(
+                available,
+                ["openai/gpt-a", "anthropic/claude-a"],
+                out var migrated));
+            Assert.Equal(["openai/gpt-b"], migrated.ModelVisibility!.HiddenModelReferences);
+            Assert.False(service.TryMigrateLegacyModelVisibility(available, null, out var unchanged));
+            Assert.Equal(["openai/gpt-b"], unchanged.ModelVisibility!.HiddenModelReferences);
+
+            var restored = new AppSettingsService(store, Path.Combine(root, "logs")).Current;
+            Assert.Equal(["openai/gpt-b"], restored.ModelVisibility!.HiddenModelReferences);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void NewSettings_DoNotImportPiEnabledModels()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PiCompanionTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var store = new SqliteRunEventStore(Path.Combine(root, "state.db"));
+            var service = new AppSettingsService(store, Path.Combine(root, "logs"));
+
+            Assert.False(service.TryMigrateLegacyModelVisibility(
+                ["openai/gpt-a", "openai/gpt-b"],
+                ["openai/gpt-a"],
+                out var unchanged));
+            Assert.Empty(unchanged.ModelVisibility!.HiddenModelReferences);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
     }
 
 }

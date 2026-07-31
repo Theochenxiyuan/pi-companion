@@ -4,6 +4,15 @@ using System.Text.Json;
 
 namespace PiCompanion.Core.Tasks;
 
+public enum AiSummaryStatus
+{
+    NotRequested,
+    Generating,
+    Available,
+    Failed,
+    Canceled,
+}
+
 public sealed class TaskProjection
 {
     private const int ActivityLimit = 40;
@@ -85,6 +94,8 @@ public sealed class TaskProjection
     public long LastSequence { get; private set; }
 
     public string Summary { get; private set; } = string.Empty;
+
+    public AiSummaryStatus AiSummaryStatus { get; private set; } = AiSummaryStatus.NotRequested;
 
     public string RuntimeStatusDetail { get; private set; } = string.Empty;
 
@@ -306,6 +317,34 @@ public sealed class TaskProjection
         }
 
         Summary = normalized;
+        AiSummaryStatus = AiSummaryStatus.Available;
+    }
+
+    public void BeginAiSummaryGeneration()
+    {
+        if (!string.IsNullOrWhiteSpace(Summary))
+        {
+            AiSummaryStatus = AiSummaryStatus.Available;
+            return;
+        }
+
+        AiSummaryStatus = AiSummaryStatus.Generating;
+    }
+
+    public void FailAiSummaryGeneration()
+    {
+        if (AiSummaryStatus == AiSummaryStatus.Generating)
+        {
+            AiSummaryStatus = AiSummaryStatus.Failed;
+        }
+    }
+
+    public void CancelAiSummaryGeneration()
+    {
+        if (AiSummaryStatus == AiSummaryStatus.Generating)
+        {
+            AiSummaryStatus = AiSummaryStatus.Canceled;
+        }
     }
 
     public bool Apply(CompanionRunEvent runEvent)

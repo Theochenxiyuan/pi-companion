@@ -28,8 +28,7 @@ const props = withDefaults(defineProps<{
   needsInteraction: boolean
   taskActive: boolean
   fileChangesExpandedByDefault?: boolean
-  aiSummaryEnabled?: boolean
-}>(), { fileChangesExpandedByDefault: false, aiSummaryEnabled: true })
+}>(), { fileChangesExpandedByDefault: false })
 
 const emit = defineEmits<{
   openDiff: [file: FileChangeEvidence]
@@ -47,6 +46,7 @@ const expandedToolGroups = ref(new Set<string>())
 const summaryExpanded = ref(false)
 const summaryCanExpand = ref(props.run.summary.trim().length > 72)
 const summaryTextElement = ref<HTMLElement | null>(null)
+const summaryGenerating = computed(() => props.run.aiSummaryStatus === 'Generating')
 const attachmentsExpanded = ref(false)
 const copiedMessage = ref<'user' | 'agent' | null>(null)
 const copiedInteractionId = ref<string | null>(null)
@@ -628,8 +628,8 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             <span class="status-dot" :class="taskStatusTone(run.status)"></span>
             <strong>{{ t(run.statusText) }}</strong>
           </div>
-          <div v-if="(aiSummaryEnabled && run.summary) || agentMessageText" class="run-summary-row" :class="{ expanded: summaryExpanded }">
-            <div v-if="aiSummaryEnabled && run.summary" class="run-summary-content">
+          <div v-if="run.summary || summaryGenerating || agentMessageText" class="run-summary-row" :class="{ expanded: summaryExpanded }">
+            <div v-if="run.summary" class="run-summary-content">
               <strong class="run-summary-label">{{ t('总结：') }}</strong>
               <span ref="summaryTextElement" class="run-summary-text" :title="run.summary">{{ run.summary }}</span>
               <UiButton
@@ -639,6 +639,10 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
                 :aria-expanded="summaryExpanded"
                 @click="toggleSummary"
               >{{ t(summaryExpanded ? '收起' : '展开') }}</UiButton>
+            </div>
+            <div v-else-if="summaryGenerating" class="run-summary-content run-summary-loading" role="status">
+              <span class="file-loading-spinner" aria-hidden="true"></span>
+              <span>{{ t('正在生成 AI 总结') }}</span>
             </div>
             <UiButton
               v-if="agentMessageText"

@@ -86,6 +86,7 @@ export function applyIncrementalTaskDelta(task: TaskSnapshot, delta: TaskDelta) 
     status: delta.status,
     statusText: delta.statusText,
     summary: delta.summary,
+    aiSummaryStatus: delta.aiSummaryStatus,
     activityStatus: delta.activityStatus,
     assistantText: delta.assistantText,
     finalAnswer: delta.finalAnswer,
@@ -100,6 +101,7 @@ export function applyIncrementalTaskDelta(task: TaskSnapshot, delta: TaskDelta) 
       status: delta.status,
       statusText: delta.statusText,
       summary: delta.summary,
+      aiSummaryStatus: delta.aiSummaryStatus,
       activityStatus: delta.activityStatus,
       assistantText: delta.assistantText,
       finalAnswer: delta.finalAnswer,
@@ -177,6 +179,7 @@ export const useTaskStore = defineStore('task', {
             status: task.status,
             statusText: task.statusText,
             summary: task.summary,
+            aiSummaryStatus: task.aiSummaryStatus,
             updatedAt: existing?.updatedAt ?? new Date().toISOString(),
             deletedAt: null,
             workspaceId: task.scopeKind === 'Workspace'
@@ -237,6 +240,7 @@ export const useTaskStore = defineStore('task', {
             status: update.task.status,
             statusText: update.task.statusText,
             summary: update.task.summary,
+            aiSummaryStatus: update.task.aiSummaryStatus,
             updatedAt: update.task.updatedAt,
             deletedAt: null,
             workspaceId: this.recentTasks.find(candidate =>

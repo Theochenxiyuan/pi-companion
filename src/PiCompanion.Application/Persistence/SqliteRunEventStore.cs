@@ -406,7 +406,10 @@ public sealed class SqliteRunEventStore : IRunEventStore
                     Enum.TryParse<TaskScopeKind>(reader.GetString(8), out var scopeKind)
                         ? scopeKind
                         : TaskScopeKind.Workspace,
-                    reader.IsDBNull(9) ? null : Guid.Parse(reader.GetString(9))));
+                    reader.IsDBNull(9) ? null : Guid.Parse(reader.GetString(9)),
+                    string.IsNullOrWhiteSpace(reader.GetString(5))
+                        ? AiSummaryStatus.NotRequested
+                        : AiSummaryStatus.Available));
             }
 
             return tasks;

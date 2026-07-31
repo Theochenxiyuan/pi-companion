@@ -1239,7 +1239,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.find('.app-toast').exists()).toBe(false)
   })
 
-  it('keeps the current task model when that model is hidden globally', async () => {
+  it('keeps the current task model when that model is hidden in Companion', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
     window.chrome = {
@@ -1279,9 +1279,12 @@ describe('Agent Chat stage 5 acceptance', () => {
         type: 'SettingsUpdated',
         payload: {
           ...currentSettings,
-          pi: {
-            ...currentSettings.pi,
-            enabledModels: ['openai-codex/gpt-5.6-luna'],
+          values: {
+            ...currentSettings.values,
+            modelVisibility: {
+              hiddenModelReferences: ['openai-codex/gpt-5.6-sol'],
+              legacyPiScopeMigrationCompleted: true,
+            },
           },
         },
       },

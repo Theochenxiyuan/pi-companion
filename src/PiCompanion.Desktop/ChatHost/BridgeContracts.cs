@@ -13,7 +13,7 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 58;
+    public const int ProtocolVersion = 60;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
@@ -352,6 +352,7 @@ internal static class BridgeContracts
         task.Status.ToString(),
         task.Status.ToDisplayText(),
         task.Summary,
+        task.AiSummaryStatus.ToString(),
         task.UpdatedAt,
         task.DeletedAt,
         task.WorkspaceId);
@@ -374,6 +375,7 @@ internal static class BridgeContracts
         projection.Status.ToString(),
         projection.Status.ToDisplayText(),
         projection.Summary,
+        projection.AiSummaryStatus.ToString(),
         projection.ActivityStatus,
         projection.AssistantText,
         projection.FinalAnswer,
@@ -432,6 +434,7 @@ internal static class BridgeContracts
         projection.Status.ToString(),
         projection.Status.ToDisplayText(),
         projection.Summary,
+        projection.AiSummaryStatus.ToString(),
         projection.ActivityStatus,
         projection.AssistantText,
         projection.FinalAnswer,
@@ -540,6 +543,7 @@ internal static class BridgeContracts
             projection.Status.ToString(),
             projection.Status.ToDisplayText(),
             projection.Summary,
+            projection.AiSummaryStatus.ToString(),
             projection.ActivityStatus,
             projection.AssistantText,
             projection.FinalAnswer,
@@ -828,6 +832,7 @@ internal sealed record TaskHistoryEntryDto(
     string Status,
     string StatusText,
     string Summary,
+    string AiSummaryStatus,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? DeletedAt,
     Guid? WorkspaceId);
@@ -847,6 +852,7 @@ internal sealed record TaskSnapshotDto(
     string Status,
     string StatusText,
     string Summary,
+    string AiSummaryStatus,
     string? ActivityStatus,
     string? AssistantText,
     string? FinalAnswer,
@@ -875,6 +881,7 @@ internal sealed record TaskRunSnapshotDto(
     string Status,
     string StatusText,
     string Summary,
+    string AiSummaryStatus,
     string? ActivityStatus,
     string? AssistantText,
     string? FinalAnswer,
@@ -989,6 +996,7 @@ internal sealed record TaskDeltaDto(
     string Status,
     string StatusText,
     string Summary,
+    string AiSummaryStatus,
     string? ActivityStatus,
     string? AssistantText,
     string? FinalAnswer,

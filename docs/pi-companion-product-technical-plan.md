@@ -734,7 +734,9 @@ Expanded
 - 结果卡按内容自适应，最大高度为 360px。
 - 进行态最多显示最近 12 条严格单行摘要，溢出内容省略并提供完整 Tooltip。
 - 同一次工具调用只显示一条记录，摘要使用命令、路径、pattern 或 query，不显示工具输出。Web Search 保留独立计数和运行副标题，但同样在活动列表中显示 query；搜索结果正文只进入 Agent Chat。
-- AI 总结开启且终态总结为空时显示加载状态；AI 总结关闭时显示截断后的最新 Agent 回答。
+- AI 总结使用显式生命周期状态：`NotRequested`、`Generating`、`Available`、`Failed`、`Canceled`。只有状态为 `Generating` 时显示加载指示，不得再从“终态 + 总结为空 + 设置开启”推测生成中。
+- `Available` 时显示已经生成的总结；`Failed`、`Canceled` 或 `NotRequested` 且总结为空时，Monitor 回退到截断后的最新 Agent 回答。Agent Chat、最近任务悬浮卡和任务管理页使用同一状态定义。
+- AI 总结开关只控制后续 Run 是否自动生成总结，不控制已有总结的可见性；关闭开关后，已经持久化的总结仍然显示。
 
 ### 15.4 展开与收起
 
@@ -1000,7 +1002,7 @@ DetectedFramework
 ### 任务
 
 - 最近任务数量和副标题。
-- AI 标题、AI 总结及其模型。
+- AI 标题、AI 总结及其共享生成模型；两个开关只控制后续自动生成，不隐藏已经生成的元数据。
 - 任务完成后的 Monitor/Chat 行为。
 - 本地待发送区的自动开始与倒计时。
 
@@ -1037,7 +1039,7 @@ DetectedFramework
 - API Key 与 OAuth。
 - 登录和退出。
 - 自定义 Provider 创建与编辑。
-- 模型启用范围和搜索能力状态。
+- Companion 模型显示范围和搜索能力状态；显示范围保存在 Companion 本地设置中，不改写 Pi 的全局 `enabledModels`。
 
 ## 21. 性能与资源目标
 
@@ -1294,7 +1296,7 @@ DetectedFramework
 
 #### 主要实现
 
-- 直接复用 Pi Provider、模型目录和认证存储。
+- 直接复用 Pi Provider、完整模型目录和认证存储；Companion 只在本地维护各选择器共用的模型显示范围。
 - 开发版 HKCU 启动项；正式版 Startup Task 后移。
 - 数据迁移和崩溃恢复。
 - 继续验证现有开发版包注册、更新和移除流程。

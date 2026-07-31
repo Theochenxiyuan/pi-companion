@@ -14,6 +14,7 @@ const snapshot: SettingsSnapshot = {
     agent: { defaultModel: 'openai-codex/gpt-5.6-sol', defaultThinkingLevel: 'xhigh', autoCompact: true, autoRetry: true, compactionReserveTokens: 16384, compactionKeepRecentTokens: 20000, retryMaxRetries: 3, retryBaseDelayMilliseconds: 2000, retryMaxDelayMilliseconds: 60000, steeringMode: 'one-at-a-time', followUpMode: 'one-at-a-time' },
     notifications: { notifyOnCompletion: true, notifyOnFailure: true, notifyWhenAttentionRequired: true, playSound: true, onlyWhenAppIsInBackground: true },
     dataRetention: { taskHistoryDays: 0, recycleBinDays: 30, logDays: 30 },
+    modelVisibility: { hiddenModelReferences: [], legacyPiScopeMigrationCompleted: true },
   },
   pi: {
     available: true,
@@ -543,7 +544,7 @@ describe('stage 7 settings modal', () => {
     expect(wrapper.get('.provider-login').text()).toContain('在浏览器中登录')
   })
 
-  it('keeps the latest optimistic model scope while an older Pi snapshot arrives', async () => {
+  it('saves model visibility with Companion settings and ignores an older snapshot while saving', async () => {
     const configuredSnapshot = JSON.parse(JSON.stringify(snapshot)) as SettingsSnapshot
     configuredSnapshot.pi.providers[1]!.configured = true
     configuredSnapshot.pi.providers[1]!.authType = 'api_key'
@@ -555,22 +556,22 @@ describe('stage 7 settings modal', () => {
 
     await wrapper.get('.provider-model-items button').trigger('click')
     await vi.waitFor(() => {
-      expect(wrapper.emitted('savePiEnabledModels')).toEqual([[['openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-luna']]])
+      expect(wrapper.emitted('saveCompanion')?.at(-1)?.[0]).toMatchObject({
+        modelVisibility: { hiddenModelReferences: ['anthropic/claude-sonnet-4-5'] },
+      })
     })
 
     await wrapper.get('.provider-model-items button').trigger('click')
     expect(wrapper.get('.provider-model-items article').classes()).not.toContain('hidden')
 
-    const firstWriteSnapshot = JSON.parse(JSON.stringify(configuredSnapshot)) as SettingsSnapshot
-    firstWriteSnapshot.pi.enabledModels = ['openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-luna']
-    await wrapper.setProps({ snapshot: firstWriteSnapshot })
+    await wrapper.setProps({ snapshot: JSON.parse(JSON.stringify(configuredSnapshot)) as SettingsSnapshot })
 
     expect(wrapper.get('.provider-model-items article').classes()).not.toContain('hidden')
+    await wrapper.setProps({ action: { message: '已自动保存。', succeeded: true, operation: 'companion-auto-save', silent: true } })
     await vi.waitFor(() => {
-      expect(wrapper.emitted('savePiEnabledModels')).toEqual([
-        [['openai-codex/gpt-5.6-sol', 'openai-codex/gpt-5.6-luna']],
-        [null],
-      ])
+      expect(wrapper.emitted('saveCompanion')?.at(-1)?.[0]).toMatchObject({
+        modelVisibility: { hiddenModelReferences: [] },
+      })
     })
   })
 

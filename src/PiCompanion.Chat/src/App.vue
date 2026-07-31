@@ -179,16 +179,14 @@ let skillImportRequestSequence = 0
 let skillTrustRequestId: string | null = null
 let skillTrustRequestSequence = 0
 const viewMode = computed(() => settingsSnapshot.value.values.general.conversationDetailLevel)
-const enabledPiModels = computed(() => {
-  const enabled = settingsSnapshot.value.pi.enabledModels
-  if (enabled === null) return settingsSnapshot.value.pi.models
-  const references = new Set(enabled)
-  return settingsSnapshot.value.pi.models.filter(model => references.has(`${model.provider}/${model.id}`))
+const visiblePiModels = computed(() => {
+  const hidden = new Set(settingsSnapshot.value.values.modelVisibility.hiddenModelReferences)
+  return settingsSnapshot.value.pi.models.filter(model => !hidden.has(`${model.provider}/${model.id}`))
 })
 const selectedModelInfo = computed<PiModelInfo | null>(() =>
   settingsSnapshot.value.pi.models.find(model => `${model.provider}/${model.id}` === selectedModel.value) ?? null)
 const selectablePiModels = computed(() => {
-  const models = enabledPiModels.value
+  const models = visiblePiModels.value
   const current = selectedModelInfo.value
   if (!store.currentTask || !current || models.some(model => model.provider === current.provider && model.id === current.id)) {
     return models
@@ -304,11 +302,12 @@ function currentTaskHistoryEntry(): TaskHistoryEntry | null {
       status: current.status,
       statusText: current.statusText,
       summary: current.summary,
+      aiSummaryStatus: current.aiSummaryStatus,
       updatedAt: '',
       deletedAt: null,
     }
 }
-watch(enabledPiModels, models => {
+watch(visiblePiModels, models => {
   const references = models.map(model => `${model.provider}/${model.id}`)
   if (!references.length || references.includes(selectedModel.value)) return
   // Hiding a model controls future selection. Existing tasks keep their recorded
@@ -483,6 +482,7 @@ const conversationRuns = computed<TaskRunSnapshot[]>(() => {
     status: task.status,
     statusText: task.statusText,
     summary: task.summary,
+    aiSummaryStatus: task.aiSummaryStatus,
     activityStatus: task.activityStatus,
     assistantText: task.assistantText,
     finalAnswer: task.finalAnswer,
@@ -1165,7 +1165,7 @@ function thinkingLevelLabel(value: string) {
 
 function applyAgentDefaults() {
   const preferred = settingsSnapshot.value.values.agent.defaultModel
-  const available = enabledPiModels.value.map(model => `${model.provider}/${model.id}`)
+  const available = visiblePiModels.value.map(model => `${model.provider}/${model.id}`)
   selectedModel.value = available.includes(preferred) ? preferred : available[0] ?? ''
   selectedThinkingLevel.value = settingsSnapshot.value.values.agent.defaultThinkingLevel
   selectedPermissionMode.value = normalizeDefaultPermissionMode(settingsSnapshot.value.values.tasks.permissionMode)
@@ -2237,6 +2237,7 @@ function createPreviewSettingsSnapshot(): SettingsSnapshot {
       agent: { defaultModel: 'openai-codex/gpt-5.6-sol', defaultThinkingLevel: 'xhigh', autoCompact: true, autoRetry: true, compactionReserveTokens: 16384, compactionKeepRecentTokens: 20000, retryMaxRetries: 3, retryBaseDelayMilliseconds: 2000, retryMaxDelayMilliseconds: 60000, steeringMode: 'one-at-a-time', followUpMode: 'one-at-a-time' },
       notifications: { notifyOnCompletion: true, notifyOnFailure: true, notifyWhenAttentionRequired: true, playSound: true, onlyWhenAppIsInBackground: true },
       dataRetention: { taskHistoryDays: 0, recycleBinDays: 30, logDays: 30 },
+      modelVisibility: { hiddenModelReferences: [], legacyPiScopeMigrationCompleted: true },
     },
     pi: {
       available: true,
@@ -2436,7 +2437,6 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             :needs-interaction="store.needsInteraction"
             :task-active="store.isActive"
             :file-changes-expanded-by-default="settingsSnapshot.values.tasks.fileChangesExpandedByDefault"
-            :ai-summary-enabled="settingsSnapshot.values.tasks.aiSummaryEnabled"
             @open-diff="openFileDiff"
             @request-recovery="recoveryTarget = $event"
             @resolve-interaction="resolveInteraction"
@@ -2765,7 +2765,6 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @add-pi-custom-provider="addPiCustomProvider"
       @update-pi-custom-provider="updatePiCustomProvider"
       @delete-pi-custom-provider="deletePiCustomProvider"
-      @save-pi-enabled-models="enabledModels => postBridgeMessage('SavePiEnabledModels', { enabledModels })"
       @open-pi-login="providerId => postBridgeMessage('OpenPiLogin', { providerId })"
       @cancel-pi-login="providerId => postBridgeMessage('CancelPiOAuthLogin', { providerId })"
       @open-data-directory="postBridgeMessage('OpenDataDirectory')"

@@ -9,7 +9,8 @@ public sealed record PiCompanionSettings(
     TaskSettings Tasks,
     AgentSettings Agent,
     NotificationSettings? Notifications = null,
-    DataRetentionSettings? DataRetention = null)
+    DataRetentionSettings? DataRetention = null,
+    ModelVisibilitySettings? ModelVisibility = null)
 {
     public static PiCompanionSettings Default { get; } = new(
         new GeneralSettings(
@@ -50,7 +51,8 @@ public sealed record PiCompanionSettings(
         new DataRetentionSettings(
             TaskHistoryDays: 0,
             RecycleBinDays: 30,
-            LogDays: 30));
+            LogDays: 30),
+        new ModelVisibilitySettings([], LegacyPiScopeMigrationCompleted: true));
 
     public PiCompanionSettings Normalize()
     {
@@ -60,6 +62,7 @@ public sealed record PiCompanionSettings(
         var agent = Agent ?? Default.Agent;
         var notifications = Notifications ?? Default.Notifications!;
         var dataRetention = DataRetention ?? Default.DataRetention!;
+        var modelVisibility = ModelVisibility ?? new ModelVisibilitySettings([], LegacyPiScopeMigrationCompleted: false);
         var metadataModel = FirstNonEmpty(
             NormalizeModel(tasks.AiMetadataModel),
             NormalizeModel(tasks.AiSummaryModel),
@@ -118,7 +121,12 @@ public sealed record PiCompanionSettings(
         new DataRetentionSettings(
             NormalizeRetentionDays(dataRetention.TaskHistoryDays),
             NormalizeRetentionDays(dataRetention.RecycleBinDays),
-            NormalizeRetentionDays(dataRetention.LogDays)));
+            NormalizeRetentionDays(dataRetention.LogDays)),
+        new ModelVisibilitySettings((modelVisibility.HiddenModelReferences ?? [])
+            .Select(NormalizeModel)
+            .Where(reference => !string.IsNullOrWhiteSpace(reference))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray(), modelVisibility.LegacyPiScopeMigrationCompleted));
     }
 
     private static string NormalizeChoice(string? value, IReadOnlyList<string> choices, string fallback) =>
@@ -212,6 +220,10 @@ public sealed record DataRetentionSettings(
     int RecycleBinDays,
     int LogDays);
 
+public sealed record ModelVisibilitySettings(
+    IReadOnlyList<string> HiddenModelReferences,
+    bool LegacyPiScopeMigrationCompleted = true);
+
 public sealed record WindowPlacementState(
     double Left,
     double Top,
@@ -269,6 +281,40 @@ public sealed class AppSettingsService
         }
 
         return normalized;
+    }
+
+    public bool TryMigrateLegacyModelVisibility(
+        IReadOnlyList<string> availableModelReferences,
+        IReadOnlyList<string>? legacyEnabledModelReferences,
+        out PiCompanionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(availableModelReferences);
+        lock (_gate)
+        {
+            if (_current.ModelVisibility!.LegacyPiScopeMigrationCompleted)
+            {
+                settings = _current;
+                return false;
+            }
+
+            var enabled = legacyEnabledModelReferences is null
+                ? null
+                : new HashSet<string>(legacyEnabledModelReferences, StringComparer.Ordinal);
+            var hidden = enabled is null
+                ? []
+                : availableModelReferences
+                    .Where(reference => !enabled.Contains(reference))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+            var migrated = (_current with
+            {
+                ModelVisibility = new ModelVisibilitySettings(hidden, LegacyPiScopeMigrationCompleted: true),
+            }).Normalize();
+            _store.SetSettingJson(SettingsKey, JsonSerializer.Serialize(migrated, JsonOptions));
+            _current = migrated;
+            settings = migrated;
+            return true;
+        }
     }
 
     public WindowPlacementState? LoadWindowPlacement(string windowName)

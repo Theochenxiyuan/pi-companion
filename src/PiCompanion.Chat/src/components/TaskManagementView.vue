@@ -452,6 +452,7 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
                         ></span>
                         <span class="management-task-progress-label">{{ t('最新进度：') }}</span>
                         <small v-if="task.summary" :title="task.summary">{{ task.summary }}</small>
+                        <small v-else-if="task.aiSummaryStatus === 'Generating'">{{ t('正在生成 AI 总结') }}</small>
                         <span v-else class="management-task-progress-status">{{ t(task.statusText) }}</span>
                       </span>
                     </span>

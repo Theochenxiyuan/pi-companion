@@ -48,7 +48,12 @@ const path = computed(() =>
           <small>{{ t(task.statusText) }}</small>
         </span>
       </div>
-      <p>{{ task.summary || t('暂无任务总结') }}</p>
+      <p v-if="task.summary">{{ task.summary }}</p>
+      <p v-else-if="task.aiSummaryStatus === 'Generating'" class="recent-task-hover-summary-loading" role="status">
+        <span class="file-loading-spinner" aria-hidden="true"></span>
+        {{ t('正在生成 AI 总结') }}
+      </p>
+      <p v-else>{{ t('暂无任务总结') }}</p>
     </div>
   </aside>
 </template>

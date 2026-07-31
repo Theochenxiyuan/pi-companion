@@ -102,7 +102,8 @@ public sealed record TaskHistoryEntry(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? DeletedAt = null,
     TaskScopeKind ScopeKind = TaskScopeKind.Workspace,
-    Guid? WorkspaceId = null);
+    Guid? WorkspaceId = null,
+    AiSummaryStatus AiSummaryStatus = AiSummaryStatus.NotRequested);
 
 public sealed record TaskHistoryQuery(
     string? Search = null,
