@@ -1024,7 +1024,7 @@ function authLabel(provider: PiProviderInfo) {
                 <UiSwitch v-model="draft.tasks.aiSummaryEnabled" :aria-label="t('AI 生成任务总结')" />
               </div>
               <div class="settings-row">
-                <span><strong>{{ t('生成模型') }}</strong><small>{{ t('只用于生成标题和总结，不会改变任务本身使用的模型。') }}</small></span>
+                <span><strong>{{ t('生成模型') }}</strong><small>{{ t('生成语言跟随界面语言；此模型只用于标题和总结，不会改变任务本身使用的模型。') }}</small></span>
                 <UiSelect v-model="draft.tasks.aiMetadataModel" :ariaLabelText="t('标题与总结生成模型')" :options="modelOptions" :disabled="!draft.tasks.aiTitleEnabled && !draft.tasks.aiSummaryEnabled" searchable :searchPlaceholder="t('搜索模型或 Provider')" />
               </div>
             </section>

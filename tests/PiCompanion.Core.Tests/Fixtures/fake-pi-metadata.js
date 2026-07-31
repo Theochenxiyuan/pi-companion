@@ -66,6 +66,11 @@ input.on('line', line => {
     process.exit(23)
     return
   }
+  if (command.message.includes('verify-english-output-language') &&
+      !command.message.includes('"outputLanguage":"en-US"')) {
+    send({ id: command.id, type: 'response', success: false, error: 'Metadata prompt did not follow the interface language.' })
+    return
+  }
 
   const isTitle = command.message.includes('生成标题')
   const isCommitMessage = command.message.includes('Git 暂存区生成提交信息')

@@ -871,6 +871,7 @@ const english: Record<string, string> = {
   '生成模型': 'Generation model',
   '标题与总结生成模型': 'Title and summary generation model',
   '只用于生成标题和总结，不会改变任务本身使用的模型。': 'Used only for titles and summaries. It does not change the model used by the task.',
+  '生成语言跟随界面语言；此模型只用于标题和总结，不会改变任务本身使用的模型。': 'Generation follows the interface language. This model is used only for titles and summaries and does not change the model used by the task.',
   '搜索模型或 Provider': 'Search models or providers',
   'Run 总结': 'Run summaries',
   'AI 生成任务总结': 'Generate run summaries with AI',

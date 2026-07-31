@@ -6,6 +6,33 @@ namespace PiCompanion.Core.Tests;
 public sealed class PiTaskMetadataGeneratorTests
 {
     [Fact]
+    public async Task UsesTheConfiguredInterfaceLanguageForTitleAndSummaryPrompts()
+    {
+        var fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "fake-pi-metadata.js");
+        using var generator = new PiTaskMetadataGenerator(
+            new PiRuntimeResolver(fixture, AppContext.BaseDirectory, "node.exe"),
+            languageResolver: () => "en-US");
+
+        var title = await generator.GenerateTitleAsync(
+            "verify-english-output-language",
+            "fake/metadata-model",
+            TestContext.Current.CancellationToken);
+        var summary = await generator.GenerateRunSummaryAsync(
+            new RunSummarySource(
+                "Task",
+                "verify-english-output-language",
+                "Completed",
+                "Completed",
+                "The requested work was completed.",
+                null),
+            "fake/metadata-model",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("AI generated title", title);
+        Assert.Equal("AI generated summary.", summary);
+    }
+
+    [Fact]
     public async Task GeneratesTitleAndSummaryThroughIsolatedPiRpc()
     {
         var fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "fake-pi-metadata.js");

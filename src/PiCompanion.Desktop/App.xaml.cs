@@ -71,7 +71,8 @@ public partial class App : System.Windows.Application
             _coordinator = new TaskCoordinator(
                 PiRpcBackend.CreateDefault(skillDiscovery),
                 eventStore,
-                metadataGenerator: PiTaskMetadataGenerator.CreateDefault(),
+                metadataGenerator: PiTaskMetadataGenerator.CreateDefault(
+                    () => settings.Current.General.Language),
                 taskSettingsResolver: () => settings.Current.Tasks,
                 attachmentStaging: AttachmentStagingService.CreateDefault(),
                 generalChatWorkspaces: GeneralChatWorkspaceService.CreateDefault());
