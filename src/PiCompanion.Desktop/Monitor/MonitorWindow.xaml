@@ -608,7 +608,9 @@
                                Placement="Top"
                                VerticalOffset="-7"
                                AllowsTransparency="True"
-                               StaysOpen="False">
+                               StaysOpen="False"
+                               Opened="OnSkillSuggestionOpened"
+                               Closed="OnSkillSuggestionClosed">
                             <Border Width="348"
                                     MaxHeight="262"
                                     Padding="5"

@@ -104,7 +104,10 @@ public partial class MonitorWindow : Window
         _autoCollapseTimer.Tick += (_, _) =>
         {
             _autoCollapseTimer.Stop();
-            Collapse();
+            if (CanAutoCollapse())
+            {
+                Collapse();
+            }
         };
         _taskPickerAutoCloseTimer = new DispatcherTimer
         {
@@ -1012,13 +1015,7 @@ public partial class MonitorWindow : Window
         _taskPickerAutoCloseTimer.Stop();
         _taskPickerWheelDelta = 0;
         _taskPickerWheelBlockedUntil = 0;
-        if (_isExpanded &&
-            !RootBorder.IsMouseOver &&
-            _settings.AutoCollapseSeconds > 0)
-        {
-            _autoCollapseTimer.Stop();
-            _autoCollapseTimer.Start();
-        }
+        RestartAutoCollapseTimerIfInactive();
     }
 
     private void Expand()
@@ -1094,17 +1091,37 @@ public partial class MonitorWindow : Window
 
     private void OnMonitorMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        if (!_isExpanded ||
-            _settings.AutoCollapseSeconds == 0 ||
-            _isContextMenuOpen ||
-            TaskPickerPopup.IsOpen)
-        {
-            return;
-        }
-
-        _autoCollapseTimer.Stop();
-        _autoCollapseTimer.Start();
+        RestartAutoCollapseTimerIfInactive();
     }
+
+    private void OnSkillSuggestionOpened(object sender, EventArgs e) =>
+        _autoCollapseTimer.Stop();
+
+    private void OnSkillSuggestionClosed(object sender, EventArgs e) =>
+        RestartAutoCollapseTimerIfInactive();
+
+    private void RestartAutoCollapseTimerIfInactive()
+    {
+        _autoCollapseTimer.Stop();
+        if (CanAutoCollapse())
+        {
+            _autoCollapseTimer.Start();
+        }
+    }
+
+    private bool CanAutoCollapse() =>
+        _isExpanded &&
+        IsVisible &&
+        _settings.AutoCollapseSeconds > 0 &&
+        !RootBorder.IsMouseOver &&
+        !HasActiveInputFocus() &&
+        !IsTransientInteractionOpen();
+
+    private bool IsTransientInteractionOpen() =>
+        _isContextMenuOpen ||
+        TaskPickerPopup.IsOpen ||
+        SkillSuggestionPopup.IsOpen ||
+        InteractionOptionsComboBox.IsDropDownOpen;
 
     private void OnDragSurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -1187,7 +1204,7 @@ public partial class MonitorWindow : Window
 
     private void OnActivated(object? sender, EventArgs e)
     {
-        if (!_isContextMenuOpen && !TaskPickerPopup.IsOpen)
+        if (!IsTransientInteractionOpen())
         {
             ClearInputFocus();
         }
@@ -1195,17 +1212,16 @@ public partial class MonitorWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
-        if (!_isContextMenuOpen &&
-            !TaskPickerPopup.IsOpen &&
-            !InteractionOptionsComboBox.IsDropDownOpen)
+        if (!IsTransientInteractionOpen())
         {
             ClearInputFocus();
+            RestartAutoCollapseTimerIfInactive();
         }
     }
 
     private void ClearInputFocusAfterMouseRouting()
     {
-        if (_isContextMenuOpen || TaskPickerPopup.IsOpen || HasActiveInputFocus())
+        if (IsTransientInteractionOpen() || HasActiveInputFocus())
         {
             return;
         }
@@ -1215,8 +1231,7 @@ public partial class MonitorWindow : Window
             DispatcherPriority.ContextIdle,
             new Action(() =>
             {
-                if (!_isContextMenuOpen &&
-                    !TaskPickerPopup.IsOpen &&
+                if (!IsTransientInteractionOpen() &&
                     !HasActiveInputFocus())
                 {
                     ClearInputFocus();
@@ -1519,6 +1534,7 @@ public partial class MonitorWindow : Window
     private void OnMonitorContextMenuOpened(object sender, RoutedEventArgs e)
     {
         _isContextMenuOpen = true;
+        _autoCollapseTimer.Stop();
         if (sender is System.Windows.Controls.ContextMenu contextMenu)
         {
             DesktopLocalizer.Apply(contextMenu);
@@ -1528,6 +1544,7 @@ public partial class MonitorWindow : Window
     private void OnMonitorContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         _isContextMenuOpen = true;
+        _autoCollapseTimer.Stop();
         if (sender is FrameworkElement element && element.ContextMenu is { } contextMenu)
         {
             DesktopLocalizer.Apply(contextMenu);
@@ -1537,6 +1554,7 @@ public partial class MonitorWindow : Window
     private void OnMonitorContextMenuClosed(object sender, RoutedEventArgs e)
     {
         _isContextMenuOpen = false;
+        RestartAutoCollapseTimerIfInactive();
     }
 
     private void OnExitClick(object sender, RoutedEventArgs e) => _exit();

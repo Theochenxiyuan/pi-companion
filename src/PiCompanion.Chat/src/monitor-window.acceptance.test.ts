@@ -34,7 +34,12 @@ describe('Monitor expand and collapse behavior', () => {
 
   it('keeps configurable automatic collapse', () => {
     expect(monitorCode).toContain('_autoCollapseTimer.Start();')
-    expect(monitorCode).toContain('_settings.AutoCollapseSeconds == 0')
+    expect(monitorCode).toContain('_settings.AutoCollapseSeconds > 0')
+    expect(monitorCode).toContain('if (CanAutoCollapse())')
+    expect(monitorCode).toContain('!HasActiveInputFocus()')
+    expect(monitorCode).toContain('SkillSuggestionPopup.IsOpen')
+    expect(monitorView).toContain('Opened="OnSkillSuggestionOpened"')
+    expect(monitorView).toContain('Closed="OnSkillSuggestionClosed"')
     expect(settingsModel).toContain('int AutoCollapseSeconds')
     expect(settingsView).toContain('draft.monitor.autoCollapseSeconds')
   })
@@ -102,7 +107,8 @@ describe('Monitor expand and collapse behavior', () => {
     expect(monitorCode).toContain('_taskPickerAutoCloseTimer.Start()')
     expect(monitorCode).toContain('ItemsControl.ContainerFromElement(TaskPickerList, source)')
     expect(monitorCode).toContain('_taskPickerWheelBlockedUntil')
-    expect(monitorCode).toContain('TaskPickerPopup.IsOpen || HasActiveInputFocus()')
+    expect(monitorCode).toContain('TaskPickerPopup.IsOpen ||')
+    expect(monitorCode).toContain('IsTransientInteractionOpen() || HasActiveInputFocus()')
     const taskSelectorMouseDown = monitorCode.match(
       /private void OnTaskSelectorMouseDown[\s\S]*?private void OpenTaskPicker/u,
     )?.[0]
