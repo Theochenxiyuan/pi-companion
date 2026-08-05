@@ -35,6 +35,7 @@ import type {
   TaskHistoryEntry,
   TaskHistoryPage,
   TaskRunSnapshot,
+  TaskTemplate,
   TrustSkillWorkspaceRequest,
   TranscriptBlock,
   WorkspaceColorKey,
@@ -63,6 +64,9 @@ import SkillManagementModal from '@/components/SkillManagementModal.vue'
 import SkillsView from '@/components/SkillsView.vue'
 import TaskManagementOverlays from '@/components/TaskManagementOverlays.vue'
 import TaskManagementView from '@/components/TaskManagementView.vue'
+import TaskTemplateEditorDialog from '@/components/TaskTemplateEditorDialog.vue'
+import TaskTemplatePicker from '@/components/TaskTemplatePicker.vue'
+import TaskTemplatesView from '@/components/TaskTemplatesView.vue'
 import WorkspaceLocationMenu from '@/components/WorkspaceLocationMenu.vue'
 import WorkspaceSidebar from '@/components/WorkspaceSidebar.vue'
 import WorkspaceInspector from '@/components/WorkspaceInspector.vue'
@@ -82,6 +86,10 @@ import { coerceThinkingLevel } from '@/utils/thinkingLevels'
 import { useI18n } from '@/i18n'
 import { applyTheme, clearTheme, resolveTheme, systemThemeQuery } from '@/theme'
 import { loadTaskPromptDraft, saveTaskPromptDraft } from '@/utils/taskPromptDrafts'
+import {
+  createBuiltInTaskTemplates,
+  taskTemplateMatchesTask,
+} from '@/utils/taskTemplates'
 
 const store = useTaskStore()
 const { locale, setLocale, t } = useI18n()
@@ -92,6 +100,14 @@ const selectedThinkingLevel = ref<PiThinkingLevel>('high')
 const selectedPermissionMode = ref<PermissionMode>('standard')
 const fullAccessConfirmationOpen = ref(false)
 const settingsOpen = ref(false)
+const taskTemplatePickerOpen = ref(false)
+const editingTaskTemplate = ref<TaskTemplate | null | undefined>(undefined)
+const deletingTaskTemplate = ref<TaskTemplate | null>(null)
+const replacingDraftWithTemplate = ref<TaskTemplate | null>(null)
+const pendingTaskTemplateApplication = ref<{
+  template: TaskTemplate
+  destination: 'workspace' | 'general-chat' | 'select-workspace'
+} | null>(null)
 const editingWorkspaceId = ref<string | null>(null)
 const hidingWorkspaceId = ref<string | null>(null)
 const inspectorCollapsed = ref(window.localStorage.getItem('pi-companion:inspector-collapsed') === 'true')
@@ -112,6 +128,15 @@ const historyHasMore = ref(false)
 const historyLoading = ref(false)
 const historyLoadedCount = ref(0)
 const settingsSnapshot = ref<SettingsSnapshot>(createPreviewSettingsSnapshot())
+const builtInTaskTemplates = computed(() => createBuiltInTaskTemplates(t))
+const allTaskTemplates = computed(() => [
+  ...builtInTaskTemplates.value,
+  ...store.taskTemplates,
+])
+const homeTaskTemplates = computed(() => [
+  ...builtInTaskTemplates.value,
+  ...store.taskTemplates.filter(template => template.isPinned),
+])
 const appearancePreview = ref<{
   language: SettingsSnapshot['values']['general']['language']
   theme: SettingsSnapshot['values']['general']['theme']
@@ -266,6 +291,7 @@ const modelOptions = computed(() => {
     label: model.name,
     group: settingsSnapshot.value.pi.providers.find(provider => provider.id === model.provider)?.name ?? model.provider,
     tooltip: modelTooltip(model),
+    thinkingLevels: model.thinkingLevels,
   }))
   return options
 })
@@ -764,6 +790,170 @@ async function beginNewTaskInWorkspace(workspaceId: string) {
   composerPanel.value?.focus()
 }
 
+function openTaskTemplates() {
+  taskTemplatePickerOpen.value = true
+}
+
+function manageTaskTemplates() {
+  taskTemplatePickerOpen.value = false
+  showMainView('templates')
+}
+
+function createTaskTemplate() {
+  editingTaskTemplate.value = null
+}
+
+function editTaskTemplate(template: TaskTemplate) {
+  editingTaskTemplate.value = template
+}
+
+function duplicateTaskTemplate(template: TaskTemplate) {
+  editingTaskTemplate.value = {
+    ...template,
+    id: '',
+    name: t('{name} 副本', { name: template.name }),
+    isBuiltIn: false,
+    isPinned: false,
+  }
+}
+
+function saveTaskTemplate(template: TaskTemplate) {
+  postBridgeMessage('SaveTaskTemplate', {
+    id: template.id || null,
+    name: template.name,
+    prompt: template.prompt,
+    targetKind: template.targetKind,
+    workspaceId: template.workspaceId,
+    model: template.model,
+    thinkingLevel: template.thinkingLevel,
+    permissionMode: template.permissionMode,
+    isPinned: template.isPinned,
+  })
+  editingTaskTemplate.value = undefined
+}
+
+function cancelTaskTemplateEditing() {
+  editingTaskTemplate.value = undefined
+}
+
+function requestDeleteTaskTemplate(template: TaskTemplate) {
+  deletingTaskTemplate.value = template
+}
+
+function cancelDeleteTaskTemplate() {
+  deletingTaskTemplate.value = null
+}
+
+function confirmDeleteTaskTemplate() {
+  const template = deletingTaskTemplate.value
+  if (!template || template.isBuiltIn) return
+  postBridgeMessage('DeleteTaskTemplate', { templateId: template.id })
+  deletingTaskTemplate.value = null
+}
+
+function requestTaskTemplateApplication(template: TaskTemplate) {
+  taskTemplatePickerOpen.value = false
+  if (prompt.value.trim() || store.draft?.attachments.length) {
+    replacingDraftWithTemplate.value = template
+    return
+  }
+  applyTaskTemplate(template)
+}
+
+function confirmTaskTemplateReplacement() {
+  const template = replacingDraftWithTemplate.value
+  replacingDraftWithTemplate.value = null
+  if (template) applyTaskTemplate(template)
+}
+
+function applyTaskTemplate(template: TaskTemplate) {
+  mainView.value = 'chat'
+  const currentWorkspaceId = composerWorkspaceId.value
+  if (taskTemplateMatchesTask(template, store.currentTask, currentWorkspaceId)) {
+    applyTaskTemplateValues(template)
+    return
+  }
+
+  if (template.targetKind === 'CurrentContext') {
+    applyTaskTemplateValues(template)
+    return
+  }
+
+  if (template.targetKind === 'GeneralChat') {
+    if (!store.currentTask && directChatSelected.value) {
+      applyTaskTemplateValues(template)
+      return
+    }
+    pendingTaskTemplateApplication.value = { template, destination: 'general-chat' }
+    void beginNewTask()
+    return
+  }
+
+  if (!template.workspaceId && !store.currentTask && store.draft?.workingDirectory) {
+    applyTaskTemplateValues(template)
+    return
+  }
+
+  if (template.workspaceId) {
+    const workspace = store.workspaces.find(candidate => candidate.id === template.workspaceId)
+    if (!workspace) {
+      showTransientNotice(`template-workspace:${template.id}`, t('模板绑定的工作区不存在或已不可用。'), false)
+      return
+    }
+    pendingTaskTemplateApplication.value = { template, destination: 'workspace' }
+    void beginNewTaskInWorkspace(workspace.id)
+    return
+  }
+
+  if (store.currentTask) {
+    pendingTaskTemplateApplication.value = { template, destination: 'select-workspace' }
+    void beginNewTask()
+    return
+  }
+
+  applyTaskTemplateValues(template)
+  selectWorkingDirectory()
+}
+
+function applyTaskTemplateValues(template: TaskTemplate) {
+  prompt.value = template.prompt
+  const notices: string[] = []
+  const canApplyRunPreferences = !store.currentTask || !store.isActive
+  if (template.model && canApplyRunPreferences) {
+    if (modelOptions.value.some(option => option.value === template.model)) {
+      selectedModel.value = template.model
+    } else {
+      notices.push(t('模板模型不可用，已保留当前模型。'))
+    }
+  }
+  if (template.thinkingLevel && canApplyRunPreferences) {
+    selectedThinkingLevel.value = normalizeThinkingLevel(template.thinkingLevel)
+  }
+  if (template.permissionMode && !store.currentTask && template.targetKind !== 'GeneralChat') {
+    selectedPermissionMode.value = template.permissionMode
+  }
+  if (store.currentTask && template.permissionMode &&
+      template.permissionMode !== store.currentTask.permissionMode) {
+    notices.push(t('当前任务已固定权限，未应用模板权限。'))
+  }
+  if (store.isActive && (template.model || template.thinkingLevel)) {
+    notices.push(t('任务运行中，只应用了模板内容。'))
+  }
+  if (notices.length) {
+    showTransientNotice(`template:${template.id}:${Date.now()}`, notices.join(' '), true, 6000)
+  }
+  void nextTick(() => composerPanel.value?.focus())
+}
+
+function finishPendingTaskTemplateApplication() {
+  const pending = pendingTaskTemplateApplication.value
+  if (!pending) return
+  pendingTaskTemplateApplication.value = null
+  if (pending.destination === 'general-chat') directChatSelected.value = true
+  applyTaskTemplateValues(pending.template)
+  if (pending.destination === 'select-workspace') selectWorkingDirectory()
+}
+
 function saveWorkspacePresentation(payload: {
   workspaceId: string
   displayName: string | null
@@ -868,21 +1058,6 @@ function setWorkspaceTrustDecision(trusted: boolean) {
     trusted,
   }
   postBridgeMessage('SetWorkspaceTrustDecision', { ...request })
-}
-
-function startDemo(mode: 'Success' | 'InteractiveSuccess' | 'Failure', text: string) {
-  if (!hasWorkingDirectory.value) {
-    selectWorkingDirectory()
-    return
-  }
-  requestWorkspaceRun('StartDemo', {
-    prompt: text,
-    mode,
-    workingDirectory: store.draft?.workingDirectory,
-    model: selectedModel.value,
-    thinkingLevel: thinkingLevelPayload.value,
-    permissionMode: selectedPermissionMode.value,
-  })
 }
 
 function ensureComposerSkills() {
@@ -1415,6 +1590,9 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
   }
 
   store.consume(message)
+  if (initializes && pendingTaskTemplateApplication.value) {
+    void nextTick(finishPendingTaskTemplateApplication)
+  }
   if (initializes && !store.currentTask && !store.draft) applyAgentDefaults()
   if (['InitializeSnapshot', 'TaskUpdated', 'TaskDelta', 'EvidenceUpdated', 'RecoveryCompleted'].includes(message.type)) {
     scheduleWorkspaceGitRefresh()
@@ -2413,17 +2591,15 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             </UiButton>
           </div>
 
-          <div class="starters">
-            <UiButton type="button" :disabled="!hasWorkingDirectory" @click="startDemo('Success', t('检查这个目录的工程结构并总结主要模块'))">
-              <span>{{ t('分析工程') }}</span><small>{{ t('只读查看目录与文件') }}</small><b>›</b>
-            </UiButton>
-            <UiButton type="button" :disabled="!hasWorkingDirectory" @click="startDemo('InteractiveSuccess', t('查找这个工程中可能需要关注的 TODO 并给出摘要'))">
-              <span>{{ t('检查 TODO') }}</span><small>{{ t('搜索并汇总待办项') }}</small><b>›</b>
-            </UiButton>
-            <UiButton type="button" :disabled="!hasWorkingDirectory" @click="startDemo('Failure', t('阅读 README 和项目文档，概括当前实现状态'))">
-              <span>{{ t('阅读文档') }}</span><small>{{ t('生成项目状态摘要') }}</small><b>›</b>
+          <div class="starters task-template-starters">
+            <UiButton v-for="template in homeTaskTemplates" :key="template.id" type="button" @click="requestTaskTemplateApplication(template)">
+              <span>{{ template.name }}</span><small>{{ template.prompt }}</small><b>›</b>
             </UiButton>
           </div>
+          <UiButton class="task-template-all-button" variant="secondary" size="md" type="button" @click="manageTaskTemplates">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="3.5" width="13" height="13" rx="2" /><path d="M7 7h6M7 10h6M7 13h4" /></svg>
+            <span>{{ t('全部任务模板') }}</span>
+          </UiButton>
         </div>
 
         <div v-else class="conversation">
@@ -2480,6 +2656,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
         @open-git="openGitInspector"
         @request-skills="ensureComposerSkills"
         @request-full-access="requestFullAccess"
+        @open-task-templates="openTaskTemplates"
       />
     </main>
 
@@ -2525,6 +2702,19 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @prepare-import="prepareSkillImport"
       @confirm-import="confirmSkillImport"
       @cancel-import="cancelSkillImport"
+    />
+
+    <TaskTemplatesView
+      v-else-if="mainView === 'templates'"
+      :templates="allTaskTemplates"
+      :workspaces="store.workspaces"
+      :sidebar-collapsed="sidebarCollapsed"
+      @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @apply="requestTaskTemplateApplication"
+      @create="createTaskTemplate"
+      @edit="editTaskTemplate"
+      @duplicate="duplicateTaskTemplate"
+      @delete="requestDeleteTaskTemplate"
     />
 
     <FeaturePlaceholderView
@@ -2594,6 +2784,59 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @remove-installation="removeSkillInstallation"
       @trust-workspace="requestSkillWorkspaceTrust"
     />
+
+    <TaskTemplatePicker
+      v-if="taskTemplatePickerOpen"
+      :templates="allTaskTemplates"
+      :workspaces="store.workspaces"
+      @apply="requestTaskTemplateApplication"
+      @manage="manageTaskTemplates"
+      @close="taskTemplatePickerOpen = false"
+    />
+
+    <TaskTemplateEditorDialog
+      v-if="editingTaskTemplate !== undefined"
+      :template="editingTaskTemplate ?? null"
+      :workspaces="store.workspaces"
+      :model-options="modelOptions"
+      :current-model="selectedModel"
+      @save="saveTaskTemplate"
+      @cancel="cancelTaskTemplateEditing"
+    />
+
+    <UiDialog
+      v-if="deletingTaskTemplate"
+      :title="t('删除任务模板？')"
+      :description="t('删除后无法恢复，但不会影响已经创建的任务。')"
+      overlay-class="dialog-backdrop"
+      content-class="task-dialog"
+      alert
+      @close="cancelDeleteTaskTemplate"
+    >
+      <h2>{{ t('删除任务模板？') }}</h2>
+      <p>{{ t('将删除“{name}”。已经创建的任务不会受到影响。', { name: deletingTaskTemplate.name }) }}</p>
+      <div class="dialog-actions">
+        <UiButton type="button" @click="cancelDeleteTaskTemplate">{{ t('取消') }}</UiButton>
+        <UiButton class="danger-action" type="button" @click="confirmDeleteTaskTemplate">{{ t('删除') }}</UiButton>
+      </div>
+    </UiDialog>
+
+    <UiDialog
+      v-if="replacingDraftWithTemplate"
+      :title="t('替换当前草稿？')"
+      :description="t('当前未发送内容会被替换；切换任务时附件也会清除。')"
+      overlay-class="dialog-backdrop"
+      content-class="task-dialog"
+      alert
+      @close="replacingDraftWithTemplate = null"
+    >
+      <h2>{{ t('替换当前草稿？') }}</h2>
+      <p>{{ t('使用“{name}”会替换当前未发送内容；如果模板需要切换任务，已有附件也会清除。', { name: replacingDraftWithTemplate.name }) }}</p>
+      <div class="dialog-actions">
+        <UiButton type="button" @click="replacingDraftWithTemplate = null">{{ t('取消') }}</UiButton>
+        <UiButton class="primary" type="button" @click="confirmTaskTemplateReplacement">{{ t('使用模板') }}</UiButton>
+      </div>
+    </UiDialog>
 
     <UiDialog
       v-if="fullAccessConfirmationOpen"

@@ -13,6 +13,8 @@ import type {
   TaskHistoryEntry,
   TaskDelta,
   TaskSnapshot,
+  TaskTemplate,
+  TaskTemplatesUpdated,
   TranscriptBlock,
   WorkspaceHistoryEntry,
   WorkspaceGitCommitDiff,
@@ -25,6 +27,7 @@ interface TaskState {
   connected: boolean
   currentTask: TaskSnapshot | null
   workspaces: WorkspaceHistoryEntry[]
+  taskTemplates: TaskTemplate[]
   recentTasks: TaskHistoryEntry[]
   historyTasks: TaskHistoryEntry[]
   recycleBinTasks: TaskHistoryEntry[]
@@ -121,6 +124,7 @@ export const useTaskStore = defineStore('task', {
     connected: false,
     currentTask: null,
     workspaces: [],
+    taskTemplates: [],
     recentTasks: [],
     historyTasks: [],
     recycleBinTasks: [],
@@ -153,6 +157,7 @@ export const useTaskStore = defineStore('task', {
           this.connected = true
           this.currentTask = snapshot.currentTask
           this.workspaces = snapshot.workspaces ?? []
+          this.taskTemplates = snapshot.taskTemplates ?? []
           this.recentTasks = sortTasksByActivity(snapshot.recentTasks)
           this.historyTasks = sortTasksByActivity(snapshot.historyTasks)
           this.recycleBinTasks = snapshot.recycleBinTasks
@@ -165,6 +170,10 @@ export const useTaskStore = defineStore('task', {
           this.recoveryNotice = null
           break
         }
+        case 'TaskTemplatesUpdated':
+          this.taskTemplates = (message.payload as TaskTemplatesUpdated).taskTemplates
+          this.bridgeError = null
+          break
         case 'TaskUpdated': {
           const task = message.payload as TaskSnapshot
           this.currentTask = task

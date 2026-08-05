@@ -366,6 +366,21 @@ describe('stage 7 settings modal', () => {
     await capabilityToggles[1]!.trigger('click')
     expect(capabilityToggles[0]!.attributes('aria-checked')).toBe('true')
     expect(capabilityToggles[1]!.attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('.custom-thinking-map').text()).toContain('推理等级映射')
+    await wrapper.get('button[aria-label="High 推理等级映射"]').trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === '自定义值')!.trigger('click')
+    expect(wrapper.get('button[aria-label="High 推理等级映射"]').text()).toBe('自定义值')
+    expect(wrapper.find('input[aria-label="High 实际值"]').exists()).toBe(true)
+    await wrapper.get('input[aria-label="High 实际值"]').setValue('strong')
+    await wrapper.get('button[aria-label="Medium 推理等级映射"]').trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === '自定义值')!.trigger('click')
+    expect(wrapper.get('button[aria-label="Medium 推理等级映射"]').text()).toBe('自定义值')
+    expect(wrapper.find('input[aria-label="Medium 实际值"]').exists()).toBe(true)
+    await wrapper.get('button[aria-label="Medium 推理等级映射"]').trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === '使用标准值')!.trigger('click')
+    expect(wrapper.find('input[aria-label="Medium 实际值"]').exists()).toBe(false)
+    await wrapper.get('button[aria-label="Xhigh 推理等级映射"]').trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === '不支持')!.trigger('click')
     await wrapper.get('.custom-provider-form').trigger('submit')
 
     const emitted = wrapper.emitted('addPiCustomProvider')?.[0]
@@ -375,7 +390,23 @@ describe('stage 7 settings modal', () => {
       baseUrl: 'https://models.example.com/v1',
       api: 'openai-completions',
       credentialMode: 'api-key',
-      models: [{ id: 'company-coder', name: 'Company Coder', reasoning: true, imageInput: true, contextWindow: 261120, maxTokens: 261120 }],
+      models: [{
+        id: 'company-coder',
+        name: 'Company Coder',
+        reasoning: true,
+        imageInput: true,
+        contextWindow: 261121,
+        maxTokens: 261121,
+        thinkingLevelMap: {
+          off: 'off',
+          minimal: 'minimal',
+          low: 'low',
+          medium: 'medium',
+          high: 'strong',
+          xhigh: null,
+          max: 'max',
+        },
+      }],
     })
     expect(emitted?.[1]).toBe('sk-company-test')
     expect(emitted?.[2]).toBeNull()
@@ -416,6 +447,10 @@ describe('stage 7 settings modal', () => {
     expect((providerIdInput.element as HTMLInputElement).disabled).toBe(true)
     expect((wrapper.get('input[placeholder="例如：公司模型网关"]').element as HTMLInputElement).value).toBe('Company Gateway')
     expect((wrapper.get('input[placeholder="model-id"]').element as HTMLInputElement).value).toBe('company-coder')
+    expect(wrapper.get('button[aria-label="High 推理等级映射"]').text()).toBe('自定义值')
+    expect((wrapper.get('input[aria-label="High 实际值"]').element as HTMLInputElement).value).toBe('strong')
+    expect(wrapper.get('button[aria-label="Xhigh 推理等级映射"]').text()).toBe('不支持')
+    expect(wrapper.get('button[aria-label="Max 推理等级映射"]').text()).toBe('使用标准值')
     expect(wrapper.find('input[placeholder="留空则保留现有 API Key"]').exists()).toBe(true)
 
     await wrapper.get('input[placeholder="例如：公司模型网关"]').setValue('Company Gateway 2')

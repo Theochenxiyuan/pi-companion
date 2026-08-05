@@ -9,6 +9,7 @@ import type {
   PiCustomProviderInfo,
   PiOAuthLoginProgress,
   PiProviderInfo,
+  PiThinkingLevel,
   SettingsActionCompleted,
   SettingsSnapshot,
   TaskHistoryEntry,
@@ -16,6 +17,8 @@ import type {
 
 type SettingsTab = 'general' | 'notifications' | 'monitor' | 'tasks' | 'workspace' | 'skills' | 'agent' | 'providers' | 'data' | 'recycle-bin'
 type CustomProviderDraft = PiCustomProviderInfo & { apiKey: string }
+type CustomProviderModel = PiCustomProviderInfo['models'][number]
+type ThinkingMapMode = 'default' | 'custom' | 'unsupported'
 
 const props = withDefaults(defineProps<{
   snapshot: SettingsSnapshot
@@ -283,6 +286,12 @@ const customProviderApiOptions: UiSelectOption[] = [
 const customProviderCredentialOptions = computed<UiSelectOption[]>(() => [
   { value: 'api-key', label: 'API Key' },
   { value: 'local', label: t('无需认证（本地服务）') },
+])
+const thinkingLevelMapKeys: PiThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+const thinkingMapModeOptions = computed<UiSelectOption[]>(() => [
+  { value: 'default', label: t('使用标准值') },
+  { value: 'custom', label: t('自定义值') },
+  { value: 'unsupported', label: t('不支持') },
 ])
 const recycleStatusOptions = computed<UiSelectOption[]>(() => [
   { value: 'all', label: t('全部状态') },
@@ -577,6 +586,55 @@ function removeCustomProviderModel(index: number) {
   customProviderDraft.value.models.splice(index, 1)
 }
 
+function thinkingMapMode(model: CustomProviderModel, level: PiThinkingLevel): ThinkingMapMode {
+  if (!model.thinkingLevelMap || !Object.prototype.hasOwnProperty.call(model.thinkingLevelMap, level)) return 'default'
+  const mappedValue = model.thinkingLevelMap[level]
+  if (mappedValue === null) return 'unsupported'
+  return mappedValue === level ? 'default' : 'custom'
+}
+
+function setThinkingMapMode(model: CustomProviderModel, level: PiThinkingLevel, value: string) {
+  const mode = value as ThinkingMapMode
+  const nextMap = { ...model.thinkingLevelMap }
+  if (mode === 'default') {
+    nextMap[level] = level
+  } else {
+    const currentValue = nextMap[level]
+    nextMap[level] = mode === 'unsupported'
+      ? null
+      : typeof currentValue === 'string' && currentValue.trim() && currentValue !== level ? currentValue : ''
+  }
+  model.thinkingLevelMap = nextMap
+  customProviderError.value = ''
+}
+
+function thinkingMapValue(model: CustomProviderModel, level: PiThinkingLevel) {
+  const value = model.thinkingLevelMap?.[level]
+  return typeof value === 'string' ? value : level
+}
+
+function updateThinkingMapValue(model: CustomProviderModel, level: PiThinkingLevel, event: Event) {
+  model.thinkingLevelMap = {
+    ...model.thinkingLevelMap,
+    [level]: (event.target as HTMLInputElement).value,
+  }
+  customProviderError.value = ''
+}
+
+function normalizedThinkingLevelMap(model: CustomProviderModel) {
+  if (!model.reasoning) return undefined
+  const result: Partial<Record<PiThinkingLevel, string | null>> = {}
+  for (const level of thinkingLevelMapKeys) {
+    if (!model.thinkingLevelMap || !Object.prototype.hasOwnProperty.call(model.thinkingLevelMap, level)) {
+      result[level] = level
+      continue
+    }
+    const value = model.thinkingLevelMap[level]
+    result[level] = value === null ? null : value?.trim() ?? ''
+  }
+  return result
+}
+
 function normalizeIntegerDown(value: number, minimum: number, maximum: number, step = 1) {
   if (value === null || value === undefined || String(value).trim() === '') return Number.NaN
   const numericValue = Number(value)
@@ -587,7 +645,7 @@ function normalizeIntegerDown(value: number, minimum: number, maximum: number, s
 
 function normalizeCustomProviderModelLimits(provider: CustomProviderDraft) {
   for (const model of provider.models) {
-    model.contextWindow = normalizeIntegerDown(model.contextWindow, 1024, 10_000_000, 1024)
+    model.contextWindow = normalizeIntegerDown(model.contextWindow, 1024, 10_000_000)
     model.maxTokens = normalizeIntegerDown(model.maxTokens, 1, Number(model.contextWindow))
   }
 }
@@ -608,15 +666,19 @@ function submitCustomProvider() {
     baseUrl: provider.baseUrl.trim().replace(/\/+$/u, ''),
     api: provider.api,
     credentialMode: provider.credentialMode,
-    models: provider.models.map(model => ({
-      id: model.id.trim(),
-      name: model.name.trim() || model.id.trim(),
-      reasoning: model.reasoning,
-      imageInput: model.imageInput,
-      contextWindow: Number(model.contextWindow),
-      maxTokens: Number(model.maxTokens),
-      supportsDeveloperRole: model.supportsDeveloperRole,
-    })),
+    models: provider.models.map((model) => {
+      const thinkingLevelMap = normalizedThinkingLevelMap(model)
+      return {
+        id: model.id.trim(),
+        name: model.name.trim() || model.id.trim(),
+        reasoning: model.reasoning,
+        imageInput: model.imageInput,
+        contextWindow: Number(model.contextWindow),
+        maxTokens: Number(model.maxTokens),
+        ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+        supportsDeveloperRole: model.supportsDeveloperRole,
+      }
+    }),
   }
   addingCustomProvider.value = true
   pendingCustomProviderId.value = normalized.id
@@ -652,6 +714,15 @@ function validateCustomProvider(provider: CustomProviderDraft) {
     ids.add(modelId)
     if (!Number.isInteger(Number(model.contextWindow)) || Number(model.contextWindow) < 1024) return t('模型 {id} 的上下文窗口无效。', { id: modelId })
     if (!Number.isInteger(Number(model.maxTokens)) || Number(model.maxTokens) < 1 || Number(model.maxTokens) > Number(model.contextWindow)) return t('模型 {id} 的最大输出 Token 无效。', { id: modelId })
+    if (model.reasoning && model.thinkingLevelMap) {
+      for (const level of thinkingLevelMapKeys) {
+        if (!Object.prototype.hasOwnProperty.call(model.thinkingLevelMap, level)) continue
+        const mappedValue = model.thinkingLevelMap[level]
+        if (mappedValue !== null && !mappedValue?.trim()) {
+          return t('模型 {id} 的推理等级 {level} 映射值不能为空。', { id: modelId, level: thinkingLabel(level) })
+        }
+      }
+    }
   }
   return ''
 }
@@ -1160,13 +1231,40 @@ function authLabel(provider: PiProviderInfo) {
                       <div class="custom-model-grid">
                         <label><span>{{ t('模型 ID') }}</span><UiInput v-model="model.id" maxlength="200" spellcheck="false" placeholder="model-id" @input="customProviderError = ''" /></label>
                         <label><span>{{ t('显示名称') }}</span><UiInput v-model="model.name" maxlength="120" :placeholder="t('留空则使用模型 ID')" /></label>
-                        <label><span>{{ t('上下文窗口') }}</span><UiInput v-model.number="model.contextWindow" type="number" min="1024" max="10000000" step="1024" /></label>
+                        <label><span>{{ t('上下文窗口') }}</span><UiInput v-model.number="model.contextWindow" type="number" min="1024" max="10000000" step="1" /></label>
                         <label><span>{{ t('最大输出 Token') }}</span><UiInput v-model.number="model.maxTokens" type="number" min="1" :max="model.contextWindow" step="1" /></label>
                       </div>
                       <div class="custom-model-capabilities">
                         <UiSwitch v-model="model.reasoning" class="custom-model-capability" size="sm"><span>{{ t('支持推理') }}</span></UiSwitch>
                         <UiSwitch v-model="model.imageInput" class="custom-model-capability" size="sm"><span>{{ t('支持图像输入') }}</span></UiSwitch>
                       </div>
+                      <details v-if="model.reasoning" class="custom-thinking-map">
+                        <summary>
+                          <span><strong>{{ t('推理等级映射') }}</strong><small>{{ t('可选；将标准推理等级映射为模型实际接受的值。') }}</small></span>
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 4.5 4.5-4.5 4.5" /></svg>
+                        </summary>
+                        <div class="custom-thinking-map-grid">
+                          <div v-for="level in thinkingLevelMapKeys" :key="level" class="custom-thinking-map-row" :data-thinking-level="level">
+                            <span>{{ thinkingLabel(level) }}</span>
+                            <UiSelect
+                              :model-value="thinkingMapMode(model, level)"
+                              :ariaLabelText="t('{level} 推理等级映射', { level: thinkingLabel(level) })"
+                              :options="thinkingMapModeOptions"
+                              @update:model-value="setThinkingMapMode(model, level, $event)"
+                            />
+                            <UiInput
+                              v-if="thinkingMapMode(model, level) === 'custom'"
+                              :value="thinkingMapValue(model, level)"
+                              maxlength="100"
+                              spellcheck="false"
+                              :aria-label="t('{level} 实际值', { level: thinkingLabel(level) })"
+                              :placeholder="level"
+                              @input="updateThinkingMapValue(model, level, $event)"
+                            />
+                          </div>
+                        </div>
+                        <p>{{ t('使用标准值会沿用 Provider 默认映射；设为不支持后，该等级不会出现在任务选择器中。') }}</p>
+                      </details>
                     </article>
                   </section>
 
@@ -1721,6 +1819,22 @@ function authLabel(provider: PiProviderInfo) {
 .custom-model-capability:has(:deep(.ui-switch[data-state="checked"])) :deep(.ui-switch) { border-color: var(--color-success-emphasis); background: var(--color-success-solid); }
 .custom-model-capability:has(:deep(.ui-switch[data-state="checked"])) :deep(.ui-switch-thumb) { background: var(--color-success-text-strong); }
 .custom-model-capability:has(:deep(.ui-switch[data-state="checked"])) :deep(.ui-switch-label) { color: var(--color-success-text-strong); }
+.custom-thinking-map { padding-top: 12px; border-top: 1px solid var(--color-tone-7); }
+.custom-thinking-map summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-tone-13); cursor: pointer; list-style: none; }
+.custom-thinking-map summary::-webkit-details-marker { display: none; }
+.custom-thinking-map summary > span { display: grid; min-width: 0; gap: 3px; }
+.custom-thinking-map summary strong { font-size: var(--font-size-body-sm); font-weight: var(--font-weight-medium); }
+.custom-thinking-map summary small { color: var(--color-tone-9); font-size: var(--font-size-caption); line-height: var(--line-height-control); }
+.custom-thinking-map summary svg { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--color-tone-10); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; transition: transform var(--duration-fast) var(--ease-standard); }
+.custom-thinking-map[open] summary svg { transform: rotate(90deg); }
+.custom-thinking-map-grid { display: grid; gap: 8px; margin-top: 13px; }
+.custom-thinking-map-row { display: grid; grid-template-columns: 74px 152px minmax(0, 1fr); align-items: center; gap: 8px; }
+.custom-thinking-map-row > span { color: var(--color-tone-12); font-size: var(--font-size-caption); }
+.custom-thinking-map-row :deep(.app-select) { width: 100%; }
+.custom-thinking-map-row :deep(.app-select-trigger) { min-height: 34px; font-size: var(--font-size-caption); font-weight: var(--font-weight-regular); }
+.custom-thinking-map-row input { box-sizing: border-box; min-width: 0; width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--color-tone-8); border-radius: 7px; outline: 0; background: var(--color-tone-2); color: var(--color-tone-14); font-size: var(--font-size-caption); }
+.custom-thinking-map-row input:focus { border-color: var(--color-tone-9); }
+.custom-thinking-map > p { margin: 11px 0 0; color: var(--color-tone-9); font-size: var(--font-size-micro); line-height: var(--line-height-control); }
 .custom-model-grid input[type="number"] { appearance: textfield; }
 .custom-model-grid input[type="number"]::-webkit-inner-spin-button,
 .custom-model-grid input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; }
@@ -1790,6 +1904,7 @@ function authLabel(provider: PiProviderInfo) {
   .provider-detail { padding: 22px 0 20px; }
   .custom-provider-grid, .custom-model-grid { grid-template-columns: 1fr; }
   .custom-provider-grid > .wide { grid-column: auto; }
+  .custom-thinking-map-row { grid-template-columns: 64px minmax(126px, .8fr) minmax(0, 1fr); }
 }
 
 @media (max-width: 620px) {

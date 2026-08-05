@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import ComposerActionMenu from './ComposerActionMenu.vue'
 
 describe('composer action menu acceptance', () => {
-  it('offers attachments and manual skill invocation from one extensible menu', async () => {
+  it('offers attachments, skills, and task templates from one extensible menu', async () => {
     const wrapper = mount(ComposerActionMenu, { attachTo: document.body })
 
     expect(wrapper.get('.composer-add-button svg').attributes('viewBox')).toBe('0 0 20 20')
@@ -12,8 +12,8 @@ describe('composer action menu acceptance', () => {
     await wrapper.get('.composer-add-button').trigger('click')
 
     const items = wrapper.findAll('[role="menuitem"]')
-    expect(items).toHaveLength(2)
-    expect(items.map(item => item.text())).toEqual(['添加附件', '调用技能'])
+    expect(items).toHaveLength(3)
+    expect(items.map(item => item.text())).toEqual(['添加附件', '调用技能', '任务模板'])
 
     await items[0].trigger('click')
     expect(wrapper.emitted('selectAttachments')).toHaveLength(1)
@@ -22,6 +22,10 @@ describe('composer action menu acceptance', () => {
     await wrapper.get('.composer-add-button').trigger('click')
     await wrapper.findAll('[role="menuitem"]')[1].trigger('click')
     expect(wrapper.emitted('invokeSkill')).toHaveLength(1)
+
+    await wrapper.get('.composer-add-button').trigger('click')
+    await wrapper.findAll('[role="menuitem"]')[2].trigger('click')
+    expect(wrapper.emitted('invokeTemplate')).toHaveLength(1)
     wrapper.unmount()
   })
 
@@ -33,12 +37,18 @@ describe('composer action menu acceptance', () => {
     const items = wrapper.findAll('[role="menuitem"]')
     expect(items[0].attributes('disabled')).toBeDefined()
     expect(items[1].attributes('disabled')).toBeUndefined()
+    expect(items[2].attributes('disabled')).toBeUndefined()
   })
 
-  it('cannot open before a conversation mode is selected', async () => {
+  it('keeps templates available before a conversation mode is selected', async () => {
     const wrapper = mount(ComposerActionMenu, {
       props: { attachmentsDisabled: true, skillsDisabled: true },
     })
-    expect(wrapper.get('.composer-add-button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.composer-add-button').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.composer-add-button').trigger('click')
+    const items = wrapper.findAll('[role="menuitem"]')
+    expect(items[0].attributes('disabled')).toBeDefined()
+    expect(items[1].attributes('disabled')).toBeDefined()
+    expect(items[2].attributes('disabled')).toBeUndefined()
   })
 })

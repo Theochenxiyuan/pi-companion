@@ -8,6 +8,7 @@ const supportedApis = new Set([
 ])
 
 const providerIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u
+const thinkingLevelNames = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 export function computeModelsConfigRevision(content) {
   return content == null ? null : createHash('sha256').update(content, 'utf8').digest('hex')
@@ -42,6 +43,9 @@ export function normalizeCustomProvider(value) {
 
     const contextWindow = requireInteger(model.contextWindow, `模型 ${modelId} 的上下文窗口`, 1024, 10_000_000)
     const maxTokens = requireInteger(model.maxTokens, `模型 ${modelId} 的最大输出 Token`, 1, contextWindow)
+    const thinkingLevelMap = Boolean(model.reasoning)
+      ? normalizeThinkingLevelMap(model.thinkingLevelMap)
+      : undefined
     return {
       id: modelId,
       name: optionalTrimmedString(model.name, 120) ?? modelId,
@@ -49,6 +53,7 @@ export function normalizeCustomProvider(value) {
       imageInput: Boolean(model.imageInput),
       contextWindow,
       maxTokens,
+      thinkingLevelMap,
       supportsDeveloperRole: typeof model.supportsDeveloperRole === 'boolean'
         ? model.supportsDeveloperRole
         : undefined,
@@ -75,6 +80,7 @@ export function toModelsJsonProvider(provider) {
       if (typeof model.supportsDeveloperRole === 'boolean') {
         config.compat = { supportsDeveloperRole: model.supportsDeveloperRole }
       }
+      if (model.thinkingLevelMap) config.thinkingLevelMap = { ...model.thinkingLevelMap }
       return config
     }),
   }
@@ -94,6 +100,9 @@ export function toCustomProviderInfo(providerId, config) {
       imageInput: Array.isArray(model.input) && model.input.includes('image'),
       contextWindow: positiveIntegerOr(model.contextWindow, 128_000),
       maxTokens: positiveIntegerOr(model.maxTokens, 16_384),
+      thinkingLevelMap: Boolean(model.reasoning)
+        ? normalizeThinkingLevelMap(model.thinkingLevelMap, false)
+        : undefined,
       supportsDeveloperRole: typeof model.compat?.supportsDeveloperRole === 'boolean'
         ? model.compat.supportsDeveloperRole
         : undefined,
@@ -167,6 +176,36 @@ export function defaultSupportsDeveloperRole(baseUrl) {
 
 function isOpenAiCompatibleApi(api) {
   return api === 'openai-completions' || api === 'openai-responses'
+}
+
+function normalizeThinkingLevelMap(value, strict = true) {
+  if (value == null) return undefined
+  if (!isObject(value)) {
+    if (strict) throw new Error('推理等级映射必须是对象。')
+    return undefined
+  }
+
+  if (strict) {
+    const unsupportedLevel = Object.keys(value).find(level => !thinkingLevelNames.includes(level))
+    if (unsupportedLevel) throw new Error(`不支持的推理等级：${unsupportedLevel}`)
+  }
+
+  const result = {}
+  for (const level of thinkingLevelNames) {
+    if (!Object.prototype.hasOwnProperty.call(value, level)) continue
+    const mappedValue = value[level]
+    if (mappedValue === null) {
+      result[level] = null
+      continue
+    }
+    const normalized = optionalTrimmedString(mappedValue, 100)
+    if (normalized) {
+      result[level] = normalized
+      continue
+    }
+    if (strict) throw new Error(`推理等级 ${level} 的映射值不能为空。`)
+  }
+  return Object.keys(result).length > 0 ? result : undefined
 }
 
 function readDeveloperRoleCapability(model) {

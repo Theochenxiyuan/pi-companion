@@ -32,7 +32,8 @@ public sealed record PiCustomModelInfo(
     bool ImageInput,
     int ContextWindow,
     int MaxTokens,
-    bool? SupportsDeveloperRole = null);
+    bool? SupportsDeveloperRole = null,
+    IReadOnlyDictionary<string, string?>? ThinkingLevelMap = null);
 
 public sealed record PiCustomProviderInfo(
     string Id,

@@ -1,4 +1,4 @@
-export const bridgeProtocolVersion = 60
+export const bridgeProtocolVersion = 62
 
 export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 
@@ -102,6 +102,7 @@ export interface PiCustomModelInfo {
   imageInput: boolean
   contextWindow: number
   maxTokens: number
+  thinkingLevelMap?: Partial<Record<PiThinkingLevel, string | null>>
   supportsDeveloperRole?: boolean
 }
 
@@ -579,6 +580,23 @@ export interface ComposerDraft {
   attachments: ComposerAttachment[]
 }
 
+export type TaskTemplateTargetKind = 'CurrentContext' | 'Workspace' | 'GeneralChat'
+
+export interface TaskTemplate {
+  id: string
+  name: string
+  prompt: string
+  targetKind: TaskTemplateTargetKind
+  workspaceId: string | null
+  model: string | null
+  thinkingLevel: string | null
+  permissionMode: Exclude<PermissionMode, 'full-access'> | null
+  isPinned: boolean
+  createdAt: string
+  updatedAt: string
+  isBuiltIn?: boolean
+}
+
 export interface ComposerAttachment {
   path: string
   displayName: string
@@ -838,6 +856,7 @@ export interface InitializeSnapshot {
   currentTask: TaskSnapshot | null
   lastSequence: number
   workspaces?: WorkspaceHistoryEntry[]
+  taskTemplates?: TaskTemplate[]
   recentTasks: TaskHistoryEntry[]
   historyTasks: TaskHistoryEntry[]
   historyHasMore?: boolean
@@ -845,6 +864,10 @@ export interface InitializeSnapshot {
   draft: ComposerDraft | null
   settings?: SettingsSnapshot
   capabilities: string[]
+}
+
+export interface TaskTemplatesUpdated {
+  taskTemplates: TaskTemplate[]
 }
 
 export interface TaskCollections {

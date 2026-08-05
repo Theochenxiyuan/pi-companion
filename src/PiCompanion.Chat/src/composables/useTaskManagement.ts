@@ -4,7 +4,7 @@ import { useTaskStore } from '@/stores/task'
 import type { TaskHistoryEntry } from '@/types/bridge'
 import { t } from '@/i18n'
 
-export type MainView = 'chat' | 'history' | 'skills' | 'presets' | 'scheduled'
+export type MainView = 'chat' | 'history' | 'skills' | 'templates' | 'scheduled'
 export type ConfirmAction = 'recycle' | 'delete-permanently'
 
 export interface TaskContextMenu {

@@ -54,6 +54,7 @@ const emit = defineEmits<{
   openGit: []
   requestSkills: []
   requestFullAccess: []
+  openTaskTemplates: []
 }>()
 
 const prompt = defineModel<string>('prompt', { required: true })
@@ -446,6 +447,7 @@ defineExpose({ focus: () => input.value?.focus() })
             :skills-disabled="!modeSelected"
             @select-attachments="$emit('selectAttachments')"
             @invoke-skill="beginSkillInvocation"
+            @invoke-template="$emit('openTaskTemplates')"
           />
           <UiButton
             class="composer-expand-button"

@@ -33,7 +33,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     vi.restoreAllMocks()
   })
 
-  it('loads grouped skill cards while presets and scheduled remain placeholders', async () => {
+  it('loads grouped skill cards, the template manager, and the scheduled placeholder', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
     window.chrome = {
@@ -232,16 +232,19 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.find('.skill-detail-dialog').exists()).toBe(false)
     expect(wrapper.findAll('.skill-card')).toHaveLength(2)
 
-    for (const [label, view] of [
-      ['预置任务', 'presets'],
-      ['定时任务', 'scheduled'],
-    ] as const) {
-      const navigation = wrapper.findAll('.sidebar > nav .nav-row').find(button => button.text() === label)!
-      await navigation.trigger('click')
-      expect(wrapper.get('.feature-placeholder-view').classes()).toContain(`management-${view}`)
-      expect(wrapper.get('.management-location strong').text()).toBe(label)
-      expect(wrapper.get('.feature-placeholder-content').text()).toContain('暂未开放')
-    }
+    const templatesNavigation = wrapper.findAll('.sidebar > nav .nav-row')
+      .find(button => button.text() === '任务模板')!
+    await templatesNavigation.trigger('click')
+    expect(wrapper.find('.task-templates-view').exists()).toBe(true)
+    expect(wrapper.get('.management-location strong').text()).toBe('任务模板')
+    expect(wrapper.findAll('.task-template-management-card')).toHaveLength(3)
+
+    const scheduledNavigation = wrapper.findAll('.sidebar > nav .nav-row')
+      .find(button => button.text() === '定时任务')!
+    await scheduledNavigation.trigger('click')
+    expect(wrapper.get('.feature-placeholder-view').classes()).toContain('management-scheduled')
+    expect(wrapper.get('.management-location strong').text()).toBe('定时任务')
+    expect(wrapper.get('.feature-placeholder-content').text()).toContain('暂未开放')
   })
 
   it('round-trips an explicit workspace trust decision and refreshes skills', async () => {
@@ -733,6 +736,75 @@ describe('Agent Chat stage 5 acceptance', () => {
         action: 'copy',
       },
     }))
+  })
+
+  it('applies a pinned task template to the composer without starting a run', async () => {
+    const postMessage = vi.fn()
+    let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
+    window.chrome = {
+      webview: {
+        postMessage,
+        addEventListener(_type, listener) { bridgeListener = listener },
+        removeEventListener() {},
+      },
+    }
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()] },
+    })
+    mountedWrappers.push(wrapper)
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'InitializeSnapshot',
+        payload: {
+          currentTask: null,
+          lastSequence: 0,
+          recentTasks: [],
+          historyTasks: [],
+          recycleBinTasks: [],
+          draft: null,
+          taskTemplates: [{
+            id: 'template-release-check',
+            name: '发布前检查',
+            prompt: '检查发布风险并列出待办',
+            targetKind: 'CurrentContext',
+            workspaceId: null,
+            model: null,
+            thinkingLevel: null,
+            permissionMode: null,
+            isPinned: true,
+            createdAt: '2026-08-04T00:00:00.000Z',
+            updatedAt: '2026-08-04T00:00:00.000Z',
+          }],
+          capabilities: ['task-templates'],
+        } satisfies InitializeSnapshot,
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+
+    expect(wrapper.find('.task-template-starters .task-template-all-button').exists()).toBe(false)
+    expect(wrapper.get('.task-template-all-button').classes()).toContain('ui-button--secondary')
+    expect(wrapper.get('.task-template-all-button').text()).toBe('全部任务模板')
+    const templateButton = wrapper.findAll('.task-template-starters button')
+      .find(button => button.text().includes('发布前检查'))!
+    await templateButton.trigger('click')
+    await nextTick()
+
+    expect((wrapper.get('.composer > textarea').element as HTMLTextAreaElement).value)
+      .toBe('检查发布风险并列出待办')
+    expect(postMessage.mock.calls.some(([message]) => message.type === 'SendPrompt')).toBe(false)
+    expect(postMessage.mock.calls.some(([message]) => message.type === 'StartDemo')).toBe(false)
+
+    await wrapper.get('.composer-add-button').trigger('click')
+    await wrapper.findAll('[role="menuitem"]')
+      .find(item => item.text() === '任务模板')!
+      .trigger('click')
+    expect(wrapper.find('.task-template-picker').exists()).toBe(true)
+    await wrapper.findAll('.task-template-picker button')
+      .find(button => button.text() === '管理任务模板')!
+      .trigger('click')
+    expect(wrapper.find('.task-templates-view').exists()).toBe(true)
   })
 
   it('intercepts app commands, validates skill calls, and supports escaped slash text', async () => {

@@ -13,12 +13,13 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 60;
+    public const int ProtocolVersion = 62;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
         IReadOnlyList<TaskProjection> conversation,
         IReadOnlyList<WorkspaceHistoryEntry> workspaces,
+        IReadOnlyList<TaskTemplate> taskTemplates,
         IReadOnlyList<TaskHistoryEntry> recentTasks,
         IReadOnlyList<TaskHistoryEntry> historyTasks,
         bool historyHasMore,
@@ -30,6 +31,7 @@ internal static class BridgeContracts
         projection is null ? null : CreateTask(projection, conversation, evidenceResolver),
         projection?.LastSequence ?? 0,
         workspaces.Select(workspace => CreateWorkspace(workspace, projectTrustResolver)).ToArray(),
+        taskTemplates.Select(CreateTaskTemplate).ToArray(),
         recentTasks.Select(CreateHistoryTask).ToArray(),
         historyTasks.Select(CreateHistoryTask).ToArray(),
         historyHasMore,
@@ -55,7 +57,21 @@ internal static class BridgeContracts
             "independent-workspaces", "workspace-new-task",
             "skill-native-discovery", "skill-content-fingerprints", "skill-pi-removal",
             "skill-local-direct-import", "skill-workspace-trust", "workspace-trust-preflight",
+            "task-templates",
         });
+
+    public static TaskTemplateDto CreateTaskTemplate(TaskTemplate template) => new(
+        template.Id,
+        template.Name,
+        template.Prompt,
+        template.TargetKind.ToString(),
+        template.WorkspaceId,
+        template.Model,
+        template.ThinkingLevel,
+        template.PermissionMode,
+        template.IsPinned,
+        template.CreatedAt,
+        template.UpdatedAt);
 
     public static SkillsLoadedDto CreateSkillsLoaded(
         string requestId,
@@ -587,6 +603,7 @@ internal sealed record InitializeSnapshotDto(
     TaskSnapshotDto? CurrentTask,
     long LastSequence,
     IReadOnlyList<WorkspaceHistoryEntryDto> Workspaces,
+    IReadOnlyList<TaskTemplateDto> TaskTemplates,
     IReadOnlyList<TaskHistoryEntryDto> RecentTasks,
     IReadOnlyList<TaskHistoryEntryDto> HistoryTasks,
     bool HistoryHasMore,
@@ -594,6 +611,32 @@ internal sealed record InitializeSnapshotDto(
     ComposerDraft? Draft,
     SettingsSnapshotDto Settings,
     IReadOnlyList<string> Capabilities);
+
+internal sealed record TaskTemplateDto(
+    Guid Id,
+    string Name,
+    string Prompt,
+    string TargetKind,
+    Guid? WorkspaceId,
+    string? Model,
+    string? ThinkingLevel,
+    string? PermissionMode,
+    bool IsPinned,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+internal sealed record SaveTaskTemplateRequestDto(
+    Guid? Id,
+    string Name,
+    string Prompt,
+    string TargetKind,
+    Guid? WorkspaceId,
+    string? Model,
+    string? ThinkingLevel,
+    string? PermissionMode,
+    bool IsPinned);
+
+internal sealed record DeleteTaskTemplateRequestDto(Guid TemplateId);
 
 internal sealed record SettingsSnapshotDto(
     PiCompanionSettings Values,

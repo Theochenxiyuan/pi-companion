@@ -479,6 +479,103 @@ public sealed class SqliteRunEventStore : IRunEventStore
         }
     }
 
+    public IReadOnlyList<TaskTemplate> GetTaskTemplates()
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                SELECT id, name, prompt, target_kind, workspace_id, model, thinking_level,
+                       permission_mode, is_pinned, created_at, updated_at
+                FROM task_templates
+                ORDER BY is_pinned DESC, julianday(updated_at) DESC, updated_at DESC, name COLLATE NOCASE;
+                """;
+            using var reader = command.ExecuteReader();
+            var templates = new List<TaskTemplate>();
+            while (reader.Read())
+            {
+                templates.Add(ReadTaskTemplate(reader));
+            }
+
+            return templates;
+        }
+    }
+
+    public TaskTemplate UpsertTaskTemplate(TaskTemplate template)
+    {
+        var normalized = TaskTemplateRules.Normalize(template);
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            if (normalized.WorkspaceId is { } workspaceId)
+            {
+                using var workspace = connection.CreateCommand();
+                workspace.CommandText = "SELECT 1 FROM workspaces WHERE id = $id AND hidden_at IS NULL;";
+                workspace.Parameters.AddWithValue("$id", workspaceId.ToString("D"));
+                if (workspace.ExecuteScalar() is null)
+                {
+                    throw new InvalidOperationException("模板绑定的工作区不存在或已不可用。");
+                }
+            }
+
+            Execute(
+                connection,
+                null,
+                """
+                INSERT INTO task_templates (
+                    id, name, prompt, target_kind, workspace_id, model, thinking_level,
+                    permission_mode, is_pinned, created_at, updated_at)
+                VALUES (
+                    $id, $name, $prompt, $targetKind, $workspaceId, $model, $thinkingLevel,
+                    $permissionMode, $isPinned, $createdAt, $updatedAt)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    prompt = excluded.prompt,
+                    target_kind = excluded.target_kind,
+                    workspace_id = excluded.workspace_id,
+                    model = excluded.model,
+                    thinking_level = excluded.thinking_level,
+                    permission_mode = excluded.permission_mode,
+                    is_pinned = excluded.is_pinned,
+                    updated_at = excluded.updated_at;
+                """,
+                ("$id", normalized.Id.ToString("D")),
+                ("$name", normalized.Name),
+                ("$prompt", normalized.Prompt),
+                ("$targetKind", normalized.TargetKind.ToString()),
+                ("$workspaceId", normalized.WorkspaceId?.ToString("D")),
+                ("$model", normalized.Model),
+                ("$thinkingLevel", normalized.ThinkingLevel),
+                ("$permissionMode", normalized.PermissionMode),
+                ("$isPinned", normalized.IsPinned ? 1 : 0),
+                ("$createdAt", normalized.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$updatedAt", normalized.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)));
+            return ReadTaskTemplate(connection, normalized.Id);
+        }
+    }
+
+    public void DeleteTaskTemplate(Guid templateId)
+    {
+        if (templateId == Guid.Empty)
+        {
+            throw new ArgumentException("任务模板 ID 无效。", nameof(templateId));
+        }
+
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM task_templates WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", templateId.ToString("D"));
+            if (command.ExecuteNonQuery() == 0)
+            {
+                throw new InvalidOperationException("任务模板不存在或已被删除。");
+            }
+        }
+    }
+
     public WorkspaceHistoryEntry UpdateWorkspacePresentation(
         Guid workspaceId,
         string? displayName,
@@ -1700,6 +1797,19 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 CREATE INDEX IF NOT EXISTS ix_warnings_run ON warnings(run_id, created_at);
                 CREATE INDEX IF NOT EXISTS ix_recovery_actions_run ON recovery_actions(run_id, created_at);
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS task_templates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    prompt TEXT NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    workspace_id TEXT NULL REFERENCES workspaces(id),
+                    model TEXT NULL,
+                    thinking_level TEXT NULL,
+                    permission_mode TEXT NULL,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS recycle_bin (task_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, data_json TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS session_statistics_cache (
                     task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -1911,8 +2021,50 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
                 VALUES (15, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
                 """);
+            Execute(
+                connection,
+                null,
+                """
+                INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+                VALUES (16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                """);
         }
     }
+
+    private static TaskTemplate ReadTaskTemplate(SqliteConnection connection, Guid templateId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT id, name, prompt, target_kind, workspace_id, model, thinking_level,
+                   permission_mode, is_pinned, created_at, updated_at
+            FROM task_templates
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", templateId.ToString("D"));
+        using var reader = command.ExecuteReader();
+        return reader.Read()
+            ? ReadTaskTemplate(reader)
+            : throw new InvalidOperationException("任务模板不存在或已被删除。");
+    }
+
+    private static TaskTemplate ReadTaskTemplate(SqliteDataReader reader) => new(
+        Guid.Parse(reader.GetString(0)),
+        reader.GetString(1),
+        reader.GetString(2),
+        ParseTaskTemplateTargetKind(reader.GetString(3)),
+        reader.IsDBNull(4) ? null : Guid.Parse(reader.GetString(4)),
+        reader.IsDBNull(5) ? null : reader.GetString(5),
+        reader.IsDBNull(6) ? null : reader.GetString(6),
+        reader.IsDBNull(7) ? null : reader.GetString(7),
+        reader.GetInt64(8) != 0,
+        DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse(reader.GetString(10), CultureInfo.InvariantCulture));
+
+    private static TaskTemplateTargetKind ParseTaskTemplateTargetKind(string value) =>
+        Enum.TryParse<TaskTemplateTargetKind>(value, out var targetKind) && Enum.IsDefined(targetKind)
+            ? targetKind
+            : TaskTemplateTargetKind.CurrentContext;
 
     private static string EnsureWorkspace(
         SqliteConnection connection,

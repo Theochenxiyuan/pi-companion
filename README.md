@@ -12,6 +12,7 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 - 在 Agent Chat 中查看思考、工具调用、授权请求、问题和文件变更。
 - 通过桌面任务监视器跟踪运行状态，在任务需要操作时收到 Windows 通知。
 - 浏览工作区文件和本地 Git 状态，暂存变更并创建本地提交。
+- 创建、固定和复用任务模板；套用模板只填写任务草稿，由用户确认后发送。
 - 管理模型 Provider、默认模型、推理等级、上下文压缩和重试策略。
 - 支持只读、标准访问和按任务开启的完全访问权限。
 - 支持简体中文和英语界面。
@@ -20,7 +21,7 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 
 ## 项目状态
 
-当前代码覆盖桌面外壳、Agent Chat、任务持久化、多任务调度、工作区与 Git 浏览、Provider 配置、技能管理、Explorer Command 和应用私有 Web Search Extension。
+当前代码覆盖桌面外壳、Agent Chat、任务持久化、多任务调度、工作区与 Git 浏览、Provider 配置、技能管理、任务模板、Explorer Command 和应用私有 Web Search Extension。
 
 尚未提供：
 

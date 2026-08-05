@@ -39,6 +39,7 @@ public sealed class TaskCoordinator : IDisposable
     private readonly Dictionary<string, (Guid Id, DateTimeOffset CreatedAt)> _createdWorkspaces =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, InMemoryWorkspacePresentation> _workspacePresentations = [];
+    private readonly Dictionary<Guid, TaskTemplate> _taskTemplates = [];
     private readonly HashSet<string> _hiddenWorkspaceDirectories = new(StringComparer.OrdinalIgnoreCase);
     private TaskProjection? _current;
     private List<TaskProjection> _conversation = [];
@@ -279,6 +280,70 @@ public sealed class TaskCoordinator : IDisposable
                     .Select(ApplyWorkspacePresentation)
                     .OrderByDescending(workspace => workspace.UpdatedAt)
                     .ToArray();
+            }
+        }
+    }
+
+    public IReadOnlyList<TaskTemplate> TaskTemplates
+    {
+        get
+        {
+            if (_eventStore is not null)
+            {
+                return _eventStore.GetTaskTemplates();
+            }
+
+            lock (_gate)
+            {
+                return _taskTemplates.Values
+                    .OrderByDescending(template => template.IsPinned)
+                    .ThenByDescending(template => template.UpdatedAt)
+                    .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+        }
+    }
+
+    public TaskTemplate SaveTaskTemplate(TaskTemplate template)
+    {
+        var existing = TaskTemplates.FirstOrDefault(candidate => candidate.Id == template.Id);
+        var now = DateTimeOffset.UtcNow;
+        var normalized = TaskTemplateRules.Normalize(template with
+        {
+            CreatedAt = existing?.CreatedAt ?? now,
+            UpdatedAt = now,
+        });
+        if (normalized.WorkspaceId is { } workspaceId &&
+            Workspaces.All(workspace => workspace.Id != workspaceId))
+        {
+            throw new InvalidOperationException("模板绑定的工作区不存在或已不可用。");
+        }
+
+        if (_eventStore is not null)
+        {
+            return _eventStore.UpsertTaskTemplate(normalized);
+        }
+
+        lock (_gate)
+        {
+            _taskTemplates[normalized.Id] = normalized;
+            return normalized;
+        }
+    }
+
+    public void DeleteTaskTemplate(Guid templateId)
+    {
+        if (_eventStore is not null)
+        {
+            _eventStore.DeleteTaskTemplate(templateId);
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (!_taskTemplates.Remove(templateId))
+            {
+                throw new InvalidOperationException("任务模板不存在或已被删除。");
             }
         }
     }

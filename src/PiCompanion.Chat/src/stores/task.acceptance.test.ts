@@ -74,6 +74,46 @@ describe('incremental Bridge acceptance', () => {
     expect(store.bridgeError).toBe("Only the current task's model settings can be changed.")
   })
 
+  it('hydrates and incrementally refreshes task templates', () => {
+    const store = useTaskStore()
+    const template = {
+      id: 'template-1',
+      name: '只读检查',
+      prompt: '检查工程并给出摘要',
+      targetKind: 'Workspace' as const,
+      workspaceId: null,
+      model: null,
+      thinkingLevel: 'high',
+      permissionMode: 'read-only' as const,
+      isPinned: true,
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    }
+
+    store.consume({
+      protocolVersion: bridgeProtocolVersion,
+      type: 'InitializeSnapshot',
+      payload: {
+        currentTask: null,
+        lastSequence: 0,
+        recentTasks: [],
+        historyTasks: [],
+        recycleBinTasks: [],
+        draft: null,
+        taskTemplates: [template],
+        capabilities: ['task-templates'],
+      } satisfies InitializeSnapshot,
+    })
+    expect(store.taskTemplates).toEqual([template])
+
+    store.consume({
+      protocolVersion: bridgeProtocolVersion,
+      type: 'TaskTemplatesUpdated',
+      payload: { taskTemplates: [{ ...template, name: '更新后的检查' }] },
+    })
+    expect(store.taskTemplates).toEqual([{ ...template, name: '更新后的检查' }])
+  })
+
   it('projects 5000 ordered events without full task snapshots', () => {
     const store = useTaskStore()
     const task = initialTask()

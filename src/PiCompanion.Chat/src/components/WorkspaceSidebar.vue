@@ -138,9 +138,9 @@ onBeforeUnmount(() => {
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9.2 4.5a2.8 2.8 0 1 1 5.6 0V7H17v2.2a2.8 2.8 0 1 1 0 5.6V17h-2.2a2.8 2.8 0 1 1-5.6 0H7v-2.2a2.8 2.8 0 1 1 0-5.6V7h2.2z" /></svg></span>
         {{ t('技能') }}
       </UiButton>
-      <UiButton class="nav-row" :class="{ selected: view === 'presets' }" type="button" @click="$emit('showView', 'presets')">
+      <UiButton class="nav-row" :class="{ selected: view === 'templates' }" type="button" @click="$emit('showView', 'templates')">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2" /><path d="M9 3.5v3h6v-3M9 11h6M9 15h4" /></svg></span>
-        {{ t('预置任务') }}
+        {{ t('任务模板') }}
       </UiButton>
       <UiButton class="nav-row" :class="{ selected: view === 'scheduled' }" type="button" @click="$emit('showView', 'scheduled')">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2" /></svg></span>

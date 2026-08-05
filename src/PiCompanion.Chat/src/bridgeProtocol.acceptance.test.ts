@@ -99,7 +99,7 @@ describe('desktop bridge protocol contract', () => {
       '../PiCompanion.Application/Tasks/PiTaskMetadataGenerator.cs',
     ), 'utf8')
 
-    expect(bridgeProtocolVersion).toBe(60)
+    expect(bridgeProtocolVersion).toBe(62)
     expect(mainWindow).toContain('case "SetWorkspaceTrustDecision":')
     expect(mainWindow).toContain('case "LoadSkills":')
     expect(mainWindow).toContain('case "TrustSkillWorkspace":')
@@ -147,6 +147,26 @@ describe('desktop bridge protocol contract', () => {
     expect(rpcBackend).not.toContain('"--no-skills"')
     expect(rpcBackend).not.toContain('"--skill"')
     expect(metadataGenerator).not.toContain('"--no-skills"')
+  })
+
+  it('exposes persisted task templates as reusable composer drafts', () => {
+    const desktopContracts = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/ChatHost/BridgeContracts.cs',
+    ), 'utf8')
+    const mainWindow = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/MainWindow.xaml.cs',
+    ), 'utf8')
+
+    expect(desktopContracts).toContain('"task-templates"')
+    expect(desktopContracts).toContain('IReadOnlyList<TaskTemplateDto> TaskTemplates')
+    expect(desktopContracts).toContain('internal sealed record SaveTaskTemplateRequestDto(')
+    expect(desktopContracts).toContain('internal sealed record DeleteTaskTemplateRequestDto(')
+    expect(mainWindow).toContain('case "SaveTaskTemplate":')
+    expect(mainWindow).toContain('case "DeleteTaskTemplate":')
+    expect(mainWindow).toContain('"TaskTemplatesUpdated"')
+    expect(mainWindow).not.toContain('case "RunTaskTemplate":')
   })
 
   it('drops stale task execution-default updates during task handoff', () => {

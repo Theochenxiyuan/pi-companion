@@ -450,6 +450,12 @@ public partial class MainWindow : Window
                 case "NewTaskInWorkspace":
                     BeginNewTaskInWorkspace(Guid.Parse(ReadString(payload, "workspaceId")));
                     break;
+                case "SaveTaskTemplate":
+                    SaveTaskTemplate(payload);
+                    break;
+                case "DeleteTaskTemplate":
+                    DeleteTaskTemplate(payload);
+                    break;
                 case "SelectTask":
                     SelectTask(Guid.Parse(ReadString(payload, "taskId")));
                     break;
@@ -852,6 +858,7 @@ public partial class MainWindow : Window
             projection,
             _coordinator.CurrentConversation,
             _coordinator.Workspaces,
+            _coordinator.TaskTemplates,
             _coordinator.RecentTasks,
             historyPage.Items,
             historyPage.HasMore,
@@ -860,6 +867,52 @@ public partial class MainWindow : Window
             BridgeContracts.CreateSettingsSnapshot(_settings.Current, _piConfigurationSnapshot),
             _coordinator.GetRunEvidence,
             _piProjectTrust.GetStatus);
+    }
+
+    private void SaveTaskTemplate(JsonElement payload)
+    {
+        var request = payload.Deserialize<SaveTaskTemplateRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("任务模板保存请求无效。");
+        if (!Enum.TryParse<TaskTemplateTargetKind>(request.TargetKind, ignoreCase: true, out var targetKind) ||
+            !Enum.IsDefined(targetKind))
+        {
+            throw new InvalidOperationException("任务模板运行位置无效。");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        _coordinator.SaveTaskTemplate(new TaskTemplate(
+            request.Id ?? Guid.NewGuid(),
+            request.Name,
+            request.Prompt,
+            targetKind,
+            request.WorkspaceId,
+            request.Model,
+            request.ThinkingLevel,
+            request.PermissionMode,
+            request.IsPinned,
+            now,
+            now));
+        PostTaskTemplates();
+    }
+
+    private void DeleteTaskTemplate(JsonElement payload)
+    {
+        var request = payload.Deserialize<DeleteTaskTemplateRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("任务模板删除请求无效。");
+        _coordinator.DeleteTaskTemplate(request.TemplateId);
+        PostTaskTemplates();
+    }
+
+    private void PostTaskTemplates()
+    {
+        if (!_bridgeReady)
+        {
+            return;
+        }
+
+        PostMessage(
+            "TaskTemplatesUpdated",
+            new { taskTemplates = _coordinator.TaskTemplates.Select(BridgeContracts.CreateTaskTemplate).ToArray() });
     }
 
     private async Task PostSkillsAsync(JsonElement payload)

@@ -129,14 +129,18 @@ test("custom provider config preserves JSONC comments and trailing commas", () =
 			imageInput: true,
 			contextWindow: 128000,
 			maxTokens: 16384,
+			thinkingLevelMap: { high: "strong", xhigh: null },
 		}],
 	});
 
-	const updated = insertProviderIntoModelsJson(source, provider.id, toModelsJsonProvider(provider));
+	const providerConfig = toModelsJsonProvider(provider);
+	const updated = insertProviderIntoModelsJson(source, provider.id, providerConfig);
 	assert.match(updated, /Existing user configuration must survive/u);
 	assert.match(updated, /"existing"/u);
 	assert.match(updated, /"company-gateway"/u);
 	assert.match(updated, /"input": \[\s*"text",\s*"image"/u);
+	assert.deepEqual(providerConfig.models[0].thinkingLevelMap, { high: "strong", xhigh: null });
+	assert.deepEqual(toCustomProviderInfo(provider.id, providerConfig).models[0].thinkingLevelMap, { high: "strong", xhigh: null });
 	assert.equal(provider.baseUrl, "https://models.example.com/v1");
 	assert.notEqual(computeModelsConfigRevision(source), computeModelsConfigRevision(updated));
 });
@@ -246,6 +250,17 @@ test("custom provider config rejects duplicate models and invalid URLs", () => {
 			{ id: "model", contextWindow: 128000, maxTokens: 4096 },
 		],
 	}), /重复/u);
+	assert.throws(() => normalizeCustomProvider({
+		...base,
+		baseUrl: "http://localhost:1234/v1",
+		models: [{
+			id: "model",
+			reasoning: true,
+			contextWindow: 128000,
+			maxTokens: 4096,
+			thinkingLevelMap: { high: "" },
+		}],
+	}), /映射值不能为空/u);
 });
 
 test("custom OpenAI-compatible providers default conservatively without exposing a role setting", () => {

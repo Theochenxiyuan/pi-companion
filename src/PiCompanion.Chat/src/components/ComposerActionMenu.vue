@@ -6,11 +6,13 @@ import { t } from '@/i18n'
 defineProps<{
   attachmentsDisabled?: boolean
   skillsDisabled?: boolean
+  templatesDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
   selectAttachments: []
   invokeSkill: []
+  invokeTemplate: []
 }>()
 
 const open = ref(false)
@@ -23,6 +25,11 @@ function selectAttachments() {
 function invokeSkill() {
   open.value = false
   emit('invokeSkill')
+}
+
+function invokeTemplate() {
+  open.value = false
+  emit('invokeTemplate')
 }
 </script>
 
@@ -39,7 +46,7 @@ function invokeSkill() {
         type="button"
         :aria-label="t('添加内容')"
         :title="t('添加内容')"
-        :disabled="attachmentsDisabled && skillsDisabled"
+        :disabled="attachmentsDisabled && skillsDisabled && templatesDisabled"
       >
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
       </UiButton>
@@ -56,6 +63,12 @@ function invokeSkill() {
           <path d="M8.5 8.5h3v3h-3z" />
         </svg>
         <span>{{ t('调用技能') }}</span>
+      </UiMenuItem>
+      <UiMenuItem :disabled="templatesDisabled" @select="invokeTemplate">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M4 3.5h12v13H4z" /><path d="M7 7h6M7 10h6M7 13h4" />
+        </svg>
+        <span>{{ t('任务模板') }}</span>
       </UiMenuItem>
   </UiMenu>
 </template>

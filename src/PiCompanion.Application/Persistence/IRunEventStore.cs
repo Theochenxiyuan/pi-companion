@@ -26,6 +26,12 @@ public interface IRunEventStore
 
     IReadOnlyList<WorkspaceHistoryEntry> GetWorkspaces();
 
+    IReadOnlyList<TaskTemplate> GetTaskTemplates();
+
+    TaskTemplate UpsertTaskTemplate(TaskTemplate template);
+
+    void DeleteTaskTemplate(Guid templateId);
+
     WorkspaceHistoryEntry UpdateWorkspacePresentation(
         Guid workspaceId,
         string? displayName,
