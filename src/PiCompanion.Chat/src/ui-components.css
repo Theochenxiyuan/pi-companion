@@ -31,6 +31,9 @@
   color: inherit;
 }
 
+.ui-button:not(:disabled) { cursor: pointer; }
+.ui-button:disabled { cursor: default; }
+
 .ui-button:focus-visible,
 .ui-input:focus-visible,
 .ui-textarea:focus-visible,

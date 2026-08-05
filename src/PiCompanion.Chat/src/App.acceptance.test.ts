@@ -807,6 +807,109 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.find('.task-templates-view').exists()).toBe(true)
   })
 
+  it('starts a new task when a template is used from the management page', async () => {
+    const postMessage = vi.fn()
+    let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
+    window.chrome = {
+      webview: {
+        postMessage,
+        addEventListener(_type, listener) { bridgeListener = listener },
+        removeEventListener() {},
+      },
+    }
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()] },
+    })
+    mountedWrappers.push(wrapper)
+
+    const currentTask = createTranscriptPreview()
+    const workspace = {
+      id: 'preview-workspace',
+      name: 'pi-companion',
+      workingDirectory: currentTask.workingDirectory,
+      createdAt: '2026-08-05T00:00:00.000Z',
+      updatedAt: '2026-08-05T00:00:00.000Z',
+      taskCount: 1,
+      hasActiveTask: false,
+    }
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'InitializeSnapshot',
+        payload: {
+          currentTask,
+          lastSequence: currentTask.lastSequence,
+          workspaces: [workspace],
+          recentTasks: [],
+          historyTasks: [],
+          recycleBinTasks: [],
+          draft: null,
+          taskTemplates: [{
+            id: 'template-release-check',
+            name: '发布前检查',
+            prompt: '检查发布风险并列出待办',
+            targetKind: 'CurrentContext',
+            workspaceId: null,
+            model: null,
+            thinkingLevel: null,
+            permissionMode: 'read-only',
+            isPinned: false,
+            createdAt: '2026-08-05T00:00:00.000Z',
+            updatedAt: '2026-08-05T00:00:00.000Z',
+          }],
+          capabilities: ['task-templates'],
+        } satisfies InitializeSnapshot,
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+
+    await wrapper.findAll('.sidebar > nav .nav-row')
+      .find(button => button.text() === '任务模板')!
+      .trigger('click')
+    postMessage.mockClear()
+    const userCard = wrapper.findAll('.task-template-management-card')
+      .find(card => card.text().includes('发布前检查'))!
+    await userCard.findAll('button').find(button => button.text() === '使用模板')!.trigger('click')
+
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'NewTaskInWorkspace',
+      payload: { workspaceId: 'preview-workspace' },
+    }))
+    expect(wrapper.find('.task-templates-view').exists()).toBe(false)
+    expect((wrapper.get('.composer > textarea').element as HTMLTextAreaElement).value).toBe('')
+
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'InitializeSnapshot',
+        payload: {
+          currentTask: null,
+          lastSequence: 0,
+          workspaces: [workspace],
+          recentTasks: [],
+          historyTasks: [],
+          recycleBinTasks: [],
+          draft: {
+            workingDirectory: workspace.workingDirectory,
+            prompt: '',
+            model: currentTask.model,
+            thinkingLevel: currentTask.thinkingLevel,
+            permissionMode: currentTask.permissionMode,
+            attachments: [],
+          },
+          taskTemplates: [],
+          capabilities: ['task-templates'],
+        } satisfies InitializeSnapshot,
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+    await nextTick()
+
+    expect((wrapper.get('.composer > textarea').element as HTMLTextAreaElement).value)
+      .toBe('检查发布风险并列出待办')
+  })
+
   it('intercepts app commands, validates skill calls, and supports escaped slash text', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined

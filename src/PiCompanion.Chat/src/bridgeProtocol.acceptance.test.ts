@@ -158,6 +158,18 @@ describe('desktop bridge protocol contract', () => {
       process.cwd(),
       '../PiCompanion.Desktop/MainWindow.xaml.cs',
     ), 'utf8')
+    const promptComposerXaml = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/PromptComposer/PromptComposerWindow.xaml',
+    ), 'utf8')
+    const promptComposer = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/PromptComposer/PromptComposerWindow.xaml.cs',
+    ), 'utf8')
+    const desktopLocalizer = readFileSync(resolve(
+      process.cwd(),
+      '../PiCompanion.Desktop/Localization/DesktopLocalizer.cs',
+    ), 'utf8')
 
     expect(desktopContracts).toContain('"task-templates"')
     expect(desktopContracts).toContain('IReadOnlyList<TaskTemplateDto> TaskTemplates')
@@ -167,6 +179,22 @@ describe('desktop bridge protocol contract', () => {
     expect(mainWindow).toContain('case "DeleteTaskTemplate":')
     expect(mainWindow).toContain('"TaskTemplatesUpdated"')
     expect(mainWindow).not.toContain('case "RunTaskTemplate":')
+    expect(promptComposerXaml).toContain('x:Name="TaskTemplatePopup"')
+    expect(promptComposerXaml).toContain('x:Name="TaskTemplateSearchBox"')
+    expect(promptComposerXaml).toContain('TextChanged="OnTaskTemplateSearchTextChanged"')
+    expect(promptComposerXaml).toContain('Text="未找到匹配的模板"')
+    expect(promptComposerXaml).toContain('PreviewMouseLeftButtonUp="OnTaskTemplateListPreviewMouseLeftButtonUp"')
+    expect(promptComposer).toContain('foreach (var template in _coordinator.TaskTemplates)')
+    expect(promptComposer).toContain('template.TargetKind == TaskTemplateTargetKind.GeneralChat')
+    expect(promptComposer).toContain('choice.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)')
+    expect(promptComposer).toContain('Keyboard.Focus(TaskTemplateSearchBox)')
+    expect(promptComposer).toContain('private void ApplyTaskTemplate(PromptTemplateChoice template)')
+    expect(promptComposer).toContain('PromptTextBox.Text = template.Prompt;')
+    expect(promptComposer).toContain('"off" => "None"')
+    expect(promptComposer).toContain('"high" => "High"')
+    expect(promptComposer).toContain('"max" => "Max"')
+    expect(desktopLocalizer).toContain('["任务模板 ▾"] = "Task templates ▾"')
+    expect(desktopLocalizer).toContain('["搜索任务模板"] = "Search task templates"')
   })
 
   it('drops stale task execution-default updates during task handoff', () => {

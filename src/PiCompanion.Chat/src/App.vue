@@ -860,6 +860,38 @@ function requestTaskTemplateApplication(template: TaskTemplate) {
   applyTaskTemplate(template)
 }
 
+function startNewTaskFromTemplate(template: TaskTemplate) {
+  taskTemplatePickerOpen.value = false
+
+  if (template.workspaceId) {
+    const workspace = store.workspaces.find(candidate => candidate.id === template.workspaceId)
+    if (!workspace) {
+      showTransientNotice(`template-workspace:${template.id}`, t('模板绑定的工作区不存在或已不可用。'), false)
+      return
+    }
+    pendingTaskTemplateApplication.value = { template, destination: 'workspace' }
+    void beginNewTaskInWorkspace(workspace.id)
+    return
+  }
+
+  if (template.targetKind === 'GeneralChat' ||
+      (template.targetKind === 'CurrentContext' && isGeneralChat.value)) {
+    pendingTaskTemplateApplication.value = { template, destination: 'general-chat' }
+    void beginNewTask()
+    return
+  }
+
+  const currentWorkspaceId = composerWorkspaceId.value
+  if (currentWorkspaceId) {
+    pendingTaskTemplateApplication.value = { template, destination: 'workspace' }
+    void beginNewTaskInWorkspace(currentWorkspaceId)
+    return
+  }
+
+  pendingTaskTemplateApplication.value = { template, destination: 'select-workspace' }
+  void beginNewTask()
+}
+
 function confirmTaskTemplateReplacement() {
   const template = replacingDraftWithTemplate.value
   replacingDraftWithTemplate.value = null
@@ -2710,7 +2742,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
-      @apply="requestTaskTemplateApplication"
+      @apply="startNewTaskFromTemplate"
       @create="createTaskTemplate"
       @edit="editTaskTemplate"
       @duplicate="duplicateTaskTemplate"

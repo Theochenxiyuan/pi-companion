@@ -14,6 +14,7 @@ using PiCompanion.Application.PiRpc;
 using PiCompanion.Application.Settings;
 using PiCompanion.Core.Activation;
 using PiCompanion.Core.Runs;
+using PiCompanion.Core.Tasks;
 using PiCompanion.Desktop.Branding;
 using PiCompanion.Desktop.Shell;
 using PiCompanion.Desktop.Localization;
@@ -33,7 +34,9 @@ public partial class PromptComposerWindow : Window
     private readonly Action _showMonitor;
     private readonly SkillCompletionController _skillCompletion;
     private readonly ObservableCollection<ModelChoice> _modelChoices = [];
+    private readonly ObservableCollection<PromptTemplateChoice> _taskTemplateChoices = [];
     private readonly ICollectionView _modelView;
+    private readonly ICollectionView _taskTemplateView;
     private bool _modelSearchActive;
     private bool _allowModelSearchFocusExit;
     private bool _isPiConfigurationLoading;
@@ -60,6 +63,9 @@ public partial class PromptComposerWindow : Window
         ModelComboBox.ItemsSource = _modelChoices;
         _modelView = CollectionViewSource.GetDefaultView(_modelChoices);
         _modelView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ModelChoice.ProviderName)));
+        _taskTemplateView = CollectionViewSource.GetDefaultView(_taskTemplateChoices);
+        _taskTemplateView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(PromptTemplateChoice.GroupName)));
+        TaskTemplateList.ItemsSource = _taskTemplateView;
         _coordinator = coordinator;
         _settings = settings;
         _piConfiguration = piConfiguration;
@@ -84,6 +90,7 @@ public partial class PromptComposerWindow : Window
     {
         var thinkingLevel = GetComboBoxValue(ThinkingComboBox);
         DesktopLocalizer.Apply(this);
+        RefreshTaskTemplates();
         UpdateThinkingOptions(thinkingLevel);
         UpdateAttachmentState();
         UpdatePiSelectionState();
@@ -96,6 +103,7 @@ public partial class PromptComposerWindow : Window
         _skillCompletion.Invalidate();
         WorkingDirectoryText.Text = Environment.CurrentDirectory;
         Attachments.Clear();
+        RefreshTaskTemplates();
         UpdateAttachmentState();
         ValidationText.Text = string.Empty;
         var initialSnapshot = _piConfiguration.CachedSnapshot ?? _piSnapshot;
@@ -120,6 +128,7 @@ public partial class PromptComposerWindow : Window
             Attachments.Add(CreateAttachment(selectedPath));
         }
 
+        RefreshTaskTemplates();
         UpdateAttachmentState();
         ValidationText.Text = string.Empty;
         var initialSnapshot = _piConfiguration.CachedSnapshot ?? _piSnapshot;
@@ -271,6 +280,199 @@ public partial class PromptComposerWindow : Window
 
     private void OnAttachmentHostSizeChanged(object sender, SizeChangedEventArgs e) => UpdateAttachmentState();
 
+    private void OnTaskTemplateButtonClick(object sender, RoutedEventArgs e)
+    {
+        RefreshTaskTemplates();
+        TaskTemplatePopup.IsOpen = !TaskTemplatePopup.IsOpen;
+        if (!TaskTemplatePopup.IsOpen)
+        {
+            return;
+        }
+
+        TaskTemplateSearchBox.Clear();
+        _taskTemplateView.Filter = null;
+        _taskTemplateView.Refresh();
+        TaskTemplateList.SelectedIndex = _taskTemplateView.IsEmpty ? -1 : 0;
+        _ = Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(() =>
+            {
+                _ = Keyboard.Focus(TaskTemplateSearchBox);
+                TaskTemplateSearchBox.CaretIndex = 0;
+            }));
+    }
+
+    private void OnTaskTemplateSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_taskTemplateView is null)
+        {
+            return;
+        }
+
+        var query = TaskTemplateSearchBox.Text.Trim();
+        _taskTemplateView.Filter = item => item is PromptTemplateChoice choice &&
+            (query.Length == 0 ||
+             choice.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+             choice.Prompt.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+             choice.TargetLabel.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+             choice.GroupName.Contains(query, StringComparison.OrdinalIgnoreCase));
+        _taskTemplateView.Refresh();
+        TaskTemplateList.SelectedIndex = _taskTemplateView.IsEmpty ? -1 : 0;
+    }
+
+    private void OnTaskTemplateSearchPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Down && !_taskTemplateView.IsEmpty)
+        {
+            if (TaskTemplateList.SelectedIndex < 0)
+            {
+                TaskTemplateList.SelectedIndex = 0;
+            }
+            _ = Keyboard.Focus(TaskTemplateList);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && TaskTemplateList.SelectedItem is PromptTemplateChoice template)
+        {
+            ApplyTaskTemplate(template);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            TaskTemplatePopup.IsOpen = false;
+            TaskTemplateButton.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private void OnTaskTemplateListPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var item = ItemsControl.ContainerFromElement(TaskTemplateList, e.OriginalSource as DependencyObject) as ListBoxItem;
+        if (item?.DataContext is PromptTemplateChoice template)
+        {
+            ApplyTaskTemplate(template);
+            e.Handled = true;
+        }
+    }
+
+    private void OnTaskTemplateListPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && TaskTemplateList.SelectedItem is PromptTemplateChoice template)
+        {
+            ApplyTaskTemplate(template);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            TaskTemplatePopup.IsOpen = false;
+            TaskTemplateButton.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private void RefreshTaskTemplates()
+    {
+        _taskTemplateChoices.Clear();
+        var systemGroup = DesktopLocalizer.Text("系统模板", "System templates");
+        var userGroup = DesktopLocalizer.Text("我的模板", "My templates");
+        var anyWorkspace = DesktopLocalizer.Text("任意工作区", "Any workspace");
+
+        _taskTemplateChoices.Add(new PromptTemplateChoice(
+            systemGroup,
+            DesktopLocalizer.Text("分析工程", "Analyze project"),
+            DesktopLocalizer.Text("检查这个目录的工程结构并总结主要模块", "Inspect this directory structure and summarize the main modules"),
+            anyWorkspace,
+            null,
+            null,
+            "read-only"));
+        _taskTemplateChoices.Add(new PromptTemplateChoice(
+            systemGroup,
+            DesktopLocalizer.Text("检查 TODO", "Review TODOs"),
+            DesktopLocalizer.Text("查找这个工程中可能需要关注的 TODO 并给出摘要", "Find TODOs that may need attention in this project and summarize them"),
+            anyWorkspace,
+            null,
+            null,
+            "read-only"));
+        _taskTemplateChoices.Add(new PromptTemplateChoice(
+            systemGroup,
+            DesktopLocalizer.Text("阅读文档", "Read documentation"),
+            DesktopLocalizer.Text("阅读 README 和项目文档，概括当前实现状态", "Read the README and project documentation and summarize the current implementation"),
+            anyWorkspace,
+            null,
+            null,
+            "read-only"));
+
+        var workingDirectory = NormalizePath(WorkingDirectoryText.Text);
+        var workspaces = _coordinator.Workspaces;
+        var currentWorkspace = workspaces.FirstOrDefault(workspace =>
+            string.Equals(NormalizePath(workspace.WorkingDirectory), workingDirectory, StringComparison.OrdinalIgnoreCase));
+        foreach (var template in _coordinator.TaskTemplates)
+        {
+            if (template.TargetKind == TaskTemplateTargetKind.GeneralChat ||
+                template.WorkspaceId is { } workspaceId && currentWorkspace?.Id != workspaceId)
+            {
+                continue;
+            }
+
+            var targetLabel = template.TargetKind == TaskTemplateTargetKind.CurrentContext
+                ? DesktopLocalizer.Text("当前上下文", "Current context")
+                : template.WorkspaceId is null
+                    ? anyWorkspace
+                    : currentWorkspace?.DisplayName ?? currentWorkspace?.Name ?? DesktopLocalizer.Text("当前工作区", "Current workspace");
+            _taskTemplateChoices.Add(new PromptTemplateChoice(
+                userGroup,
+                template.IsPinned ? $"★ {template.Name}" : template.Name,
+                template.Prompt,
+                targetLabel,
+                template.Model,
+                template.ThinkingLevel,
+                template.PermissionMode));
+        }
+
+        _taskTemplateView.Refresh();
+    }
+
+    private void ApplyTaskTemplate(PromptTemplateChoice template)
+    {
+        TaskTemplatePopup.IsOpen = false;
+        ValidationText.Text = string.Empty;
+        PromptTextBox.Text = template.Prompt;
+
+        if (!string.IsNullOrWhiteSpace(template.Model) && !SelectComboBoxValue(ModelComboBox, template.Model))
+        {
+            ValidationText.Text = DesktopLocalizer.Text(
+                "模板模型当前不可用，已保留现有模型。",
+                "The template model is currently unavailable; the existing model was kept.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(template.ThinkingLevel) &&
+            !SelectComboBoxValue(ThinkingComboBox, template.ThinkingLevel))
+        {
+            ValidationText.Text = DesktopLocalizer.Text(
+                "模板推理等级当前不可用，已使用模型的可用等级。",
+                "The template reasoning level is currently unavailable; an available model level was used.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(template.PermissionMode))
+        {
+            SelectDefaultPermissionMode(template.PermissionMode);
+        }
+
+        FocusPromptInput();
+        SchedulePrewarm();
+    }
+
+    private static string NormalizePath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.Trim();
+        }
+    }
+
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (FullAccessConfirmationOverlay.Visibility == Visibility.Visible)
@@ -280,6 +482,14 @@ public partial class PromptComposerWindow : Window
                 DismissFullAccessConfirmation();
             }
 
+            e.Handled = true;
+            return;
+        }
+
+        if (TaskTemplatePopup.IsOpen && e.Key == Key.Escape)
+        {
+            TaskTemplatePopup.IsOpen = false;
+            TaskTemplateButton.Focus();
             e.Handled = true;
             return;
         }
@@ -851,15 +1061,24 @@ public partial class PromptComposerWindow : Window
         string Reference,
         string Tooltip);
 
+    private sealed record PromptTemplateChoice(
+        string GroupName,
+        string DisplayName,
+        string Prompt,
+        string TargetLabel,
+        string? Model,
+        string? ThinkingLevel,
+        string? PermissionMode);
+
     private static string ThinkingLevelLabel(string level) => level switch
     {
-        "off" => DesktopLocalizer.Text("无", "None"),
-        "minimal" => DesktopLocalizer.Text("最低", "Minimal"),
-        "low" => DesktopLocalizer.Text("低", "Low"),
-        "medium" => DesktopLocalizer.Text("中", "Medium"),
-        "high" => DesktopLocalizer.Text("高", "High"),
-        "xhigh" => DesktopLocalizer.Text("很高", "Xhigh"),
-        "max" => DesktopLocalizer.Text("最高", "Max"),
+        "off" => "None",
+        "minimal" => "Minimal",
+        "low" => "Low",
+        "medium" => "Medium",
+        "high" => "High",
+        "xhigh" => "Xhigh",
+        "max" => "Max",
         _ => level,
     };
 

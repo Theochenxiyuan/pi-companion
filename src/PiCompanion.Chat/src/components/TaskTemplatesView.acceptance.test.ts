@@ -45,6 +45,10 @@ describe('TaskTemplatesView', () => {
     expect(wrapper.findAll('.task-template-management-card')).toHaveLength(2)
     expect(wrapper.text()).toContain('模型：openai-codex/gpt-5.6-sol')
     expect(wrapper.text()).toContain('推理：high')
+    const userBadges = wrapper.findAll('.task-template-management-card')[1]!
+      .findAll('.task-template-preferences span').map(badge => badge.text())
+    expect(userBadges.slice(0, 2)).toEqual(['任意工作区', '权限：只读'])
+    expect(wrapper.find('.task-template-management-card > header em').exists()).toBe(false)
 
     await wrapper.findAll('button').find(button => button.text() === '新建模板')!.trigger('click')
     expect(wrapper.emitted('create')).toHaveLength(1)

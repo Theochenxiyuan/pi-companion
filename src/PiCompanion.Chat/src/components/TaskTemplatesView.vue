@@ -39,15 +39,15 @@ const systemTemplates = computed(() => visibleTemplates.value.filter(template =>
 const userTemplates = computed(() => visibleTemplates.value.filter(template => !template.isBuiltIn))
 const hasSearchResults = computed(() => visibleTemplates.value.length > 0)
 
-function preferenceLabels(template: TaskTemplate) {
-  const labels: string[] = []
-  if (template.model) labels.push(t('模型：{model}', { model: template.model }))
-  if (template.thinkingLevel) labels.push(t('推理：{level}', { level: template.thinkingLevel }))
+function badgeLabels(template: TaskTemplate) {
+  const labels: string[] = [taskTemplateTargetLabel(template, props.workspaces, t)]
   if (template.permissionMode) {
     labels.push(t('权限：{mode}', {
       mode: t(template.permissionMode === 'read-only' ? '只读' : '标准访问'),
     }))
   }
+  if (template.model) labels.push(t('模型：{model}', { model: template.model }))
+  if (template.thinkingLevel) labels.push(t('推理：{level}', { level: template.thinkingLevel }))
   return labels
 }
 </script>
@@ -67,7 +67,7 @@ function preferenceLabels(template: TaskTemplate) {
         </UiButton>
         <div class="location management-location">
           <strong>{{ t('任务模板') }}</strong>
-          <span>{{ t('管理可复用的任务草稿，套用后由你确认发送。') }}</span>
+          <span>{{ t('管理可复用的任务草稿，使用模板会新建任务。') }}</span>
         </div>
       </div>
       <UiButton class="task-template-create" variant="secondary" size="md" type="button" @click="$emit('create')">
@@ -93,11 +93,10 @@ function preferenceLabels(template: TaskTemplate) {
           <article v-for="template in systemTemplates" :key="template.id" class="task-template-management-card system">
             <header>
               <strong>{{ template.name }}</strong>
-              <em>{{ taskTemplateTargetLabel(template, workspaces, t) }}</em>
             </header>
             <p>{{ template.prompt }}</p>
-            <div v-if="preferenceLabels(template).length" class="task-template-preferences">
-              <span v-for="label in preferenceLabels(template)" :key="label">{{ label }}</span>
+            <div class="task-template-preferences">
+              <span v-for="label in badgeLabels(template)" :key="label">{{ label }}</span>
             </div>
             <footer>
               <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制为我的模板') }}</UiButton>
@@ -116,11 +115,10 @@ function preferenceLabels(template: TaskTemplate) {
           <article v-for="template in userTemplates" :key="template.id" class="task-template-management-card">
             <header>
               <strong><b v-if="template.isPinned" :title="t('已固定到新任务首页')" aria-label="t('已固定到新任务首页')">★</b>{{ template.name }}</strong>
-              <em>{{ taskTemplateTargetLabel(template, workspaces, t) }}</em>
             </header>
             <p>{{ template.prompt }}</p>
-            <div v-if="preferenceLabels(template).length" class="task-template-preferences">
-              <span v-for="label in preferenceLabels(template)" :key="label">{{ label }}</span>
+            <div class="task-template-preferences">
+              <span v-for="label in badgeLabels(template)" :key="label">{{ label }}</span>
             </div>
             <footer>
               <UiButton variant="secondary" type="button" @click="$emit('edit', template)">{{ t('编辑') }}</UiButton>

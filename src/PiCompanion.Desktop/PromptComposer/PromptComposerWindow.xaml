@@ -206,7 +206,175 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="任务描述" FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="任务描述"
+                                   VerticalAlignment="Center"
+                                   FontSize="{StaticResource TypographySizeCaption}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <Button x:Name="TaskTemplateButton"
+                                Grid.Column="1"
+                                Content="任务模板 ▾"
+                                Margin="0,-5,0,-4"
+                                Padding="8,4"
+                                Style="{StaticResource GhostButton}"
+                                Click="OnTaskTemplateButtonClick" />
+                        <Popup x:Name="TaskTemplatePopup"
+                               PlacementTarget="{Binding ElementName=TaskTemplateButton}"
+                               Placement="Bottom"
+                               VerticalOffset="6"
+                               AllowsTransparency="True"
+                               StaysOpen="False">
+                            <Border Width="500"
+                                    MaxHeight="390"
+                                    Padding="7"
+                                    Background="{DynamicResource ElevatedBrush}"
+                                    BorderBrush="{DynamicResource StrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="9">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.34" Color="{StaticResource ColorShadow}" />
+                                </Border.Effect>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Bottom"
+                                               Margin="9,7,9,5"
+                                               Text="选择模板后会填入草稿，不会立即运行"
+                                               FontSize="{StaticResource TypographySizeCaption}"
+                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                    <Grid DockPanel.Dock="Top" Margin="4,3,4,7">
+                                        <TextBox x:Name="TaskTemplateSearchBox"
+                                                 Style="{StaticResource ComboBoxSearchTextBox}"
+                                                 Padding="9,7"
+                                                 FontSize="{StaticResource TypographySizeBodySmall}"
+                                                 TextChanged="OnTaskTemplateSearchTextChanged"
+                                                 PreviewKeyDown="OnTaskTemplateSearchPreviewKeyDown" />
+                                        <TextBlock Margin="10,0"
+                                                   VerticalAlignment="Center"
+                                                   IsHitTestVisible="False"
+                                                   Text="搜索任务模板"
+                                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                                   Foreground="{DynamicResource TextMutedBrush}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text, ElementName=TaskTemplateSearchBox}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                    <Grid>
+                                        <ListBox x:Name="TaskTemplateList"
+                                                 MaxHeight="292"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 PreviewMouseLeftButtonUp="OnTaskTemplateListPreviewMouseLeftButtonUp"
+                                                 PreviewKeyDown="OnTaskTemplateListPreviewKeyDown">
+                                        <ListBox.ItemContainerStyle>
+                                            <Style TargetType="ListBoxItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Margin" Value="0,0,0,5" />
+                                                <Setter Property="Padding" Value="10,8" />
+                                                <Setter Property="Cursor" Value="Hand" />
+                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="ListBoxItem">
+                                                            <Border x:Name="ItemBorder"
+                                                                    Padding="{TemplateBinding Padding}"
+                                                                    Background="Transparent"
+                                                                    BorderBrush="{DynamicResource StrokeBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="7">
+                                                                <ContentPresenter />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource RaisedBrush}" />
+                                                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource StrokeStrongBrush}" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsSelected" Value="True">
+                                                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource RaisedBrush}" />
+                                                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                                                   FontWeight="{StaticResource TypographyWeightSemibold}" />
+                                                        <TextBlock Text="{Binding Prompt}"
+                                                                   Margin="0,3,0,0"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontSize="{StaticResource TypographySizeCaption}"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding TargetLabel}"
+                                                               Margin="14,0,0,0"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="{StaticResource TypographySizeCaption}"
+                                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                        <ListBox.GroupStyle>
+                                            <GroupStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   Margin="9,8,9,7"
+                                                                   FontSize="{StaticResource TypographySizeCaption}"
+                                                                   FontWeight="{StaticResource TypographyWeightSemibold}"
+                                                                   Foreground="{DynamicResource TextMutedBrush}" />
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ListBox.GroupStyle>
+                                        </ListBox>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   IsHitTestVisible="False"
+                                                   Text="未找到匹配的模板"
+                                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                                   Foreground="{DynamicResource TextMutedBrush}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasItems, ElementName=TaskTemplateList}" Value="False">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </DockPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                     <Grid Grid.Row="1" Margin="0,7,0,0">
                         <TextBox x:Name="PromptTextBox"
                                  AcceptsReturn="True"

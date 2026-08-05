@@ -86,6 +86,7 @@ const english: Record<string, string> = {
   '全部任务模板': 'All task templates',
   '创建和管理可复用的任务草稿': 'Create and manage reusable task drafts',
   '管理可复用的任务草稿，套用后由你确认发送。': 'Manage reusable task drafts. You review and send after applying one.',
+  '管理可复用的任务草稿，使用模板会新建任务。': 'Manage reusable task drafts. Using a template creates a new task.',
   '管理任务模板': 'Manage task templates',
   '搜索任务模板': 'Search task templates',
   '未找到匹配的模板。': 'No matching templates found.',
