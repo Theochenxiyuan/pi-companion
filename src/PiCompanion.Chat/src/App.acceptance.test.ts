@@ -120,7 +120,9 @@ describe('Agent Chat stage 5 acceptance', () => {
       },
     } as WebViewMessageEvent)
     await nextTick()
-    const destinationSelect = wrapper.getComponent(SkillsView).findAllComponents(UiSelect)[0]!
+    const destinationSelect = wrapper.getComponent(SkillsView)
+      .get('.skill-import-targets')
+      .findAllComponents(UiSelect)[0]!
     destinationSelect.vm.$emit('update:modelValue', 'global')
     await nextTick()
     const prepareImportRequest = postMessage.mock.calls

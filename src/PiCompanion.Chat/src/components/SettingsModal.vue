@@ -1873,7 +1873,7 @@ function authLabel(provider: PiProviderInfo) {
 .settings-recycle-empty strong { color: var(--color-tone-12); font-size: var(--font-size-body-sm); }
 .settings-recycle-empty small { color: var(--color-tone-10); font-size: var(--font-size-caption); }
 
-:global(.settings-confirm-backdrop) { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--color-overlay); backdrop-filter: blur(2px); }
+:global(.settings-confirm-backdrop) { position: fixed; z-index: 1500; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--color-overlay); backdrop-filter: blur(2px); }
 :global(.settings-confirm-dialog) { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; width: min(440px, 100%); padding: 22px; border: 1px solid var(--color-tone-8); border-radius: 10px; background: var(--color-tone-4); box-shadow: 0 24px 70px var(--color-overlay-strong); }
 .settings-confirm-icon { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--color-warning-border); border-radius: 50%; background: var(--color-warning-surface-emphasis); color: var(--color-warning-text); font-size: var(--font-size-title-md); font-weight: var(--font-weight-bold); }
 .settings-confirm-icon.danger { border-color: var(--color-danger-border); background: var(--color-danger-surface-emphasis); color: var(--color-danger-text); }

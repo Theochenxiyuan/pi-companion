@@ -666,13 +666,21 @@ body.sidebar-resizing .workspace { transition: none; }
 .skills-summary > span { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .skills-summary strong { color: var(--color-text-primary); font-size: var(--font-size-body); font-weight: var(--font-weight-semibold); }
 .skills-summary time { margin-left: auto; text-align: right; }
-.skills-search { display: flex; width: min(100%, 1120px); min-height: 36px; align-items: center; gap: 8px; margin: 0 auto 18px; padding: 0 11px; border: 1px solid var(--color-border-default); border-radius: 8px; background: var(--color-bg-surface); }
+.skills-controls { display: grid; grid-template-columns: minmax(0, 1fr) 190px 150px; align-items: center; gap: 9px; width: min(100%, 1120px); margin: 0 auto 18px; }
+.skills-controls .app-select { width: 100%; }
+.skills-search { display: flex; width: 100%; min-height: 36px; align-items: center; gap: 8px; margin: 0; padding: 0 11px; border: 1px solid var(--color-border-default); border-radius: 8px; background: var(--color-bg-surface); }
 .skills-search:focus-within { border-color: var(--color-border-strong); }
 .skills-search svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--color-text-tertiary); stroke-linecap: round; stroke-width: 1.5; }
 .skills-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text-primary); font: inherit; }
 .skills-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; width: min(100%, 1120px); margin: 0 auto; }
 @container (max-width: 740px) {
+  .skills-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skills-search { grid-column: 1 / -1; }
   .skills-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 500px) {
+  .skills-controls { grid-template-columns: minmax(0, 1fr); }
+  .skills-search { grid-column: auto; }
 }
 .skill-card { min-width: 0; overflow: hidden; border: 1px solid var(--color-border-subtle); border-radius: 10px; background: var(--color-bg-surface); }
 .skill-card.skill-collision, .skill-card.skill-warning { border-color: var(--color-warning-border); }

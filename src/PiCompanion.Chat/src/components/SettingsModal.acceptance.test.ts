@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import SettingsModal from './SettingsModal.vue'
 import type { SettingsSnapshot, TaskHistoryEntry } from '@/types/bridge'
 import { setLocale } from '@/i18n'
+
+const settingsSource = readFileSync(resolve(process.cwd(), 'src/components/SettingsModal.vue'), 'utf8')
 
 afterEach(() => setLocale('zh-CN'))
 
@@ -655,6 +659,11 @@ describe('stage 7 settings modal', () => {
 
     await wrapper.get('.recycle-item-actions .text-danger-button').trigger('click')
     expect(wrapper.get('.settings-confirm-dialog').text()).toContain('旧版界面评审')
+    const confirmationStyle = settingsSource.match(
+      /:global\(\.settings-confirm-backdrop\) \{[^}]+\}/u,
+    )?.[0]
+    expect(confirmationStyle).toContain('position: fixed')
+    expect(confirmationStyle).toContain('z-index: 1500')
     await wrapper.get('.settings-confirm-actions .danger').trigger('click')
     expect(wrapper.emitted('deleteRecycleTask')).toEqual([['deleted-task']])
 

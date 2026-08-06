@@ -686,7 +686,7 @@
 
         <Popup x:Name="TaskPickerPopup"
            AllowsTransparency="True"
-           StaysOpen="True"
+           StaysOpen="False"
            Placement="Custom"
            PopupAnimation="Fade"
            Opened="OnTaskPickerOpened"

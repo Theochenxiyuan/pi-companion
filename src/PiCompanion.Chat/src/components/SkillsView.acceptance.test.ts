@@ -67,6 +67,81 @@ describe('SkillsView management acceptance', () => {
     expect(wrapper.findAll('.skill-card')).toHaveLength(1)
   })
 
+  it('lists skills with issues before available skills', () => {
+    wrapper = mount(SkillsView, {
+      props: {
+        snapshot: createSkillsPreview(),
+        loading: false,
+        error: null,
+        sidebarCollapsed: false,
+      },
+    })
+
+    expect(wrapper.findAll('.skill-card').map(card => card.get('h2').text()))
+      .toEqual(['draft', 'find-skills', 'release-notes'])
+  })
+
+  it('filters out a skill only when none of its installations match location and source', async () => {
+    wrapper = mount(SkillsView, {
+      props: {
+        snapshot: createSkillsPreview(),
+        loading: false,
+        error: null,
+        sidebarCollapsed: false,
+        workspaces: [workspace, {
+          ...workspace,
+          id: 'second-workspace',
+          name: 'second-project',
+          workingDirectory: 'D:\\Dev\\second-project',
+        }],
+      },
+    })
+
+    const [locationSelect, sourceSelect] = wrapper.findAllComponents(UiSelect)
+    expect(locationSelect!.props('ariaLabelText')).toBe('按技能安装位置筛选')
+    expect(locationSelect!.props('options')).toEqual([
+      { value: 'all', label: '安装位置：全部' },
+      { value: 'global', label: '全局' },
+      {
+        value: 'workspace:preview-workspace',
+        label: 'pi-companion',
+        group: '工作区',
+        tooltip: 'D:\\Dev\\pi-companion',
+      },
+      {
+        value: 'workspace:second-workspace',
+        label: 'second-project',
+        group: '工作区',
+        tooltip: 'D:\\Dev\\second-project',
+      },
+    ])
+    expect(sourceSelect!.props('options')).toEqual([
+      { value: 'all', label: '来源：全部' },
+      { value: 'agents', label: '通用 Agent' },
+      { value: 'pi', label: 'Pi' },
+    ])
+
+    locationSelect!.vm.$emit('update:modelValue', 'workspace:preview-workspace')
+    sourceSelect!.vm.$emit('update:modelValue', 'agents')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.skill-card').map(card => card.get('h2').text()))
+      .toEqual(['draft'])
+
+    sourceSelect!.vm.$emit('update:modelValue', 'pi')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.skill-card').map(card => card.get('h2').text()))
+      .toEqual(['release-notes'])
+
+    locationSelect!.vm.$emit('update:modelValue', 'global')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.skill-card')).toHaveLength(0)
+
+    sourceSelect!.vm.$emit('update:modelValue', 'agents')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.skill-card').map(card => card.get('h2').text()))
+      .toEqual(['find-skills'])
+  })
+
   it('groups by exact name and separates content variants by hash', async () => {
     const snapshot = createSkillsPreview()
     const skill = snapshot.skills.find(candidate => candidate.name === 'release-notes')!
@@ -309,7 +384,7 @@ describe('SkillsView management acceptance', () => {
       .toEqual(['选择文件夹', '选择 ZIP'])
     expect(wrapper.emitted('openImport')).toHaveLength(1)
 
-    const destinationSelects = wrapper.findAllComponents(UiSelect)
+    const destinationSelects = wrapper.get('.skill-import-targets').findAllComponents(UiSelect)
     expect(destinationSelects).toHaveLength(2)
     expect(destinationSelects[1]!.props('disabled')).toBe(true)
     destinationSelects[0]!.vm.$emit('update:modelValue', 'workspace')

@@ -83,6 +83,10 @@ describe('Monitor expand and collapse behavior', () => {
     expect(monitorCode).toContain('Math.Clamp(')
     expect(monitorCode).toContain('selectedRowTop = TaskPickerPadding + (selectedIndex * TaskPickerRowHeight)')
     expect(monitorView).toContain('<Border Width="310"')
+    const taskPickerPopup = monitorView.match(
+      /<Popup x:Name="TaskPickerPopup"[\s\S]*?<Border Width="310"/u,
+    )?.[0]
+    expect(taskPickerPopup).toContain('StaysOpen="False"')
     expect(monitorView).toContain('Padding="4,6"')
     expect(monitorView).toContain('<Setter Property="Padding" Value="8,6" />')
     expect(pickerItemTemplate).toContain('FontSize="{StaticResource TypographySizeBody}"')

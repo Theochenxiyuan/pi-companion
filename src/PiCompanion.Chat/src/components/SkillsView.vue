@@ -72,6 +72,8 @@ const emit = defineEmits<{
 
 const { locale, t } = useI18n()
 const search = ref('')
+const installationLocationFilter = ref('all')
+const installationSourceFilter = ref('all')
 const selectedSkillName = ref<string | null>(null)
 const removalTarget = ref<{
   skill: DiscoveredSkill
@@ -193,17 +195,70 @@ function trustWorkspace(trust: SkillWorkspaceTrust | null) {
   emit('trustWorkspace', trust.workspaceId)
 }
 
+const installationFilterWorkspaces = computed(() => {
+  if (props.globalOnly) return []
+  if (props.contextWorkspace) return [props.contextWorkspace]
+  return props.workspaces
+})
+
+const installationLocationOptions = computed(() => [
+  { value: 'all', label: t('安装位置：全部') },
+  { value: 'global', label: t('全局') },
+  ...installationFilterWorkspaces.value.map(workspace => ({
+    value: `workspace:${workspace.id}`,
+    label: workspace.name,
+    group: t('工作区'),
+    tooltip: workspace.workingDirectory,
+  })),
+])
+
+const installationSourceOptions = computed(() => [
+  { value: 'all', label: t('来源：全部') },
+  { value: 'agents', label: t('通用 Agent') },
+  { value: 'pi', label: 'Pi' },
+])
+
+watch(installationLocationOptions, options => {
+  if (!options.some(option => option.value === installationLocationFilter.value)) {
+    installationLocationFilter.value = 'all'
+  }
+})
+
+function originMatchesInstallationFilters(origin: SkillOrigin) {
+  const matchesLocation = installationLocationFilter.value === 'all' ||
+    (installationLocationFilter.value === 'global'
+      ? origin.scope === 'global'
+      : origin.scope === 'workspace' &&
+        `workspace:${origin.workspaceId}` === installationLocationFilter.value)
+  const matchesSource = installationSourceFilter.value === 'all' ||
+    origin.source === installationSourceFilter.value
+  return matchesLocation && matchesSource
+}
+
+function skillMatchesInstallationFilters(skill: DiscoveredSkill) {
+  if (installationLocationFilter.value === 'all' && installationSourceFilter.value === 'all') {
+    return true
+  }
+  return relevantVariants(skill).some(variant =>
+    relevantInstallations(variant).some(installation =>
+      originsForContext(installation).some(origin => originMatchesInstallationFilters(origin))))
+}
+
 const visibleSkills = computed(() => {
   const query = search.value.trim().toLocaleLowerCase(locale.value)
-  return (props.snapshot?.skills ?? []).filter(skill => {
-    const variants = relevantVariants(skill)
-    if (variants.length === 0) return false
-    if (!query) return true
-    return [
-      skill.name,
-      ...variants.map(variant => variant.description ?? ''),
-    ].some(value => value.toLocaleLowerCase(locale.value).includes(query))
-  })
+  return (props.snapshot?.skills ?? [])
+    .filter(skill => {
+      const variants = relevantVariants(skill)
+      if (variants.length === 0) return false
+      if (!skillMatchesInstallationFilters(skill)) return false
+      if (!query) return true
+      return [
+        skill.name,
+        ...variants.map(variant => variant.description ?? ''),
+      ].some(value => value.toLocaleLowerCase(locale.value).includes(query))
+    })
+    .sort((left, right) =>
+      Number(skillTone(right) !== 'available') - Number(skillTone(left) !== 'available'))
 })
 
 const selectedSkill = computed(() =>
@@ -501,10 +556,26 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         </time>
       </div>
 
-      <label class="skills-search">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5" /><path d="m12.5 12.5 4 4" /></svg>
-        <UiInput v-model="search" type="search" :placeholder="t('搜索技能')" />
-      </label>
+      <div class="skills-controls">
+        <label class="skills-search">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5" /><path d="m12.5 12.5 4 4" /></svg>
+          <UiInput v-model="search" type="search" :placeholder="t('搜索技能')" />
+        </label>
+        <UiSelect
+          v-model="installationLocationFilter"
+          class="skills-location-filter"
+          :ariaLabelText="t('按技能安装位置筛选')"
+          :options="installationLocationOptions"
+          :searchable="installationFilterWorkspaces.length > 8"
+          :searchPlaceholder="t('搜索工作区')"
+        />
+        <UiSelect
+          v-model="installationSourceFilter"
+          class="skills-source-filter"
+          :ariaLabelText="t('按技能来源筛选')"
+          :options="installationSourceOptions"
+        />
+      </div>
 
       <div v-if="loading && !snapshot" class="management-empty skills-loading" role="status">
         <span class="management-empty-icon">π</span>
