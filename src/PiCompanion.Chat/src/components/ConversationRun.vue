@@ -23,6 +23,7 @@ type RunRenderItem =
 const props = withDefaults(defineProps<{
   run: TaskRunSnapshot
   agentName?: string
+  agentMark?: string
   viewMode: 'summary' | 'normal' | 'verbose'
   currentRunId?: string
   needsInteraction: boolean
@@ -399,7 +400,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
 
     <article class="message agent run-response">
       <header>
-        <span class="agent-mark">π</span>
+        <span class="agent-mark">{{ agentMark ?? 'A' }}</span>
         <strong>{{ agentName ?? run.model }} ({{ thinkingLevelLabel(run.thinkingLevel) }})</strong>
         <time>{{ isRunActive() ? t('正在运行') : formatTime(run.transcript.at(-1)?.timestamp ?? initialUserBlock?.timestamp ?? new Date().toISOString()) }}</time>
       </header>

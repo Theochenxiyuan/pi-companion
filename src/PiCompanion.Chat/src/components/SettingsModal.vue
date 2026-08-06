@@ -288,11 +288,11 @@ const customProviderCredentialOptions = computed<UiSelectOption[]>(() => [
   { value: 'local', label: t('无需认证（本地服务）') },
 ])
 const thinkingLevelMapKeys: PiThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
-const thinkingMapModeOptions = computed<UiSelectOption[]>(() => [
-  { value: 'default', label: t('使用标准值') },
+const thinkingMapModeOptions = (level: PiThinkingLevel): UiSelectOption[] => [
+  { value: 'default', label: t('使用标准值（{value}）', { value: level }) },
   { value: 'custom', label: t('自定义值') },
   { value: 'unsupported', label: t('不支持') },
-])
+]
 const recycleStatusOptions = computed<UiSelectOption[]>(() => [
   { value: 'all', label: t('全部状态') },
   { value: 'completed', label: t('已完成') },
@@ -1249,7 +1249,7 @@ function authLabel(provider: PiProviderInfo) {
                             <UiSelect
                               :model-value="thinkingMapMode(model, level)"
                               :ariaLabelText="t('{level} 推理等级映射', { level: thinkingLabel(level) })"
-                              :options="thinkingMapModeOptions"
+                              :options="thinkingMapModeOptions(level)"
                               @update:model-value="setThinkingMapMode(model, level, $event)"
                             />
                             <UiInput

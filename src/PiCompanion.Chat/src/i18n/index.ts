@@ -714,6 +714,7 @@ const english: Record<string, string> = {
   '推理等级映射': 'Reasoning level mapping',
   '可选；将标准推理等级映射为模型实际接受的值。': 'Optional; map standard reasoning levels to the values accepted by this model.',
   '使用标准值': 'Use standard value',
+  '使用标准值（{value}）': 'Use standard value ({value})',
   '自定义值': 'Custom value',
   '{level} 推理等级映射': '{level} reasoning level mapping',
   '{level} 实际值': '{level} provider value',

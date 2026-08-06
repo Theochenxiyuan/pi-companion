@@ -40,6 +40,22 @@ function createRun(summary: string): TaskRunSnapshot {
 }
 
 describe('ConversationRun summary', () => {
+  it('shows the model provider initial instead of the Pi mark', () => {
+    const wrapper = shallowMount(ConversationRun, {
+      props: {
+        run: createRun(''),
+        agentName: 'DeepSeek V4 Flash',
+        agentMark: 'D',
+        viewMode: 'normal',
+        needsInteraction: false,
+        taskActive: false,
+      },
+    })
+
+    expect(wrapper.get('.agent-mark').text()).toBe('D')
+    expect(wrapper.get('.message.agent header strong').text()).toContain('DeepSeek V4 Flash')
+  })
+
   it('keeps the generated-file primary action legible on hover', () => {
     expect(globalStyles).toContain('.artifact-card > .primary-button:hover')
     expect(globalStyles).toMatch(

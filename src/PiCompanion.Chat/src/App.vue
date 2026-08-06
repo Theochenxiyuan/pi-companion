@@ -83,6 +83,7 @@ import { useAttachmentPaste } from '@/composables/useAttachmentPaste'
 import { useSidebarResize } from '@/composables/useSidebarResize'
 import { useTaskManagement } from '@/composables/useTaskManagement'
 import { coerceThinkingLevel } from '@/utils/thinkingLevels'
+import { sessionStatisticsAutoLoadMode } from '@/utils/taskStatus'
 import { useI18n } from '@/i18n'
 import { applyTheme, clearTheme, resolveTheme, systemThemeQuery } from '@/theme'
 import { loadTaskPromptDraft, saveTaskPromptDraft } from '@/utils/taskPromptDrafts'
@@ -308,6 +309,13 @@ function modelDisplayName(reference: string) {
   const model = settingsSnapshot.value.pi.models.find(candidate => `${candidate.provider}/${candidate.id}` === reference)
   if (model) return model.name
   return reference.split('/').at(-1) || reference || 'Agent'
+}
+
+function modelProviderInitial(reference: string) {
+  const providerId = reference.split('/')[0]?.trim() ?? ''
+  const providerName = settingsSnapshot.value.pi.providers
+    .find(provider => provider.id === providerId)?.name.trim() ?? providerId
+  return Array.from(providerName)[0]?.toLocaleUpperCase(locale.value) || 'A'
 }
 
 function normalizePathForComparison(path: string) {
@@ -2145,7 +2153,7 @@ function scheduleSessionStatisticsRefresh(delay = 450) {
   if (!store.currentTask || inspectorCollapsed.value || inspectorTab.value !== 'context') return
   sessionStatisticsRefreshTimer = window.setTimeout(() => {
     sessionStatisticsRefreshTimer = 0
-    refreshSessionStatistics(false)
+    refreshSessionStatisticsIfNeeded()
   }, delay)
 }
 
@@ -2169,6 +2177,14 @@ function acceptSessionStatistics(update: SessionStatisticsSnapshot) {
   sessionStatisticsCache.set(sessionStatisticsCacheKey(task.id), { update, lastSequence: task.lastSequence })
   sessionStatisticsUpdate.value = update
   sessionStatisticsLoading.value = false
+}
+
+function refreshSessionStatisticsIfNeeded() {
+  const task = store.currentTask
+  if (!task || sessionStatisticsLoading.value || restoreCachedSessionStatistics()) return
+  const mode = sessionStatisticsAutoLoadMode(task.status)
+  if (mode === null) return
+  refreshSessionStatistics(mode === 'historical')
 }
 
 function refreshSessionStatistics(loadHistoricalSession = true) {
@@ -2223,7 +2239,7 @@ function refreshSessionStatistics(loadHistoricalSession = true) {
 function selectInspectorTab(tab: 'git' | 'files' | 'context') {
   inspectorTab.value = tab
   if (tab === 'git') refreshWorkspaceGit()
-  if (tab === 'context') refreshSessionStatistics(false)
+  if (tab === 'context') refreshSessionStatisticsIfNeeded()
 }
 
 function openGitInspector() {
@@ -2640,6 +2656,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             :key="run.id"
             :run="run"
             :agent-name="modelDisplayName(run.model)"
+            :agent-mark="modelProviderInitial(run.model)"
             :view-mode="viewMode"
             :current-run-id="store.currentTask?.runId"
             :needs-interaction="store.needsInteraction"

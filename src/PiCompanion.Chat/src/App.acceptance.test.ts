@@ -2073,7 +2073,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.find('.app-toast').exists()).toBe(false)
   })
 
-  it('caches Session statistics while switching context tabs and models', async () => {
+  it('auto-loads missing Session statistics and reuses the task cache', async () => {
     vi.useFakeTimers()
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | null = null
@@ -2111,7 +2111,7 @@ describe('Agent Chat stage 5 acceptance', () => {
       .filter(message => message.type === 'RefreshSessionStatistics')
       .at(-1)
     expect(firstRequest).toBeTruthy()
-    expect(firstRequest.payload.loadHistoricalSession).toBe(false)
+    expect(firstRequest.payload.loadHistoricalSession).toBe(true)
 
     bridgeListener!({
       data: {
