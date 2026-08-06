@@ -39,16 +39,10 @@ const systemTemplates = computed(() => visibleTemplates.value.filter(template =>
 const userTemplates = computed(() => visibleTemplates.value.filter(template => !template.isBuiltIn))
 const hasSearchResults = computed(() => visibleTemplates.value.length > 0)
 
-function badgeLabels(template: TaskTemplate) {
-  const labels: string[] = [taskTemplateTargetLabel(template, props.workspaces, t)]
-  if (template.permissionMode) {
-    labels.push(t('权限：{mode}', {
-      mode: t(template.permissionMode === 'read-only' ? '只读' : '标准访问'),
-    }))
-  }
-  if (template.model) labels.push(t('模型：{model}', { model: template.model }))
-  if (template.thinkingLevel) labels.push(t('推理：{level}', { level: template.thinkingLevel }))
-  return labels
+function preferenceRows(template: TaskTemplate) {
+  return [
+    { label: t('任务环境'), value: taskTemplateTargetLabel(template, props.workspaces, t) },
+  ]
 }
 </script>
 
@@ -93,11 +87,14 @@ function badgeLabels(template: TaskTemplate) {
           <article v-for="template in systemTemplates" :key="template.id" class="task-template-management-card system">
             <header>
               <strong>{{ template.name }}</strong>
+              <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
             </header>
             <p>{{ template.prompt }}</p>
-            <div class="task-template-preferences">
-              <span v-for="label in badgeLabels(template)" :key="label">{{ label }}</span>
-            </div>
+            <dl class="task-template-preferences">
+              <div v-for="row in preferenceRows(template)" :key="row.label">
+                <dt>{{ row.label }}</dt><dd :title="row.value">{{ row.value }}</dd>
+              </div>
+            </dl>
             <footer>
               <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制为我的模板') }}</UiButton>
               <UiButton class="task-template-apply-button" variant="secondary" type="button" @click="$emit('apply', template)">{{ t('使用模板') }}</UiButton>
@@ -115,15 +112,18 @@ function badgeLabels(template: TaskTemplate) {
           <article v-for="template in userTemplates" :key="template.id" class="task-template-management-card">
             <header>
               <strong><b v-if="template.isPinned" :title="t('已固定到新任务首页')" aria-label="t('已固定到新任务首页')">★</b>{{ template.name }}</strong>
+              <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
             </header>
             <p>{{ template.prompt }}</p>
-            <div class="task-template-preferences">
-              <span v-for="label in badgeLabels(template)" :key="label">{{ label }}</span>
-            </div>
+            <dl class="task-template-preferences">
+              <div v-for="row in preferenceRows(template)" :key="row.label">
+                <dt>{{ row.label }}</dt><dd :title="row.value">{{ row.value }}</dd>
+              </div>
+            </dl>
             <footer>
               <UiButton variant="secondary" type="button" @click="$emit('edit', template)">{{ t('编辑') }}</UiButton>
-              <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制模板') }}</UiButton>
-              <UiButton class="danger-action" variant="ghost" type="button" @click="$emit('delete', template)">{{ t('删除模板') }}</UiButton>
+              <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制') }}</UiButton>
+              <UiButton class="danger-action" variant="ghost" type="button" @click="$emit('delete', template)">{{ t('删除') }}</UiButton>
               <UiButton class="task-template-apply-button" variant="secondary" type="button" @click="$emit('apply', template)">{{ t('使用模板') }}</UiButton>
             </footer>
           </article>

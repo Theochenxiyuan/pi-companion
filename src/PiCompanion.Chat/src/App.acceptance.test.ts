@@ -427,7 +427,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     }))
   })
 
-  it('opens the same workspace skill manager modal from the conversation and All Tasks', async () => {
+  it('opens workspace skills and trust management from All Tasks', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
     window.chrome = {
@@ -449,6 +449,9 @@ describe('Agent Chat stage 5 acceptance', () => {
       updatedAt: '2026-07-27T00:00:00.000Z',
       taskCount: 1,
       hasActiveTask: false,
+      trustStatus: 'undecided' as const,
+      trustDecisionPath: null,
+      trustInherited: false,
     }
     const historyTask = {
       id: currentTask.id,
@@ -522,6 +525,12 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.get('.skill-manager').text()).toContain('pi-companion 的技能')
     expect(wrapper.findAll('.skills-view')).toHaveLength(0)
     expect(wrapper.findAll('.management-history')).toHaveLength(1)
+    await wrapper.get('.skill-manager-close').trigger('click')
+    await wrapper.get('.management-workspace-more summary').trigger('click')
+    const manageTrust = wrapper.findAll('.management-workspace-menu button')
+      .find(button => button.text() === '管理信任')!
+    await manageTrust.trigger('click')
+    expect(wrapper.get('.workspace-trust-dialog').text()).toContain('是否信任“pi-companion”？')
   })
 
   it('opens a Direct Chat modal containing only global skills', async () => {

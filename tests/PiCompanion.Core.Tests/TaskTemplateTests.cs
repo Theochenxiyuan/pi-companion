@@ -42,6 +42,18 @@ public sealed class TaskTemplateTests
             PermissionMode = "read-only",
         });
         Assert.Null(generalChat.PermissionMode);
+
+        Assert.Throws<ArgumentException>(() => TaskTemplateRules.Normalize(normalized with
+        {
+            Origin = TaskTemplateOrigin.Agent,
+        }));
+        var agentTemplate = TaskTemplateRules.Normalize(normalized with
+        {
+            Origin = TaskTemplateOrigin.Agent,
+            SourceTaskId = Guid.NewGuid(),
+            SourceRunId = Guid.NewGuid(),
+        });
+        Assert.Equal(TaskTemplateOrigin.Agent, agentTemplate.Origin);
     }
 
     [Fact]
@@ -58,12 +70,20 @@ public sealed class TaskTemplateTests
                 "Workspace health",
                 pinned: true,
                 targetKind: TaskTemplateTargetKind.Workspace,
-                workspaceId: workspace.Id));
+                workspaceId: workspace.Id) with
+            {
+                Origin = TaskTemplateOrigin.Agent,
+                SourceTaskId = Guid.NewGuid(),
+                SourceRunId = Guid.NewGuid(),
+            });
 
             var reopened = new SqliteRunEventStore(databasePath);
             var restored = reopened.GetTaskTemplates();
             Assert.Equal([second.Id, first.Id], restored.Select(template => template.Id));
             Assert.Equal(workspace.Id, restored[0].WorkspaceId);
+            Assert.Equal(TaskTemplateOrigin.Agent, restored[0].Origin);
+            Assert.Equal(second.SourceTaskId, restored[0].SourceTaskId);
+            Assert.Equal(second.SourceRunId, restored[0].SourceRunId);
 
             var updated = reopened.UpsertTaskTemplate(first with
             {
@@ -80,7 +100,7 @@ public sealed class TaskTemplateTests
             using var connection = new SqliteConnection($"Data Source={databasePath}");
             connection.Open();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 16;";
+            command.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 17;";
             Assert.Equal(1L, command.ExecuteScalar());
         }
         finally
@@ -107,6 +127,63 @@ public sealed class TaskTemplateTests
                     "Missing workspace",
                     targetKind: TaskTemplateTargetKind.Workspace,
                     workspaceId: Guid.NewGuid())));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Store_Migration17BackfillsExistingTemplatesAsUserOrigin()
+    {
+        var root = Directory.CreateTempSubdirectory("pi-companion-template-migration-tests-").FullName;
+        try
+        {
+            var databasePath = Path.Combine(root, "state.db");
+            var templateId = Guid.NewGuid();
+            using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+                    INSERT INTO schema_migrations (version, applied_at) VALUES (16, '2026-08-01T00:00:00Z');
+                    CREATE TABLE task_templates (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL COLLATE NOCASE,
+                        prompt TEXT NOT NULL,
+                        target_kind TEXT NOT NULL,
+                        workspace_id TEXT NULL,
+                        model TEXT NULL,
+                        thinking_level TEXT NULL,
+                        permission_mode TEXT NULL,
+                        is_pinned INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    INSERT INTO task_templates (
+                        id, name, prompt, target_kind, is_pinned, created_at, updated_at)
+                    VALUES ($id, 'Legacy review', 'Review changes.', 'CurrentContext', 0,
+                            '2026-08-01T00:00:00Z', '2026-08-01T00:00:00Z');
+                    """;
+                command.Parameters.AddWithValue("$id", templateId.ToString("D"));
+                command.ExecuteNonQuery();
+            }
+
+            var store = new SqliteRunEventStore(databasePath);
+            var restored = Assert.Single(store.GetTaskTemplates());
+            Assert.Equal(TaskTemplateOrigin.User, restored.Origin);
+            Assert.Null(restored.SourceTaskId);
+            Assert.Null(restored.SourceRunId);
+
+            using var reopened = new SqliteConnection($"Data Source={databasePath}");
+            reopened.Open();
+            using var migration = reopened.CreateCommand();
+            migration.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 17;";
+            Assert.Equal(1L, migration.ExecuteScalar());
         }
         finally
         {

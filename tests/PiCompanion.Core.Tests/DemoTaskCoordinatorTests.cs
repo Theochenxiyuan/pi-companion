@@ -1104,6 +1104,50 @@ public sealed class DemoTaskCoordinatorTests
         Assert.Equal(queued.Id, Assert.Single(coordinator.Current!.LocalQueuedMessages).Id);
     }
 
+    [Fact]
+    public async Task AgentTaskTemplateCommand_CreatesAuditedTemplateAndDeduplicatesRetries()
+    {
+        var backend = new RecordingBackend();
+        using var coordinator = new TaskCoordinator(backend);
+        var changes = 0;
+        coordinator.TaskTemplatesChanged += () => changes++;
+        var sourceTaskId = Guid.NewGuid();
+        var sourceRunId = Guid.NewGuid();
+        var first = await backend.CreateTaskTemplateAsync(new AgentTaskTemplateCreationRequest(
+            "tool-call-1",
+            sourceTaskId,
+            sourceRunId,
+            "  Review   changes ",
+            " Review the current changes. ",
+            TaskTemplateTargetKind.CurrentContext,
+            null,
+            null,
+            "high",
+            "read-only",
+            false), TestContext.Current.CancellationToken);
+        var second = await backend.CreateTaskTemplateAsync(new AgentTaskTemplateCreationRequest(
+            "tool-call-2",
+            sourceTaskId,
+            sourceRunId,
+            "Review changes",
+            "Review the current changes.",
+            TaskTemplateTargetKind.CurrentContext,
+            null,
+            null,
+            "high",
+            "read-only",
+            false), TestContext.Current.CancellationToken);
+
+        Assert.False(first.AlreadyExisted);
+        Assert.True(second.AlreadyExisted);
+        Assert.Equal(first.Template.Id, second.Template.Id);
+        Assert.Equal(TaskTemplateOrigin.Agent, first.Template.Origin);
+        Assert.Equal(sourceTaskId, first.Template.SourceTaskId);
+        Assert.Equal(sourceRunId, first.Template.SourceRunId);
+        Assert.Equal(1, changes);
+        Assert.Single(coordinator.TaskTemplates);
+    }
+
     private static CompanionRunEvent SettledEvent(Guid taskId, Guid runId, DateTimeOffset timestamp) => new(
         Guid.NewGuid(),
         taskId,
@@ -1192,8 +1236,12 @@ public sealed class DemoTaskCoordinatorTests
             new AgentContextUsage(27200, 272000, 10));
 
     private sealed class RecordingBackend : IAgentBackend, IAgentBackendPrewarmer,
-        IAgentBackendWorkspaceReleaser, IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider
+        IAgentBackendWorkspaceReleaser, IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider,
+        IAgentTaskTemplateCommandSource
     {
+        private Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>?
+            _taskTemplateCreationHandler;
+
         public List<AgentRunRequest> Requests { get; } = [];
 
         public AgentRunRequest? LastRequest { get; private set; }
@@ -1217,6 +1265,16 @@ public sealed class DemoTaskCoordinatorTests
         public event Action<CompanionRunEvent>? EventReceived;
 
         public event Action<AgentToolExecution>? ToolExecutionCompleted;
+
+        public void SetTaskTemplateCreationHandler(
+            Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>> handler) =>
+            _taskTemplateCreationHandler = handler;
+
+        public ValueTask<AgentTaskTemplateCreationResult> CreateTaskTemplateAsync(
+            AgentTaskTemplateCreationRequest request,
+            CancellationToken cancellationToken = default) =>
+            Assert.IsType<Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>>(
+                _taskTemplateCreationHandler)(request, cancellationToken);
 
         public void PublishToolExecution(AgentToolExecution execution) =>
             ToolExecutionCompleted?.Invoke(execution);

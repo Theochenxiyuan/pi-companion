@@ -12,6 +12,7 @@ src/PiCompanion.WebSearchExtension/dist/
 artifacts/
 
 # Local runtimes, state, credentials, and packaging secrets
+.dotnet-cli/
 **/PiRuntime/
 .env
 .env.*

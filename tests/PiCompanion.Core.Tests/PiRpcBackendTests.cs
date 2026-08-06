@@ -1,15 +1,112 @@
 using System.Collections.Concurrent;
+using System.Buffers.Binary;
+using System.IO.Pipes;
 using System.Text.Json;
 using PiCompanion.Application.PiRpc;
 using PiCompanion.Application.Skills;
 using PiCompanion.Core.Agents;
 using PiCompanion.Core.Events;
 using PiCompanion.Core.Runs;
+using PiCompanion.Core.Tasks;
 
 namespace PiCompanion.Core.Tests;
 
 public sealed class PiRpcBackendTests
 {
+    [Fact]
+    public async Task AgentCommandPipe_AuthenticatesActiveRunAndReturnsIdempotentTemplateResult()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var cancellationToken = TestContext.Current.CancellationToken;
+            var pipeName = $"PiCompanion.Tests.AgentCommands.{Guid.NewGuid():N}";
+            using var backend = CreateBackend(root, agentCommandPipeName: pipeName);
+            var handlerCalls = 0;
+            AgentTaskTemplateCreationRequest? receivedRequest = null;
+            backend.SetTaskTemplateCreationHandler((request, _) =>
+            {
+                handlerCalls++;
+                receivedRequest = request;
+                var now = DateTimeOffset.UtcNow;
+                return ValueTask.FromResult(new AgentTaskTemplateCreationResult(
+                    new TaskTemplate(
+                        Guid.NewGuid(),
+                        request.Name,
+                        request.Prompt,
+                        request.TargetKind,
+                        request.WorkspaceId,
+                        request.Model,
+                        request.ThinkingLevel,
+                        request.PermissionMode,
+                        request.IsPinned,
+                        now,
+                        now,
+                        TaskTemplateOrigin.Agent,
+                        request.SourceTaskId,
+                        request.SourceRunId),
+                    AlreadyExisted: false));
+            });
+            var run = CreateRequest(root, "retry-wait");
+            await backend.StartRunAsync(run, cancellationToken);
+            var contextPath = Assert.Single(Directory.GetFiles(
+                Path.Combine(root, "sessions", ".runtime"),
+                "*.context.json"));
+            using var context = JsonDocument.Parse(File.ReadAllText(contextPath));
+            var runtime = context.RootElement;
+            var token = runtime.GetProperty("permissionToken").GetString();
+            var generation = runtime.GetProperty("generation").GetInt64();
+            var template = new
+            {
+                name = "Review changes",
+                prompt = "Review the current changes.",
+                targetKind = "CurrentContext",
+                workspaceId = (string?)null,
+                model = (string?)null,
+                thinkingLevel = "high",
+                permissionMode = "read-only",
+                isPinned = false,
+            };
+            var command = new
+            {
+                type = "createTaskTemplate",
+                requestId = "tool-call-1",
+                taskId = run.TaskId,
+                runId = run.RunId,
+                generation,
+                permissionToken = token,
+                template,
+            };
+
+            using var first = await SendAgentCommandAsync(pipeName, command, cancellationToken);
+            using var repeated = await SendAgentCommandAsync(pipeName, command, cancellationToken);
+            using var forged = await SendAgentCommandAsync(pipeName, new
+            {
+                type = "createTaskTemplate",
+                requestId = "tool-call-1",
+                taskId = run.TaskId,
+                runId = run.RunId,
+                generation,
+                permissionToken = "00000000000000000000000000000000",
+                template,
+            }, cancellationToken);
+
+            Assert.True(first.RootElement.GetProperty("success").GetBoolean());
+            Assert.True(repeated.RootElement.GetProperty("success").GetBoolean());
+            Assert.False(forged.RootElement.GetProperty("success").GetBoolean());
+            Assert.Contains("无效或已过期", forged.RootElement.GetProperty("error").GetString());
+            Assert.Equal(1, handlerCalls);
+            Assert.NotNull(receivedRequest);
+            Assert.Equal(run.TaskId, receivedRequest.SourceTaskId);
+            Assert.Equal(run.RunId, receivedRequest.SourceRunId);
+            await backend.AbortAsync(run.RunId, cancellationToken);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
     [Fact]
     public async Task StartRunAsync_ExposesEffectiveSkillPathsWithoutOverridingNativeLoading()
     {
@@ -472,7 +569,7 @@ public sealed class PiRpcBackendTests
             var toolsIndex = Array.IndexOf(arguments, "--tools");
             Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
             Assert.Equal(
-                "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills",
+                "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template",
                 arguments[toolsIndex + 1]);
         }
         finally
@@ -643,7 +740,7 @@ public sealed class PiRpcBackendTests
             var toolsIndex = Array.IndexOf(arguments, "--tools");
             Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
             Assert.Equal(
-                "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,web_search",
+                "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template,web_search",
                 arguments[toolsIndex + 1]);
             Assert.Equal(2, arguments.Count(item => item == "--extension"));
             Assert.Contains(webSearchExtension, arguments);
@@ -1549,7 +1646,8 @@ public sealed class PiRpcBackendTests
         string root,
         string? webSearchExtensionPath = null,
         SkillDiscoveryService? skillDiscovery = null,
-        PiProjectTrustService? projectTrust = null)
+        PiProjectTrustService? projectTrust = null,
+        string? agentCommandPipeName = null)
     {
         var fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "fake-pi-rpc.js");
         var extension = Path.Combine(AppContext.BaseDirectory, "Fixtures", "pi-companion.mjs");
@@ -1561,7 +1659,33 @@ public sealed class PiRpcBackendTests
             Path.Combine(root, "backups"),
             webSearchExtensionPath: webSearchExtensionPath,
             skillDiscovery: skillDiscovery,
-            projectTrust: projectTrust ?? new PiProjectTrustService(root));
+            projectTrust: projectTrust ?? new PiProjectTrustService(root),
+            agentCommandPipeName: agentCommandPipeName);
+    }
+
+    private static async Task<JsonDocument> SendAgentCommandAsync(
+        string pipeName,
+        object command,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(command);
+        await using var pipe = new NamedPipeClientStream(
+            ".",
+            pipeName,
+            PipeDirection.InOut,
+            PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
+        var header = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
+        await pipe.WriteAsync(header, cancellationToken);
+        await pipe.WriteAsync(payload, cancellationToken);
+        await pipe.FlushAsync(cancellationToken);
+        await pipe.ReadExactlyAsync(header, cancellationToken);
+        var responseLength = BinaryPrimitives.ReadInt32LittleEndian(header);
+        Assert.InRange(responseLength, 1, 32 * 1024);
+        var response = new byte[responseLength];
+        await pipe.ReadExactlyAsync(response, cancellationToken);
+        return JsonDocument.Parse(response);
     }
 
     private static AgentRunRequest CreateRequest(string root, string prompt) => new(

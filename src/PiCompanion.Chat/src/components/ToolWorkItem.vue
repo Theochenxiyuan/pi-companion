@@ -21,6 +21,7 @@ const displayTitle = computed(() => {
   const toolName = props.block.title.trim().toLocaleLowerCase()
   if (toolName === 'ask_user') return t('向用户提问')
   if (toolName === 'list_available_skills') return t('列出可用技能')
+  if (toolName === 'create_task_template') return t('创建任务模板')
   return props.block.title
 })
 

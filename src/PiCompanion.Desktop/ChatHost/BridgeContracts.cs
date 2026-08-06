@@ -13,7 +13,7 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 62;
+    public const int ProtocolVersion = 63;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
@@ -57,7 +57,7 @@ internal static class BridgeContracts
             "independent-workspaces", "workspace-new-task",
             "skill-native-discovery", "skill-content-fingerprints", "skill-pi-removal",
             "skill-local-direct-import", "skill-workspace-trust", "workspace-trust-preflight",
-            "task-templates",
+            "task-templates", "agent-task-template-create",
         });
 
     public static TaskTemplateDto CreateTaskTemplate(TaskTemplate template) => new(
@@ -71,7 +71,10 @@ internal static class BridgeContracts
         template.PermissionMode,
         template.IsPinned,
         template.CreatedAt,
-        template.UpdatedAt);
+        template.UpdatedAt,
+        template.Origin.ToString(),
+        template.SourceTaskId,
+        template.SourceRunId);
 
     public static SkillsLoadedDto CreateSkillsLoaded(
         string requestId,
@@ -623,7 +626,10 @@ internal sealed record TaskTemplateDto(
     string? PermissionMode,
     bool IsPinned,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string Origin,
+    Guid? SourceTaskId,
+    Guid? SourceRunId);
 
 internal sealed record SaveTaskTemplateRequestDto(
     Guid? Id,

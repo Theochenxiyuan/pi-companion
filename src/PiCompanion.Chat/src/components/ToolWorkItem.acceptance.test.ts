@@ -100,4 +100,26 @@ describe('ToolWorkItem', () => {
       setLocale('zh-CN')
     }
   })
+
+  it('localizes the create-task-template tool without changing its protocol name', async () => {
+    const block: TranscriptBlock = {
+      id: 'tool-create-template', kind: 'Tool', status: 'Completed', title: 'create_task_template',
+      content: 'create_task_template 已完成',
+      firstSequence: 1, lastSequence: 1, timestamp: new Date().toISOString(),
+      input: null, output: '模板已创建',
+      interactionId: null, interactionMethod: null, interactionKind: null, interactionOptions: [],
+    }
+    const wrapper = mount(ToolWorkItem, { props: { block } })
+
+    try {
+      expect(wrapper.get('.work-label').text()).toBe('创建任务模板')
+      expect(wrapper.get('.work-label').text()).not.toContain('create_task_template')
+
+      setLocale('en-US')
+      await nextTick()
+      expect(wrapper.get('.work-label').text()).toBe('Create task template')
+    } finally {
+      setLocale('zh-CN')
+    }
+  })
 })

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -79,6 +81,144 @@ test("ask_user prefers Pi 0.83 strict JSON Schema sampling", () => {
 			new Set(Object.keys(askUser.parameters.properties)),
 		);
 	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("create_task_template exposes the complete strict draft schema", () => {
+	const root = temporaryDirectory();
+	try {
+		const { tools } = loadExtension(root);
+		const createTemplate = tools.get("create_task_template");
+		assert.ok(createTemplate);
+		assert.deepEqual(createTemplate.constrainedSampling, { type: "json_schema", strict: "prefer" });
+		assert.deepEqual(
+			new Set(createTemplate.parameters.required),
+			new Set(Object.keys(createTemplate.parameters.properties)),
+		);
+		assert.deepEqual(createTemplate.parameters.properties.permissionMode.enum, [null, "read-only", "standard"]);
+		assert.equal(createTemplate.parameters.properties.name.maxLength, 80);
+		assert.equal(createTemplate.parameters.properties.prompt.maxLength, 100000);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("create_task_template always requires one-time confirmation even with full access", async () => {
+	const root = temporaryDirectory();
+	try {
+		process.env.PI_COMPANION_SCOPE_KIND = "Workspace";
+		const { handlers } = loadExtension(root, undefined, undefined, "full-access");
+		const calls = [];
+		const promptTail = "CONFIRMATION_MUST_SHOW_THIS_TAIL";
+		const { context } = uiContext(async (message, choices) => {
+			calls.push({ message, choices });
+			return permissionChoices.deny;
+		});
+		const result = await handlers.get("tool_call")({
+			toolName: "create_task_template",
+			toolCallId: "template-tool-call",
+			input: {
+				name: "Review changes",
+				prompt: `${"x".repeat(2000)}${promptTail}`,
+				targetKind: "CurrentContext",
+				workspaceId: null,
+				model: null,
+				thinkingLevel: "high",
+				permissionMode: "read-only",
+				isPinned: false,
+			},
+		}, context);
+
+		assert.equal(result.block, true);
+		assert.match(calls[0].message, /创建任务模板/u);
+		assert.match(calls[0].message, /Review changes/u);
+		assert.match(calls[0].message, new RegExp(promptTail, "u"));
+		assert.match(calls[0].message, /权限：read-only/u);
+		assert.deepEqual(calls[0].choices, [permissionChoices.allowOnce, permissionChoices.deny]);
+	} finally {
+		delete process.env.PI_COMPANION_SCOPE_KIND;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("create_task_template sends the authenticated runtime context and returns the saved template", async () => {
+	const root = temporaryDirectory();
+	const pipeName = process.platform === "win32"
+		? `PiCompanion.ExtensionTests.${crypto.randomUUID()}`
+		: path.join(root, "agent-command.sock");
+	const pipePath = process.platform === "win32" ? `\\\\.\\pipe\\${pipeName}` : pipeName;
+	const taskId = "11111111-1111-1111-1111-111111111111";
+	const runId = "22222222-2222-2222-2222-222222222222";
+	const permissionToken = "0123456789abcdef0123456789abcdef";
+	const contextPath = path.join(root, "runtime-context.json");
+	fs.writeFileSync(contextPath, JSON.stringify({
+		schemaVersion: 4,
+		generation: 7,
+		taskId,
+		runId,
+		workingDirectory: root,
+		permissionMode: "standard",
+		permissionToken,
+		readOnlyRoots: [],
+		skillReadOnlyRoots: [],
+		skillReadOnlyFiles: [],
+		scopeKind: "Workspace",
+		workspaceTrustStatus: "trusted",
+	}), "utf8");
+	let receivedCommand;
+	const server = net.createServer(socket => {
+		let received = Buffer.alloc(0);
+		socket.on("data", chunk => {
+			received = Buffer.concat([received, chunk]);
+			if (received.length < 4) return;
+			const length = received.readInt32LE(0);
+			if (received.length < length + 4) return;
+			receivedCommand = JSON.parse(received.subarray(4, length + 4).toString("utf8"));
+			const response = Buffer.from(JSON.stringify({
+				requestId: receivedCommand.requestId,
+				success: true,
+				error: null,
+				templateId: "33333333-3333-3333-3333-333333333333",
+				templateName: receivedCommand.template.name,
+				alreadyExisted: false,
+			}), "utf8");
+			const header = Buffer.alloc(4);
+			header.writeInt32LE(response.length, 0);
+			socket.end(Buffer.concat([header, response]));
+		});
+	});
+	try {
+		await new Promise((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(pipePath, resolve);
+		});
+		const { tools } = loadExtension(root);
+		process.env.PI_COMPANION_CONTEXT_FILE = contextPath;
+		process.env.PI_COMPANION_COMMAND_PIPE = pipeName;
+		const result = await tools.get("create_task_template").execute("tool-call-7", {
+			name: "Review changes",
+			prompt: "Review the current changes.",
+			targetKind: "CurrentContext",
+			workspaceId: null,
+			model: null,
+			thinkingLevel: "high",
+			permissionMode: "read-only",
+			isPinned: false,
+		});
+
+		assert.equal(result.isError, false);
+		assert.match(result.content[0].text, /已创建/u);
+		assert.equal(result.details.templateId, "33333333-3333-3333-3333-333333333333");
+		assert.equal(receivedCommand.taskId, taskId);
+		assert.equal(receivedCommand.runId, runId);
+		assert.equal(receivedCommand.generation, 7);
+		assert.equal(receivedCommand.permissionToken, permissionToken);
+		assert.equal(receivedCommand.template.permissionMode, "read-only");
+	} finally {
+		delete process.env.PI_COMPANION_CONTEXT_FILE;
+		delete process.env.PI_COMPANION_COMMAND_PIPE;
+		await new Promise(resolve => server.close(resolve));
 		fs.rmSync(root, { recursive: true, force: true });
 	}
 });

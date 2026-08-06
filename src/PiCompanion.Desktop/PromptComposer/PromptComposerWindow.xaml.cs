@@ -374,7 +374,7 @@ public partial class PromptComposerWindow : Window
         _taskTemplateChoices.Clear();
         var systemGroup = DesktopLocalizer.Text("系统模板", "System templates");
         var userGroup = DesktopLocalizer.Text("我的模板", "My templates");
-        var anyWorkspace = DesktopLocalizer.Text("任意工作区", "Any workspace");
+        var anyWorkspace = DesktopLocalizer.Text("工作区（使用时选择）", "Workspace (choose when used)");
 
         _taskTemplateChoices.Add(new PromptTemplateChoice(
             systemGroup,
@@ -414,7 +414,7 @@ public partial class PromptComposerWindow : Window
             }
 
             var targetLabel = template.TargetKind == TaskTemplateTargetKind.CurrentContext
-                ? DesktopLocalizer.Text("当前上下文", "Current context")
+                ? DesktopLocalizer.Text("不指定", "Not specified")
                 : template.WorkspaceId is null
                     ? anyWorkspace
                     : currentWorkspace?.DisplayName ?? currentWorkspace?.Name ?? DesktopLocalizer.Text("当前工作区", "Current workspace");

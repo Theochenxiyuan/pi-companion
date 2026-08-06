@@ -25,6 +25,9 @@ const userTemplate: TaskTemplate = {
   prompt: '检查发布风险并列出待办',
   model: 'openai-codex/gpt-5.6-sol',
   thinkingLevel: 'high',
+  origin: 'Agent',
+  sourceTaskId: '11111111-1111-1111-1111-111111111111',
+  sourceRunId: '22222222-2222-2222-2222-222222222222',
   isBuiltIn: false,
 }
 
@@ -43,12 +46,12 @@ describe('TaskTemplatesView', () => {
     expect(wrapper.get('.task-template-management-search').classes()).toContain('management-search')
     expect(wrapper.get('.task-template-create').classes()).toContain('ui-button--secondary')
     expect(wrapper.findAll('.task-template-management-card')).toHaveLength(2)
-    expect(wrapper.text()).toContain('模型：openai-codex/gpt-5.6-sol')
-    expect(wrapper.text()).toContain('推理：high')
-    const userBadges = wrapper.findAll('.task-template-management-card')[1]!
-      .findAll('.task-template-preferences span').map(badge => badge.text())
-    expect(userBadges.slice(0, 2)).toEqual(['任意工作区', '权限：只读'])
-    expect(wrapper.find('.task-template-management-card > header em').exists()).toBe(false)
+    const userPreferenceRows = wrapper.findAll('.task-template-management-card')[1]!
+      .findAll('.task-template-preferences > div')
+    expect(userPreferenceRows.map(row => [row.get('dt').text(), row.get('dd').text()])).toEqual([
+      ['任务环境', '工作区（使用时选择）'],
+    ])
+    expect(wrapper.find('.task-template-management-card > header em').text()).toBe('AI创建')
 
     await wrapper.findAll('button').find(button => button.text() === '新建模板')!.trigger('click')
     expect(wrapper.emitted('create')).toHaveLength(1)
@@ -57,8 +60,8 @@ describe('TaskTemplatesView', () => {
     expect(userCard.get('.task-template-apply-button').classes()).toContain('ui-button--secondary')
     expect(userCard.get('.danger-action').classes()).toContain('ui-button--ghost')
     await userCard.findAll('button').find(button => button.text() === '编辑')!.trigger('click')
-    await userCard.findAll('button').find(button => button.text() === '复制模板')!.trigger('click')
-    await userCard.findAll('button').find(button => button.text() === '删除模板')!.trigger('click')
+    await userCard.findAll('button').find(button => button.text() === '复制')!.trigger('click')
+    await userCard.findAll('button').find(button => button.text() === '删除')!.trigger('click')
     await userCard.findAll('button').find(button => button.text() === '使用模板')!.trigger('click')
     expect(wrapper.emitted('edit')).toEqual([[userTemplate]])
     expect(wrapper.emitted('duplicate')).toEqual([[userTemplate]])

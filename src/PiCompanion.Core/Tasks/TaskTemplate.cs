@@ -7,6 +7,12 @@ public enum TaskTemplateTargetKind
     GeneralChat,
 }
 
+public enum TaskTemplateOrigin
+{
+    User,
+    Agent,
+}
+
 public sealed record TaskTemplate(
     Guid Id,
     string Name,
@@ -18,7 +24,10 @@ public sealed record TaskTemplate(
     string? PermissionMode,
     bool IsPinned,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    TaskTemplateOrigin Origin = TaskTemplateOrigin.User,
+    Guid? SourceTaskId = null,
+    Guid? SourceRunId = null);
 
 public static class TaskTemplateRules
 {
@@ -56,6 +65,23 @@ public static class TaskTemplateRules
         if (template.TargetKind != TaskTemplateTargetKind.Workspace && template.WorkspaceId is not null)
         {
             throw new ArgumentException("只有工作区模板可以绑定指定工作区。", nameof(template));
+        }
+
+        if (!Enum.IsDefined(template.Origin))
+        {
+            throw new ArgumentException("任务模板来源无效。", nameof(template));
+        }
+
+        if (template.Origin == TaskTemplateOrigin.Agent &&
+            (template.SourceTaskId is null || template.SourceRunId is null))
+        {
+            throw new ArgumentException("AI 创建的任务模板必须记录来源任务和运行。", nameof(template));
+        }
+
+        if (template.Origin == TaskTemplateOrigin.User &&
+            (template.SourceTaskId is not null || template.SourceRunId is not null))
+        {
+            throw new ArgumentException("用户创建的任务模板不能带有 AI 来源信息。", nameof(template));
         }
 
         var permissionMode = NormalizeOptional(template.PermissionMode);

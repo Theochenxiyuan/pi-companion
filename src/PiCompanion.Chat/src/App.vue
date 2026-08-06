@@ -1079,6 +1079,11 @@ function openWorkspaceTrust(workspace: WorkspaceHistoryEntry) {
   workspaceTrustDialogWorkspaceId.value = workspace.id
 }
 
+function openWorkspaceTrustById(workspaceId: string) {
+  const workspace = store.workspaces.find(candidate => candidate.id === workspaceId)
+  if (workspace) openWorkspaceTrust(workspace)
+}
+
 function cancelWorkspaceTrustDecision() {
   if (workspaceTrustDecisionPending.value) return
   workspaceTrustDialogWorkspaceId.value = null
@@ -2722,6 +2727,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @create-workspace="postBridgeMessage('CreateWorkspace')"
       @new-task-in-workspace="beginNewTaskInWorkspace"
       @manage-workspace-skills="openWorkspaceSkills"
+      @manage-workspace-trust="openWorkspaceTrustById"
       @edit-workspace="editingWorkspaceId = $event"
       @hide-workspace="hidingWorkspaceId = $event"
     />

@@ -102,6 +102,7 @@ public partial class MainWindow : Window
         _coordinator.TaskChanged += OnTaskChanged;
         _coordinator.RunEventReceived += OnRunEventReceived;
         _coordinator.EvidenceChanged += OnEvidenceChanged;
+        _coordinator.TaskTemplatesChanged += OnTaskTemplatesChanged;
         DesktopLocalizer.Apply(this);
     }
 
@@ -880,6 +881,9 @@ public partial class MainWindow : Window
         }
 
         var now = DateTimeOffset.UtcNow;
+        var existing = request.Id is { } templateId
+            ? _coordinator.TaskTemplates.FirstOrDefault(template => template.Id == templateId)
+            : null;
         _coordinator.SaveTaskTemplate(new TaskTemplate(
             request.Id ?? Guid.NewGuid(),
             request.Name,
@@ -891,8 +895,10 @@ public partial class MainWindow : Window
             request.PermissionMode,
             request.IsPinned,
             now,
-            now));
-        PostTaskTemplates();
+            now,
+            existing?.Origin ?? TaskTemplateOrigin.User,
+            existing?.SourceTaskId,
+            existing?.SourceRunId));
     }
 
     private void DeleteTaskTemplate(JsonElement payload)
@@ -900,7 +906,6 @@ public partial class MainWindow : Window
         var request = payload.Deserialize<DeleteTaskTemplateRequestDto>(JsonOptions) ??
             throw new InvalidOperationException("任务模板删除请求无效。");
         _coordinator.DeleteTaskTemplate(request.TemplateId);
-        PostTaskTemplates();
     }
 
     private void PostTaskTemplates()
@@ -2136,6 +2141,16 @@ public partial class MainWindow : Window
         _ = Dispatcher.InvokeAsync(() => PostMessage("EvidenceUpdated", evidence));
     }
 
+    private void OnTaskTemplatesChanged()
+    {
+        if (!_bridgeReady)
+        {
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(PostTaskTemplates);
+    }
+
     private void PostFileDiff(Guid changeId)
     {
         var diff = _coordinator.GetFileDiff(changeId) ??
@@ -2944,6 +2959,7 @@ public partial class MainWindow : Window
         _coordinator.TaskChanged -= OnTaskChanged;
         _coordinator.RunEventReceived -= OnRunEventReceived;
         _coordinator.EvidenceChanged -= OnEvidenceChanged;
+        _coordinator.TaskTemplatesChanged -= OnTaskTemplatesChanged;
         CancelPendingSkillImports();
         DiscardDraft();
         ChatWebView.Dispose();

@@ -13,6 +13,9 @@ const emptyWorkspace: WorkspaceHistoryEntry = {
   hasActiveTask: false,
   iconKey: 'code',
   colorKey: 'violet',
+  trustStatus: 'undecided',
+  trustDecisionPath: null,
+  trustInherited: false,
 }
 
 describe('TaskManagementView workspaces', () => {
@@ -36,6 +39,8 @@ describe('TaskManagementView workspaces', () => {
     expect(wrapper.get('.management-workspace-copy').text()).toContain(emptyWorkspace.name)
     expect(wrapper.get('.management-workspace-empty').text()).toContain('暂无任务')
     expect(wrapper.get('.workspace-icon-visual').classes()).toContain('workspace-icon-color-violet')
+    expect(wrapper.get('.management-workspace-trust').text()).toContain('尚未选择信任')
+    expect(wrapper.get('.management-workspace-trust').classes()).toContain('trust-undecided')
     expect(wrapper.get('.management-workspace-new-task svg').element.tagName.toLowerCase()).toBe('svg')
 
     await wrapper.get('.management-workspace-more summary').trigger('click')
@@ -44,10 +49,14 @@ describe('TaskManagementView workspaces', () => {
 
     await wrapper.get('.management-workspace-more summary').trigger('click')
     await wrapper.findAll('.management-workspace-menu button')[1]!.trigger('click')
-    expect(wrapper.emitted('editWorkspace')).toEqual([[emptyWorkspace.id]])
+    expect(wrapper.emitted('manageWorkspaceTrust')).toEqual([[emptyWorkspace.id]])
 
     await wrapper.get('.management-workspace-more summary').trigger('click')
     await wrapper.findAll('.management-workspace-menu button')[2]!.trigger('click')
+    expect(wrapper.emitted('editWorkspace')).toEqual([[emptyWorkspace.id]])
+
+    await wrapper.get('.management-workspace-more summary').trigger('click')
+    await wrapper.findAll('.management-workspace-menu button')[3]!.trigger('click')
     expect(wrapper.emitted('hideWorkspace')).toEqual([[emptyWorkspace.id]])
 
     await wrapper.get('.management-workspace-new-task').trigger('click')

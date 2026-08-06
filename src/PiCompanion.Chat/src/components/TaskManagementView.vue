@@ -34,6 +34,7 @@ const emit = defineEmits<{
   createWorkspace: []
   newTaskInWorkspace: [workspaceId: string]
   manageWorkspaceSkills: [workspaceId: string]
+  manageWorkspaceTrust: [workspaceId: string]
   editWorkspace: [workspaceId: string]
   hideWorkspace: [workspaceId: string]
 }>()
@@ -64,6 +65,8 @@ interface WorkspaceGroup {
   generalChat: boolean
   iconKey: WorkspaceIconKey
   colorKey: WorkspaceColorKey
+  trustStatus: 'trusted' | 'declined' | 'undecided'
+  trustInherited: boolean
 }
 
 const collapsedWorkspaceKeys = ref(loadCollapsedWorkspaceKeys())
@@ -112,6 +115,8 @@ const workspaceGroups = computed<WorkspaceGroup[]>(() => {
       generalChat: false,
       iconKey: workspace.iconKey ?? 'folder',
       colorKey: workspace.colorKey ?? 'blue',
+      trustStatus: workspace.trustStatus ?? 'trusted',
+      trustInherited: workspace.trustInherited ?? false,
     })
   }
 
@@ -146,6 +151,8 @@ const workspaceGroups = computed<WorkspaceGroup[]>(() => {
       generalChat,
       iconKey: generalChat ? 'app' : 'folder',
       colorKey: generalChat ? 'indigo' : 'blue',
+      trustStatus: 'trusted',
+      trustInherited: false,
     })
   }
   return Array.from(groups.values())
@@ -283,6 +290,16 @@ function fullTaskTime(task: TaskHistoryEntry) {
   return formatFullTimestamp(task.deletedAt ?? task.updatedAt, locale.value)
 }
 
+function workspaceTrustLabel(workspace: WorkspaceGroup) {
+  if (workspace.trustInherited) {
+    if (workspace.trustStatus === 'trusted') return t('继承信任')
+    if (workspace.trustStatus === 'declined') return t('继承不信任')
+  }
+  if (workspace.trustStatus === 'trusted') return t('已信任')
+  if (workspace.trustStatus === 'declined') return t('不信任')
+  return t('尚未选择信任')
+}
+
 function emitMenuFromButton(event: MouseEvent, task: TaskHistoryEntry) {
   const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const positionedEvent = { clientX: bounds.right, clientY: bounds.bottom } as MouseEvent
@@ -365,7 +382,17 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
               >
                 <WorkspaceIcon :icon-key="workspace.iconKey" :color-key="workspace.colorKey" />
                 <span class="management-workspace-copy">
-                  <strong>{{ workspace.name }}</strong>
+                  <span class="management-workspace-title-row">
+                    <strong>{{ workspace.name }}</strong>
+                    <span
+                      v-if="!workspace.generalChat"
+                      class="management-workspace-trust"
+                      :class="`trust-${workspace.trustStatus}`"
+                    >
+                      <span aria-hidden="true">{{ workspace.trustStatus === 'trusted' ? '✓' : workspace.trustStatus === 'declined' ? '–' : '?' }}</span>
+                      {{ workspaceTrustLabel(workspace) }}
+                    </span>
+                  </span>
                   <small :title="workspace.path">{{ workspace.path }}</small>
                 </span>
                 <span class="management-workspace-meta">
@@ -393,6 +420,11 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
                     role="menuitem"
                     @click="$emit('manageWorkspaceSkills', workspace.workspaceId); closeWorkspaceMenu($event)"
                   >{{ t('查看工作区技能') }}</UiButton>
+                  <UiButton
+                    type="button"
+                    role="menuitem"
+                    @click="$emit('manageWorkspaceTrust', workspace.workspaceId); closeWorkspaceMenu($event)"
+                  >{{ t('管理信任') }}</UiButton>
                   <UiButton
                     type="button"
                     role="menuitem"

@@ -1,4 +1,4 @@
-export const bridgeProtocolVersion = 62
+export const bridgeProtocolVersion = 63
 
 export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 
@@ -594,6 +594,9 @@ export interface TaskTemplate {
   isPinned: boolean
   createdAt: string
   updatedAt: string
+  origin?: 'User' | 'Agent'
+  sourceTaskId?: string | null
+  sourceRunId?: string | null
   isBuiltIn?: boolean
 }
 

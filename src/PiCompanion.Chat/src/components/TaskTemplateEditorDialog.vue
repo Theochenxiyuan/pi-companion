@@ -41,11 +41,15 @@ const advancedOpen = ref(Boolean(props.template && (
 )))
 
 const canSave = computed(() => name.value.trim().length > 0 && prompt.value.trim().length > 0)
-const effectiveModel = computed(() => model.value || props.currentModel)
 const availableThinkingLevels = computed(() => {
-  const selected = props.modelOptions.find(option => option.value === effectiveModel.value)
+  if (!model.value) return []
+  const selected = props.modelOptions.find(option => option.value === model.value)
   return selected?.thinkingLevels?.length ? selected.thinkingLevels : ['low', 'medium', 'high']
 })
+
+watch(model, selectedModel => {
+  if (!selectedModel) thinkingLevel.value = ''
+}, { immediate: true })
 
 watch(availableThinkingLevels, levels => {
   if (!thinkingLevel.value) return
@@ -114,12 +118,12 @@ function save() {
         </UiButton>
         <div v-if="advancedOpen" class="task-template-advanced">
           <label class="task-template-target-field">
-            <span>{{ t('运行位置') }}</span>
+            <span>{{ t('任务环境') }}</span>
             <UiNativeSelect v-model="target">
-              <option value="CurrentContext">{{ t('当前上下文') }}</option>
-              <option value="Workspace">{{ t('任意工作区') }}</option>
+              <option value="CurrentContext">{{ t('不指定') }}</option>
+              <option value="Workspace">{{ t('工作区（使用时选择）') }}</option>
               <option value="GeneralChat">{{ t('直接对话') }}</option>
-              <optgroup v-if="workspaces.length" :label="t('指定工作区')">
+              <optgroup v-if="workspaces.length" :label="t('固定工作区')">
                 <option v-for="workspace in workspaces" :key="workspace.id" :value="`Workspace:${workspace.id}`">{{ workspace.name }}</option>
               </optgroup>
             </UiNativeSelect>
@@ -127,7 +131,7 @@ function save() {
           <label class="task-template-permission-field">
             <span>{{ t('权限') }}</span>
             <UiNativeSelect v-model="permissionMode" :disabled="target === 'GeneralChat'">
-              <option value="">{{ t('继承当前设置') }}</option>
+              <option value="">{{ t('不指定') }}</option>
               <option value="read-only">{{ t('只读') }}</option>
               <option value="standard">{{ t('标准访问') }}</option>
             </UiNativeSelect>
@@ -135,14 +139,14 @@ function save() {
           <label class="task-template-model-field">
             <span>{{ t('模型') }}</span>
             <UiNativeSelect v-model="model">
-              <option value="">{{ t('继承当前设置') }}</option>
+              <option value="">{{ t('不指定') }}</option>
               <option v-for="option in modelOptions" :key="option.value" :value="option.value">{{ option.group ? `${option.group} · ` : '' }}{{ option.label }}</option>
             </UiNativeSelect>
           </label>
           <label class="task-template-thinking-field">
             <span>{{ t('推理等级') }}</span>
-            <UiNativeSelect v-model="thinkingLevel">
-              <option value="">{{ t('继承当前设置') }}</option>
+            <UiNativeSelect v-model="thinkingLevel" :disabled="!model">
+              <option value="">{{ t('不指定') }}</option>
               <option v-for="level in availableThinkingLevels" :key="level" :value="level">{{ thinkingLevelLabel(level) }}</option>
             </UiNativeSelect>
           </label>

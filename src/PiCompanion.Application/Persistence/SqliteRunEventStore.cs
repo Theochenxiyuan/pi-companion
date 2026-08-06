@@ -488,7 +488,8 @@ public sealed class SqliteRunEventStore : IRunEventStore
             command.CommandText =
                 """
                 SELECT id, name, prompt, target_kind, workspace_id, model, thinking_level,
-                       permission_mode, is_pinned, created_at, updated_at
+                       permission_mode, is_pinned, created_at, updated_at,
+                       origin, source_task_id, source_run_id
                 FROM task_templates
                 ORDER BY is_pinned DESC, julianday(updated_at) DESC, updated_at DESC, name COLLATE NOCASE;
                 """;
@@ -526,10 +527,12 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 """
                 INSERT INTO task_templates (
                     id, name, prompt, target_kind, workspace_id, model, thinking_level,
-                    permission_mode, is_pinned, created_at, updated_at)
+                    permission_mode, is_pinned, created_at, updated_at,
+                    origin, source_task_id, source_run_id)
                 VALUES (
                     $id, $name, $prompt, $targetKind, $workspaceId, $model, $thinkingLevel,
-                    $permissionMode, $isPinned, $createdAt, $updatedAt)
+                    $permissionMode, $isPinned, $createdAt, $updatedAt,
+                    $origin, $sourceTaskId, $sourceRunId)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     prompt = excluded.prompt,
@@ -539,6 +542,9 @@ public sealed class SqliteRunEventStore : IRunEventStore
                     thinking_level = excluded.thinking_level,
                     permission_mode = excluded.permission_mode,
                     is_pinned = excluded.is_pinned,
+                    origin = excluded.origin,
+                    source_task_id = excluded.source_task_id,
+                    source_run_id = excluded.source_run_id,
                     updated_at = excluded.updated_at;
                 """,
                 ("$id", normalized.Id.ToString("D")),
@@ -551,7 +557,10 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 ("$permissionMode", normalized.PermissionMode),
                 ("$isPinned", normalized.IsPinned ? 1 : 0),
                 ("$createdAt", normalized.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
-                ("$updatedAt", normalized.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)));
+                ("$updatedAt", normalized.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$origin", normalized.Origin.ToString()),
+                ("$sourceTaskId", normalized.SourceTaskId?.ToString("D")),
+                ("$sourceRunId", normalized.SourceRunId?.ToString("D")));
             return ReadTaskTemplate(connection, normalized.Id);
         }
     }
@@ -1808,7 +1817,10 @@ public sealed class SqliteRunEventStore : IRunEventStore
                     permission_mode TEXT NULL,
                     is_pinned INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    origin TEXT NOT NULL DEFAULT 'User',
+                    source_task_id TEXT NULL,
+                    source_run_id TEXT NULL
                 );
                 CREATE TABLE IF NOT EXISTS recycle_bin (task_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, data_json TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS session_statistics_cache (
@@ -1843,6 +1855,9 @@ public sealed class SqliteRunEventStore : IRunEventStore
             EnsureColumn(connection, "workspaces", "icon_key", "TEXT NOT NULL DEFAULT 'folder'");
             EnsureColumn(connection, "workspaces", "color_key", "TEXT NOT NULL DEFAULT 'blue'");
             EnsureColumn(connection, "workspaces", "hidden_at", "TEXT");
+            EnsureColumn(connection, "task_templates", "origin", "TEXT NOT NULL DEFAULT 'User'");
+            EnsureColumn(connection, "task_templates", "source_task_id", "TEXT");
+            EnsureColumn(connection, "task_templates", "source_run_id", "TEXT");
 
             using var migration = connection.CreateCommand();
             migration.CommandText =
@@ -2028,6 +2043,13 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
                 VALUES (16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
                 """);
+            Execute(
+                connection,
+                null,
+                """
+                INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+                VALUES (17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                """);
         }
     }
 
@@ -2037,7 +2059,8 @@ public sealed class SqliteRunEventStore : IRunEventStore
         command.CommandText =
             """
             SELECT id, name, prompt, target_kind, workspace_id, model, thinking_level,
-                   permission_mode, is_pinned, created_at, updated_at
+                   permission_mode, is_pinned, created_at, updated_at,
+                   origin, source_task_id, source_run_id
             FROM task_templates
             WHERE id = $id;
             """;
@@ -2059,12 +2082,20 @@ public sealed class SqliteRunEventStore : IRunEventStore
         reader.IsDBNull(7) ? null : reader.GetString(7),
         reader.GetInt64(8) != 0,
         DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture),
-        DateTimeOffset.Parse(reader.GetString(10), CultureInfo.InvariantCulture));
+        DateTimeOffset.Parse(reader.GetString(10), CultureInfo.InvariantCulture),
+        ParseTaskTemplateOrigin(reader.GetString(11)),
+        reader.IsDBNull(12) ? null : Guid.Parse(reader.GetString(12)),
+        reader.IsDBNull(13) ? null : Guid.Parse(reader.GetString(13)));
 
     private static TaskTemplateTargetKind ParseTaskTemplateTargetKind(string value) =>
         Enum.TryParse<TaskTemplateTargetKind>(value, out var targetKind) && Enum.IsDefined(targetKind)
             ? targetKind
             : TaskTemplateTargetKind.CurrentContext;
+
+    private static TaskTemplateOrigin ParseTaskTemplateOrigin(string value) =>
+        Enum.TryParse<TaskTemplateOrigin>(value, out var origin) && Enum.IsDefined(origin)
+            ? origin
+            : TaskTemplateOrigin.User;
 
     private static string EnsureWorkspace(
         SqliteConnection connection,

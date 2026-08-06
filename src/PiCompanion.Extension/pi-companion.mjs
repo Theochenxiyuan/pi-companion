@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 
 export const permissionChoices = Object.freeze({
@@ -11,6 +12,7 @@ export const permissionChoices = Object.freeze({
 const pathTools = new Set(["read", "grep", "find", "ls", "edit", "write"]);
 const writeTools = new Set(["edit", "write"]);
 const readOnlyTools = new Set(["read", "grep", "find", "ls", "ask_user", "list_available_skills", "web_search"]);
+const companionMutationTools = new Set(["create_task_template"]);
 const permissionModes = new Set(["read-only", "standard", "full-access"]);
 const sensitiveNames = new Set([".env", ".git", ".npmrc", ".pypirc", "credentials", "id_rsa", "id_ed25519"]);
 
@@ -92,6 +94,25 @@ function pathPermissionFingerprint(value) {
 
 function describePermission(toolName, input, target, workingDirectory, token) {
 	const permissionMarker = `[PI_COMPANION_PERMISSION:${token}]`;
+	if (toolName === "create_task_template") {
+		const name = String(input.name ?? "").trim();
+		const prompt = String(input.prompt ?? "").trim();
+		const target = String(input.targetKind ?? "CurrentContext");
+		const targetLabel = target === "GeneralChat"
+			? "直接对话"
+			: target === "Workspace"
+				? input.workspaceId ? "固定工作区" : "工作区（使用时选择）"
+				: "不指定";
+		const workspace = input.workspaceId ? `（${String(input.workspaceId)}）` : "";
+		const preferences = [
+			`任务环境：${targetLabel}${workspace}`,
+			`模型：${input.model || "不指定"}`,
+			`推理等级：${input.thinkingLevel || "不指定"}`,
+			`权限：${input.permissionMode || "不指定"}`,
+			`固定到首页：${input.isPinned === true ? "是" : "否"}`,
+		].join("\n");
+		return `${permissionMarker}\n创建任务模板\n\n名称：${name}\n${preferences}\n\n完整内容：\n${prompt}`;
+	}
 	if (toolName === "bash") {
 		return `${permissionMarker}\nShell 命令请求\n\n${String(input.command ?? "")}\n\n工作目录：${workingDirectory}`;
 	}
@@ -266,6 +287,9 @@ export function classifyToolCall(
 		return { action: "allow", permissionClass: "skills:list-effective", target: undefined };
 	}
 	if (toolName === "web_search") return { action: "allow", permissionClass: "network:web-search", target: undefined };
+	if (toolName === "create_task_template") {
+		return { action: "ask", permissionClass: "companion:task-template:create", target: undefined };
+	}
 	if (toolName === "publish_artifact") {
 		const target = resolveToolTarget(input.path, workingDirectory);
 		return isPathInsideWorkspace(target, workingDirectory)
@@ -346,6 +370,64 @@ function toolResult(text, isError = false, details = {}) {
 		details,
 		isError,
 	};
+}
+
+function sendAgentCommand(command, signal) {
+	const pipeName = process.env.PI_COMPANION_COMMAND_PIPE || "";
+	if (!pipeName) return Promise.reject(new Error("Pi Companion 命令通道不可用。"));
+	const pipePath = process.platform === "win32" ? `\\\\.\\pipe\\${pipeName}` : pipeName;
+	const payload = Buffer.from(JSON.stringify(command), "utf8");
+	if (payload.length === 0 || payload.length > 256 * 1024) {
+		return Promise.reject(new Error("任务模板请求过大。"));
+	}
+
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		let expectedLength;
+		let received = Buffer.alloc(0);
+		const socket = net.createConnection(pipePath);
+		const finish = (error, value) => {
+			if (settled) return;
+			settled = true;
+			signal?.removeEventListener("abort", abort);
+			socket.destroy();
+			if (error) reject(error);
+			else resolve(value);
+		};
+		const abort = () => finish(new Error("任务模板创建已取消。"));
+		if (signal?.aborted) {
+			abort();
+			return;
+		}
+		signal?.addEventListener("abort", abort, { once: true });
+		socket.setTimeout(10_000, () => finish(new Error("任务模板创建请求超时。")));
+		socket.on("error", error => finish(error));
+		socket.on("connect", () => {
+			const header = Buffer.allocUnsafe(4);
+			header.writeInt32LE(payload.length, 0);
+			socket.write(Buffer.concat([header, payload]));
+		});
+		socket.on("data", chunk => {
+			received = Buffer.concat([received, chunk]);
+			if (expectedLength === undefined && received.length >= 4) {
+				expectedLength = received.readInt32LE(0);
+				if (expectedLength <= 0 || expectedLength > 32 * 1024) {
+					finish(new Error("Pi Companion 命令响应长度无效。"));
+					return;
+				}
+			}
+			if (expectedLength !== undefined && received.length >= expectedLength + 4) {
+				try {
+					finish(undefined, JSON.parse(received.subarray(4, expectedLength + 4).toString("utf8")));
+				} catch (error) {
+					finish(error);
+				}
+			}
+		});
+		socket.on("end", () => {
+			if (!settled) finish(new Error("Pi Companion 命令通道在返回结果前已关闭。"));
+		});
+	});
 }
 
 function skillMetadata(filePath) {
@@ -499,6 +581,62 @@ export default function piCompanionExtension(pi) {
 		});
 	}
 
+	pi.registerTool({
+		name: "create_task_template",
+		label: "创建任务模板",
+		description: "创建一个可复用的 Pi Companion 任务草稿。仅在用户明确要求保存为模板，或用户已经同意 AI 的模板建议时使用。模板不会自动运行；内容必须独立完整，不得包含密钥、附件或临时执行结果。",
+		parameters: {
+			type: "object",
+			properties: {
+				name: { type: "string", minLength: 1, maxLength: 80, description: "简短、可辨认的模板名称" },
+				prompt: { type: "string", minLength: 1, maxLength: 100000, description: "套用模板时填入输入区的完整任务草稿" },
+				targetKind: { type: "string", enum: ["CurrentContext", "Workspace", "GeneralChat"], description: "模板运行位置；通常使用 CurrentContext" },
+				workspaceId: { type: ["string", "null"], description: "仅绑定现有工作区时填写其 GUID，否则传 null" },
+				model: { type: ["string", "null"], description: "指定模型；继承用户设置时传 null" },
+				thinkingLevel: { type: ["string", "null"], enum: [null, "off", "minimal", "low", "medium", "high", "xhigh", "max"], description: "指定推理等级；继承时传 null" },
+				permissionMode: { type: ["string", "null"], enum: [null, "read-only", "standard"], description: "权限偏好；继承时传 null，不能使用完全访问" },
+				isPinned: { type: "boolean", description: "是否固定到新任务首页；除非用户明确要求，否则传 false" },
+			},
+			required: ["name", "prompt", "targetKind", "workspaceId", "model", "thinkingLevel", "permissionMode", "isPinned"],
+			additionalProperties: false,
+		},
+		constrainedSampling: { type: "json_schema", strict: "prefer" },
+		execute: async (toolCallId, params, signal) => {
+			try {
+				const runtimeContext = loadRuntimeContext();
+				if (!runtimeContext.valid || runtimeContext.schemaVersion < 1) {
+					return toolResult("Pi Companion 运行上下文无效，无法创建任务模板。", true);
+				}
+				if (!process.env.PI_COMPANION_COMMAND_PIPE) {
+					return toolResult("当前版本的 Pi Companion 未提供任务模板命令通道。", true);
+				}
+				const response = await sendAgentCommand({
+					type: "createTaskTemplate",
+					requestId: toolCallId,
+					taskId: runtimeContext.taskId,
+					runId: runtimeContext.runId,
+					generation: runtimeContext.generation,
+					permissionToken: runtimeContext.permissionToken,
+					template: params,
+				}, signal);
+				if (!response?.success) {
+					return toolResult(`创建任务模板失败：${response?.error || "未知错误"}`, true);
+				}
+				const status = response.alreadyExisted ? "已存在，无需重复创建" : "已创建";
+				return toolResult(
+					`任务模板“${response.templateName}”${status}。模板只会填入任务草稿，不会自动运行。`,
+					false,
+					{
+						templateId: response.templateId,
+						templateName: response.templateName,
+						alreadyExisted: response.alreadyExisted === true,
+					});
+			} catch (error) {
+				return toolResult(`创建任务模板失败：${error instanceof Error ? error.message : String(error)}`, true);
+			}
+		},
+	});
+
 	pi.on("tool_call", async (event, ctx) => {
 		const runtimeContext = loadRuntimeContext();
 		if (!runtimeContext.valid) {
@@ -528,7 +666,9 @@ export default function piCompanionExtension(pi) {
 		if (runtimeContext.scopeKind === "GeneralChat" && event.toolName === "bash") {
 			return { block: true, reason: "General Chat 的隔离空间不允许执行 Shell 命令。" };
 		}
-		if (runtimeContext.permissionMode === "read-only" && !readOnlyTools.has(event.toolName)) {
+		if (runtimeContext.permissionMode === "read-only" &&
+			!readOnlyTools.has(event.toolName) &&
+			!companionMutationTools.has(event.toolName)) {
 			return { block: true, reason: "Pi Companion 当前使用只读权限模式。" };
 		}
 		if (decision.action === "block" && !fullAccess && !standardOutsideRequest) {
@@ -538,10 +678,11 @@ export default function piCompanionExtension(pi) {
 
 		const standardModeAllowsOverwrite = runtimeContext.permissionMode === "standard" &&
 			decision.permissionClass.startsWith("write:overwrite:");
-		const requiresConfirmation = !fullAccess && (
+		const isCompanionMutation = companionMutationTools.has(event.toolName);
+		const requiresConfirmation = isCompanionMutation || (!fullAccess && (
 			(decision.action === "ask" && !standardModeAllowsOverwrite) ||
-			standardOutsideRequest);
-		if (requiresConfirmation && !taskGrants.has(decision.permissionClass)) {
+			standardOutsideRequest));
+		if (requiresConfirmation && (isCompanionMutation || !taskGrants.has(decision.permissionClass))) {
 			if (!ctx.hasUI) return { block: true, reason: "Pi Companion 无可用授权界面，操作已阻止。" };
 			const selected = await ctx.ui.select(
 				describePermission(
@@ -550,7 +691,9 @@ export default function piCompanionExtension(pi) {
 					decision.target,
 					runtimeContext.workingDirectory,
 					runtimeContext.permissionToken),
-				[permissionChoices.allowOnce, permissionChoices.allowTask, permissionChoices.deny],
+				isCompanionMutation
+					? [permissionChoices.allowOnce, permissionChoices.deny]
+					: [permissionChoices.allowOnce, permissionChoices.allowTask, permissionChoices.deny],
 			);
 			if (selected === permissionChoices.allowTask) {
 				taskGrants.add(decision.permissionClass);

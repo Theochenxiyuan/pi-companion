@@ -75,6 +75,10 @@ public sealed class TaskCoordinator : IDisposable
         }
         _backend.EventReceived += OnEventReceived;
         _backend.ToolExecutionCompleted += OnToolExecutionCompleted;
+        if (_backend is IAgentTaskTemplateCommandSource taskTemplateCommands)
+        {
+            taskTemplateCommands.SetTaskTemplateCreationHandler(CreateTaskTemplateFromAgentAsync);
+        }
         if (_evidenceService is not null)
         {
             _evidenceService.EvidenceChanged += OnEvidenceChanged;
@@ -102,6 +106,8 @@ public sealed class TaskCoordinator : IDisposable
     public event Action<CompanionRunEvent>? RunEventReceived;
 
     public event Action<Guid>? EvidenceChanged;
+
+    public event Action? TaskTemplatesChanged;
 
     public TaskProjection? Current
     {
@@ -319,16 +325,22 @@ public sealed class TaskCoordinator : IDisposable
             throw new InvalidOperationException("模板绑定的工作区不存在或已不可用。");
         }
 
+        TaskTemplate saved;
         if (_eventStore is not null)
         {
-            return _eventStore.UpsertTaskTemplate(normalized);
+            saved = _eventStore.UpsertTaskTemplate(normalized);
+        }
+        else
+        {
+            lock (_gate)
+            {
+                _taskTemplates[normalized.Id] = normalized;
+                saved = normalized;
+            }
         }
 
-        lock (_gate)
-        {
-            _taskTemplates[normalized.Id] = normalized;
-            return normalized;
-        }
+        TaskTemplatesChanged?.Invoke();
+        return saved;
     }
 
     public void DeleteTaskTemplate(Guid templateId)
@@ -336,16 +348,63 @@ public sealed class TaskCoordinator : IDisposable
         if (_eventStore is not null)
         {
             _eventStore.DeleteTaskTemplate(templateId);
-            return;
         }
-
-        lock (_gate)
+        else
         {
-            if (!_taskTemplates.Remove(templateId))
+            lock (_gate)
             {
-                throw new InvalidOperationException("任务模板不存在或已被删除。");
+                if (!_taskTemplates.Remove(templateId))
+                {
+                    throw new InvalidOperationException("任务模板不存在或已被删除。");
+                }
             }
         }
+
+        TaskTemplatesChanged?.Invoke();
+    }
+
+    private ValueTask<AgentTaskTemplateCreationResult> CreateTaskTemplateFromAgentAsync(
+        AgentTaskTemplateCreationRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(request.RequestId))
+        {
+            throw new ArgumentException("AI 任务模板请求 ID 不能为空。", nameof(request));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var candidate = TaskTemplateRules.Normalize(new TaskTemplate(
+            Guid.NewGuid(),
+            request.Name,
+            request.Prompt,
+            request.TargetKind,
+            request.WorkspaceId,
+            request.Model,
+            request.ThinkingLevel,
+            request.PermissionMode,
+            request.IsPinned,
+            now,
+            now,
+            TaskTemplateOrigin.Agent,
+            request.SourceTaskId,
+            request.SourceRunId));
+        var existing = TaskTemplates.FirstOrDefault(template =>
+            string.Equals(template.Name, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(template.Prompt, candidate.Prompt, StringComparison.Ordinal) &&
+            template.TargetKind == candidate.TargetKind &&
+            template.WorkspaceId == candidate.WorkspaceId &&
+            string.Equals(template.Model, candidate.Model, StringComparison.Ordinal) &&
+            string.Equals(template.ThinkingLevel, candidate.ThinkingLevel, StringComparison.Ordinal) &&
+            string.Equals(template.PermissionMode, candidate.PermissionMode, StringComparison.Ordinal) &&
+            template.IsPinned == candidate.IsPinned);
+        if (existing is not null)
+        {
+            return ValueTask.FromResult(new AgentTaskTemplateCreationResult(existing, AlreadyExisted: true));
+        }
+
+        var saved = SaveTaskTemplate(candidate);
+        return ValueTask.FromResult(new AgentTaskTemplateCreationResult(saved, AlreadyExisted: false));
     }
 
     public WorkspaceHistoryEntry CreateWorkspace(string workingDirectory)

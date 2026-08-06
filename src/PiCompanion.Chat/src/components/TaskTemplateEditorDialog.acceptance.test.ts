@@ -57,15 +57,24 @@ describe('TaskTemplateEditorDialog', () => {
     const permissionSelect = wrapper.get('.task-template-permission-field select')
     const modelSelect = wrapper.get('.task-template-model-field select')
     const thinkingSelect = wrapper.get('.task-template-thinking-field select')
-    expect(thinkingSelect.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'off', 'low', 'high'])
+    expect(wrapper.get('.task-template-target-field > span').text()).toBe('任务环境')
+    expect(targetSelect.findAll('option').slice(0, 3).map(option => option.text())).toEqual([
+      '不指定',
+      '工作区（使用时选择）',
+      '直接对话',
+    ])
+    expect(targetSelect.get('optgroup').attributes('label')).toBe('固定工作区')
+    expect([permissionSelect, modelSelect, thinkingSelect].every(select => select.find('option[value=""]').text() === '不指定')).toBe(true)
+    expect(thinkingSelect.attributes('disabled')).toBeDefined()
+    expect(thinkingSelect.findAll('option').map(option => option.attributes('value'))).toEqual([''])
 
     await targetSelect.setValue('Workspace:workspace-1')
     await permissionSelect.setValue('read-only')
-    await thinkingSelect.setValue('high')
     await modelSelect.setValue('model-2')
     await nextTick()
+    expect(thinkingSelect.attributes('disabled')).toBeUndefined()
     expect(thinkingSelect.findAll('option').map(option => option.attributes('value'))).toEqual(['', 'off', 'medium'])
-    expect((thinkingSelect.element as HTMLSelectElement).value).toBe('medium')
+    await thinkingSelect.setValue('medium')
     await wrapper.get('form').trigger('submit')
 
     expect(wrapper.emitted('save')?.[0]?.[0]).toEqual(expect.objectContaining({

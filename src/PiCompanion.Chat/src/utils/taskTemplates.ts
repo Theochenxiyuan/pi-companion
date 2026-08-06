@@ -56,9 +56,9 @@ export function taskTemplateTargetLabel(
   workspaces: WorkspaceHistoryEntry[],
   t: Translate,
 ) {
-  if (template.targetKind === 'CurrentContext') return t('当前上下文')
+  if (template.targetKind === 'CurrentContext') return t('不指定')
   if (template.targetKind === 'GeneralChat') return t('直接对话')
-  if (!template.workspaceId) return t('任意工作区')
+  if (!template.workspaceId) return t('工作区（使用时选择）')
   return workspaces.find(workspace => workspace.id === template.workspaceId)?.name ?? t('工作区不可用')
 }
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PiCompanion.Application.Skills;
@@ -11,7 +12,8 @@ using PiCompanion.Core.Tasks;
 namespace PiCompanion.Application.PiRpc;
 
 public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgentBackendWorkspaceReleaser,
-    IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider, IAgentSessionCommandController, IDisposable
+    IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider, IAgentSessionCommandController,
+    IAgentTaskTemplateCommandSource, IDisposable
 {
     private const int ToolOutputMaximumLength = 24_000;
     private const string OtherChoice = "其他…";
@@ -43,9 +45,12 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     private readonly string _grantDirectory;
     private readonly SkillDiscoveryService? _skillDiscovery;
     private readonly PiProjectTrustService _projectTrust;
+    private readonly AgentCommandPipeServer _agentCommandPipeServer;
     private readonly Timer _warmCleanupTimer;
     private readonly Dictionary<Guid, RunContext> _active = [];
     private readonly List<RunContext> _warm = [];
+    private Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>?
+        _taskTemplateCreationHandler;
     private bool _disposed;
 
     public PiRpcBackend(
@@ -57,7 +62,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         string? grantDirectory = null,
         string? webSearchExtensionPath = null,
         SkillDiscoveryService? skillDiscovery = null,
-        PiProjectTrustService? projectTrust = null)
+        PiProjectTrustService? projectTrust = null,
+        string? agentCommandPipeName = null)
     {
         _runtimeResolver = runtimeResolver ?? throw new ArgumentNullException(nameof(runtimeResolver));
         _sessionDirectory = Path.GetFullPath(sessionDirectory);
@@ -70,6 +76,10 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         _grantDirectory = Path.GetFullPath(grantDirectory ?? Path.Combine(_sessionDirectory, "..", "permission-grants"));
         _skillDiscovery = skillDiscovery;
         _projectTrust = projectTrust ?? new PiProjectTrustService();
+        _agentCommandPipeServer = new AgentCommandPipeServer(
+            HandleAgentCommandAsync,
+            pipeName: agentCommandPipeName);
+        _agentCommandPipeServer.Start();
         _warmCleanupTimer = new Timer(
             _ => RemoveExpiredWarmWorkers(),
             null,
@@ -97,6 +107,22 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     public event Action<CompanionRunEvent>? EventReceived;
 
     public event Action<AgentToolExecution>? ToolExecutionCompleted;
+
+    public void SetTaskTemplateCreationHandler(
+        Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_taskTemplateCreationHandler is not null)
+            {
+                throw new InvalidOperationException("AI 任务模板创建处理器已经注册。");
+            }
+
+            _taskTemplateCreationHandler = handler;
+        }
+    }
 
     public async Task PrepareAsync(
         AgentPreparationRequest request,
@@ -963,6 +989,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             _warm.Clear();
         }
 
+        _agentCommandPipeServer.Dispose();
+
         foreach (var context in active)
         {
             context.ExpectedStop = true;
@@ -1165,6 +1193,124 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             {
             }
         }
+    }
+
+    private async ValueTask<byte[]> HandleAgentCommandAsync(
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        string requestId = string.Empty;
+        try
+        {
+            var command = JsonSerializer.Deserialize<AgentCommandRequestDto>(payload.Span, JsonOptions) ??
+                throw new InvalidDataException("Agent 命令请求无效。");
+            requestId = command.RequestId?.Trim() ?? string.Empty;
+            if (requestId.Length is <= 0 or > 256)
+            {
+                throw new InvalidDataException("Agent 命令请求 ID 无效。");
+            }
+
+            if (!string.Equals(command.Type, "createTaskTemplate", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Agent 命令类型不受支持。");
+            }
+
+            if (command.Template is null)
+            {
+                throw new InvalidDataException("AI 任务模板内容缺失。");
+            }
+
+            RunContext context;
+            Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>
+                handler;
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_active.TryGetValue(command.RunId, out context!) || context.IsTerminal)
+                {
+                    throw new InvalidOperationException("AI 任务模板请求对应的 Run 已不再活动。");
+                }
+
+                if (context.Request.TaskId != command.TaskId ||
+                    context.Request.RunId != command.RunId ||
+                    context.Generation != command.Generation ||
+                    !SecureEquals(context.PermissionToken, command.PermissionToken))
+                {
+                    throw new UnauthorizedAccessException("AI 任务模板请求的运行上下文无效或已过期。");
+                }
+
+                if (context.AgentCommandResponses.TryGetValue(requestId, out var cached))
+                {
+                    return cached;
+                }
+
+                handler = _taskTemplateCreationHandler ??
+                    throw new InvalidOperationException("应用尚未注册 AI 任务模板创建处理器。");
+            }
+
+            if (!Enum.TryParse<TaskTemplateTargetKind>(
+                    command.Template.TargetKind,
+                    ignoreCase: true,
+                    out var targetKind) ||
+                !Enum.IsDefined(targetKind))
+            {
+                throw new InvalidDataException("AI 任务模板运行位置无效。");
+            }
+
+            var result = await handler(
+                new AgentTaskTemplateCreationRequest(
+                    requestId,
+                    context.Request.TaskId,
+                    context.Request.RunId,
+                    command.Template.Name ?? string.Empty,
+                    command.Template.Prompt ?? string.Empty,
+                    targetKind,
+                    command.Template.WorkspaceId,
+                    command.Template.Model,
+                    command.Template.ThinkingLevel,
+                    command.Template.PermissionMode,
+                    command.Template.IsPinned),
+                cancellationToken).ConfigureAwait(false);
+            var response = SerializeAgentCommandResponse(new AgentCommandResponseDto(
+                requestId,
+                Success: true,
+                Error: null,
+                TemplateId: result.Template.Id,
+                TemplateName: result.Template.Name,
+                result.AlreadyExisted));
+            context.AgentCommandResponses.TryAdd(requestId, response);
+            return response;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return SerializeAgentCommandResponse(new AgentCommandResponseDto(
+                requestId,
+                Success: false,
+                Error: exception.Message.Length <= 800 ? exception.Message : exception.Message[..800],
+                TemplateId: null,
+                TemplateName: null,
+                AlreadyExisted: false));
+        }
+    }
+
+    private static byte[] SerializeAgentCommandResponse(AgentCommandResponseDto response) =>
+        JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
+
+    private static bool SecureEquals(string expected, string? actual)
+    {
+        if (actual is null)
+        {
+            return false;
+        }
+
+        var expectedBytes = Encoding.UTF8.GetBytes(expected);
+        var actualBytes = Encoding.UTF8.GetBytes(actual);
+        return expectedBytes.Length == actualBytes.Length &&
+            CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
     }
 
     private SkillReadAccess ResolveSkillReadAccess(AgentRunRequest request)
@@ -1461,6 +1607,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         startInfo.Environment["PI_COMPANION_RUN_ID"] = request.RunId.ToString("D");
         startInfo.Environment["PI_COMPANION_RUN_ID_FILE"] = runIdentityPath;
         startInfo.Environment["PI_COMPANION_CONTEXT_FILE"] = runtimeContextPath;
+        startInfo.Environment["PI_COMPANION_COMMAND_PIPE"] = _agentCommandPipeServer.PipeName;
         startInfo.Environment["PI_COMPANION_PERMISSION_TOKEN"] = permissionToken;
         startInfo.Environment["PI_COMPANION_PERMISSION_MODE"] = permissionMode;
         startInfo.Environment["PI_COMPANION_SCOPE_KIND"] = request.ScopeKind.ToString();
@@ -1497,8 +1644,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         }
         startInfo.ArgumentList.Add("--tools");
         var tools = request.ScopeKind == TaskScopeKind.GeneralChat
-            ? "read,grep,find,ls,edit,write,ask_user,list_available_skills,publish_artifact"
-            : "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills";
+            ? "read,grep,find,ls,edit,write,ask_user,list_available_skills,publish_artifact,create_task_template"
+            : "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template";
         startInfo.ArgumentList.Add(enableWebSearch ? $"{tools},web_search" : tools);
         startInfo.ArgumentList.Add("--no-extensions");
         startInfo.ArgumentList.Add("--extension");
@@ -1510,8 +1657,11 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         }
         startInfo.ArgumentList.Add("--no-prompt-templates");
         startInfo.ArgumentList.Add("--append-system-prompt");
+        const string taskTemplateSystemPrompt =
+            " 用户明确要求把内容保存为任务模板，或已经同意你的模板建议时，使用 create_task_template；模板内容必须是独立完整的任务草稿，不得包含密钥、附件或临时执行结果。工具未成功返回前不得声称模板已经创建。";
         var workspaceSystemPrompt =
-            "Pi Companion 会在工具执行前实施工作目录和用户授权策略。需要用户作出选择或补充信息时，必须调用 ask_user；不要自行猜测用户答案。被拒绝或阻止的操作不得换用其他工具绕过。";
+            "Pi Companion 会在工具执行前实施工作目录和用户授权策略。需要用户作出选择或补充信息时，必须调用 ask_user；不要自行猜测用户答案。被拒绝或阻止的操作不得换用其他工具绕过。" +
+            taskTemplateSystemPrompt;
         if (request.ScopeKind == TaskScopeKind.Workspace &&
             !string.Equals(workspaceTrustStatus, "trusted", StringComparison.Ordinal))
         {
@@ -1520,7 +1670,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         }
         startInfo.ArgumentList.Add(
             request.ScopeKind == TaskScopeKind.GeneralChat
-                ? "这是 General Chat。当前目录是 Pi Companion 管理的隔离工作区，不是用户项目目录。你只能读取当前目录和提示中列出的只读附件，只能在当前目录创建或修改文件。用户要求生成文件时，先在当前目录完成文件，再调用 publish_artifact 返回最终文件；未成功调用 publish_artifact 时不得声称文件已经交付。不要向用户展示内部路径。Shell 在 General Chat 中不可用。需要用户作出选择或补充信息时，必须调用 ask_user；被拒绝或阻止的操作不得换用其他工具绕过。"
+                ? "这是 General Chat。当前目录是 Pi Companion 管理的隔离工作区，不是用户项目目录。你只能读取当前目录和提示中列出的只读附件，只能在当前目录创建或修改文件。用户要求生成文件时，先在当前目录完成文件，再调用 publish_artifact 返回最终文件；未成功调用 publish_artifact 时不得声称文件已经交付。不要向用户展示内部路径。Shell 在 General Chat 中不可用。需要用户作出选择或补充信息时，必须调用 ask_user；被拒绝或阻止的操作不得换用其他工具绕过。" +
+                    taskTemplateSystemPrompt
                 : workspaceSystemPrompt);
 
         var thinking = NormalizeThinkingLevel(request.ThinkingLevel);
@@ -3247,6 +3398,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         public SemaphoreSlim WriteLock { get; } = new(1, 1);
         public ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> PendingResponses { get; } = new();
         public ConcurrentDictionary<string, ToolStart> ToolStarts { get; } = new(StringComparer.Ordinal);
+        public ConcurrentDictionary<string, byte[]> AgentCommandResponses { get; } = new(StringComparer.Ordinal);
         public TaskCompletionSource Completion { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? StdoutTask { get; set; }
         public Task? StderrTask { get; set; }
@@ -3306,6 +3458,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             Completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             PendingResponses.Clear();
             ToolStarts.Clear();
+            AgentCommandResponses.Clear();
             lock (InteractionGate)
             {
                 PendingInteractions.Clear();
@@ -3355,6 +3508,33 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         IReadOnlyList<string> SkillReadOnlyFiles,
         string ScopeKind,
         string WorkspaceTrustStatus);
+
+    private sealed record AgentCommandRequestDto(
+        string? Type,
+        string? RequestId,
+        Guid TaskId,
+        Guid RunId,
+        long Generation,
+        string? PermissionToken,
+        AgentTaskTemplatePayloadDto? Template);
+
+    private sealed record AgentTaskTemplatePayloadDto(
+        string? Name,
+        string? Prompt,
+        string? TargetKind,
+        Guid? WorkspaceId,
+        string? Model,
+        string? ThinkingLevel,
+        string? PermissionMode,
+        bool IsPinned);
+
+    private sealed record AgentCommandResponseDto(
+        string RequestId,
+        bool Success,
+        string? Error,
+        Guid? TemplateId,
+        string? TemplateName,
+        bool AlreadyExisted);
 
     private sealed record SkillReadAccess(
         IReadOnlyList<string> Roots,
