@@ -642,7 +642,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
               >{{ t(summaryExpanded ? '收起' : '展开') }}</UiButton>
             </div>
             <div v-else-if="summaryGenerating" class="run-summary-content run-summary-loading" role="status">
-              <span class="file-loading-spinner" aria-hidden="true"></span>
+              <span class="ui-spinner file-loading-spinner" aria-hidden="true"></span>
               <span>{{ t('正在生成 AI 总结') }}</span>
             </div>
             <UiButton

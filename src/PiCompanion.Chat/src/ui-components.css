@@ -11,6 +11,16 @@
   white-space: nowrap;
 }
 
+.surface-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 9px;
+  background: var(--color-bg-surface);
+}
+
+.surface-card--sm { border-radius: var(--radius-md); }
+.surface-card--lg { border-radius: var(--radius-lg); }
+.surface-card--muted { background: var(--color-tone-2); }
+
 .ui-button,
 .ui-input,
 .ui-textarea,
@@ -28,7 +38,12 @@
 
 .ui-button {
   appearance: none;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  background: transparent;
   color: inherit;
+  font: inherit;
+  line-height: var(--line-height-control);
 }
 
 .ui-button:not(:disabled) { cursor: pointer; }
@@ -93,14 +108,30 @@
   border-radius: var(--radius-md);
 }
 
+.ui-button-spinner,
+.ui-spinner {
+  display: inline-block;
+  flex: none;
+  border-style: solid;
+  border-radius: 50%;
+  animation: ui-spin 700ms linear infinite;
+}
+
 .ui-button-spinner {
   width: 1em;
   height: 1em;
-  flex: none;
-  border: 2px solid currentColor;
+  border-width: 2px;
+  border-color: currentColor;
   border-right-color: transparent;
-  border-radius: 50%;
-  animation: ui-spin var(--motion-duration-slow) linear infinite;
+  animation-duration: var(--motion-duration-slow);
+}
+
+.ui-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  border-color: var(--color-border-default);
+  border-top-color: var(--color-text-secondary);
 }
 
 .ui-dialog-layer {
@@ -171,6 +202,15 @@
 .ui-switch[data-state="checked"] {
   border-color: var(--color-text-primary);
   background: var(--color-text-primary);
+}
+
+.ui-switch:not(:disabled):hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-tone-6);
+}
+
+.ui-switch[data-state="checked"]:not(:disabled):hover {
+  background: var(--color-tone-13);
 }
 
 .ui-switch[data-state="checked"] .ui-switch-thumb {

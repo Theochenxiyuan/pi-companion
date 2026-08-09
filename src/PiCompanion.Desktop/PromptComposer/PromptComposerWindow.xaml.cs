@@ -59,7 +59,7 @@ public partial class PromptComposerWindow : Window
         Action showMonitor)
     {
         InitializeComponent();
-        Icon = PiAppIcon.WindowIcon;
+        PiAppIcon.ApplyTo(this);
         ModelComboBox.ItemsSource = _modelChoices;
         _modelView = CollectionViewSource.GetDefaultView(_modelChoices);
         _modelView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ModelChoice.ProviderName)));

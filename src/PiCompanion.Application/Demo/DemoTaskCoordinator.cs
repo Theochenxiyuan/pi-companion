@@ -40,6 +40,7 @@ public sealed class TaskCoordinator : IDisposable
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, InMemoryWorkspacePresentation> _workspacePresentations = [];
     private readonly Dictionary<Guid, TaskTemplate> _taskTemplates = [];
+    private readonly Dictionary<Guid, ScheduledTask> _scheduledTasks = [];
     private readonly HashSet<string> _hiddenWorkspaceDirectories = new(StringComparer.OrdinalIgnoreCase);
     private TaskProjection? _current;
     private List<TaskProjection> _conversation = [];
@@ -75,9 +76,13 @@ public sealed class TaskCoordinator : IDisposable
         }
         _backend.EventReceived += OnEventReceived;
         _backend.ToolExecutionCompleted += OnToolExecutionCompleted;
-        if (_backend is IAgentTaskTemplateCommandSource taskTemplateCommands)
+        if (_backend is IAgentCompanionCommandSource companionCommands)
         {
-            taskTemplateCommands.SetTaskTemplateCreationHandler(CreateTaskTemplateFromAgentAsync);
+            companionCommands.SetTaskTemplateListHandler(ListTaskTemplatesForAgentAsync);
+            companionCommands.SetTaskTemplateGetHandler(GetTaskTemplateForAgentAsync);
+            companionCommands.SetTaskTemplateCreationHandler(CreateTaskTemplateFromAgentAsync);
+            companionCommands.SetScheduledTaskListHandler(ListScheduledTasksForAgentAsync);
+            companionCommands.SetScheduledTaskCreationHandler(CreateScheduledTaskFromAgentAsync);
         }
         if (_evidenceService is not null)
         {
@@ -108,6 +113,8 @@ public sealed class TaskCoordinator : IDisposable
     public event Action<Guid>? EvidenceChanged;
 
     public event Action? TaskTemplatesChanged;
+
+    public event Action? ScheduledTasksChanged;
 
     public TaskProjection? Current
     {
@@ -353,6 +360,11 @@ public sealed class TaskCoordinator : IDisposable
         {
             lock (_gate)
             {
+                if (_scheduledTasks.Values.Any(task => task.TemplateId == templateId))
+                {
+                    throw new InvalidOperationException("该模板仍被定时任务关联，请先解除关联或删除对应定时任务。");
+                }
+
                 if (!_taskTemplates.Remove(templateId))
                 {
                     throw new InvalidOperationException("任务模板不存在或已被删除。");
@@ -362,6 +374,440 @@ public sealed class TaskCoordinator : IDisposable
 
         TaskTemplatesChanged?.Invoke();
     }
+
+    public IReadOnlyList<ScheduledTask> ScheduledTasks
+    {
+        get
+        {
+            if (_eventStore is not null)
+            {
+                return _eventStore.GetScheduledTasks();
+            }
+
+            lock (_gate)
+            {
+                return _scheduledTasks.Values
+                    .OrderByDescending(task => task.IsEnabled)
+                    .ThenBy(task => task.NextRunAt is null)
+                    .ThenBy(task => task.NextRunAt)
+                    .ThenBy(task => task.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+        }
+    }
+
+    public ScheduledTask SaveScheduledTask(ScheduledTask scheduledTask)
+    {
+        var existing = ScheduledTasks.FirstOrDefault(candidate => candidate.Id == scheduledTask.Id);
+        var now = DateTimeOffset.UtcNow;
+        var normalized = ScheduledTaskRules.Normalize(scheduledTask with
+        {
+            CreatedAt = existing?.CreatedAt ?? now,
+            UpdatedAt = now,
+            LastOccurrence = existing?.LastOccurrence,
+        });
+
+        if (normalized.TemplateId is { } templateId)
+        {
+            var template = TaskTemplates.FirstOrDefault(candidate => candidate.Id == templateId)
+                ?? throw new InvalidOperationException("定时任务关联的模板不存在或已被删除。");
+            if (template.TargetKind == TaskTemplateTargetKind.CurrentContext ||
+                template.TargetKind == TaskTemplateTargetKind.Workspace && template.WorkspaceId is null)
+            {
+                throw new InvalidOperationException("关联模板必须绑定具体工作区或直接对话。");
+            }
+        }
+        else if (normalized.WorkspaceId is { } workspaceId &&
+                 Workspaces.All(workspace => workspace.Id != workspaceId))
+        {
+            throw new InvalidOperationException("定时任务绑定的工作区不存在或已不可用。");
+        }
+
+        DateTimeOffset? nextRunAt = null;
+        if (normalized.IsEnabled)
+        {
+            nextRunAt = ScheduledTaskRecurrence.GetNextOccurrence(normalized, now);
+            if (normalized.Frequency == ScheduledTaskFrequency.Once && nextRunAt is null)
+            {
+                throw new InvalidOperationException("单次定时任务的运行时间必须晚于当前时间。");
+            }
+        }
+
+        normalized = normalized with { NextRunAt = nextRunAt };
+        ScheduledTask saved;
+        if (_eventStore is not null)
+        {
+            saved = _eventStore.UpsertScheduledTask(normalized);
+        }
+        else
+        {
+            lock (_gate)
+            {
+                _scheduledTasks[normalized.Id] = normalized;
+                saved = normalized;
+            }
+        }
+
+        ScheduledTasksChanged?.Invoke();
+        return saved;
+    }
+
+    public void DeleteScheduledTask(Guid scheduledTaskId)
+    {
+        if (_eventStore is not null)
+        {
+            _eventStore.DeleteScheduledTask(scheduledTaskId);
+        }
+        else
+        {
+            lock (_gate)
+            {
+                if (!_scheduledTasks.Remove(scheduledTaskId))
+                {
+                    throw new InvalidOperationException("定时任务不存在或已被删除。");
+                }
+            }
+        }
+
+        ScheduledTasksChanged?.Invoke();
+    }
+
+    public void NotifyScheduledTasksChanged() => ScheduledTasksChanged?.Invoke();
+
+    private ValueTask<IReadOnlyList<AgentTaskTemplateView>> ListTaskTemplatesForAgentAsync(
+        AgentTaskTemplateListRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var query = request.Query?.Trim();
+        var templates = GetVisibleTaskTemplates(request.Context, includePrompt: true)
+            .Where(template => string.IsNullOrWhiteSpace(query) ||
+                template.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                template.Prompt?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+            .Select(template => template with { Prompt = null })
+            .ToArray();
+        return ValueTask.FromResult<IReadOnlyList<AgentTaskTemplateView>>(templates);
+    }
+
+    private ValueTask<AgentTaskTemplateView> GetTaskTemplateForAgentAsync(
+        AgentTaskTemplateGetRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var template = GetVisibleTaskTemplates(request.Context, includePrompt: true)
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, request.TemplateId, StringComparison.OrdinalIgnoreCase)) ??
+            throw new InvalidOperationException("任务模板不存在，或当前任务无权读取该模板。");
+        return ValueTask.FromResult(template);
+    }
+
+    private ValueTask<IReadOnlyList<AgentScheduledTaskView>> ListScheduledTasksForAgentAsync(
+        AgentScheduledTaskListRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var query = request.Query?.Trim();
+        var currentWorkspaceId = ResolveAgentWorkspaceId(request.Context);
+        var templates = TaskTemplates.ToDictionary(template => template.Id);
+        var scheduledTasks = ScheduledTasks
+            .Select(task => CreateAgentScheduledTaskView(task, templates))
+            .Where(task => IsAgentTargetVisible(
+                task.TargetKind,
+                task.WorkspaceId,
+                request.Context.ScopeKind,
+                currentWorkspaceId))
+            .Where(task => request.IsEnabled is null || task.IsEnabled == request.IsEnabled)
+            .Where(task => string.IsNullOrWhiteSpace(query) ||
+                task.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                task.TemplateName?.Contains(query, StringComparison.OrdinalIgnoreCase) == true)
+            .ToArray();
+        return ValueTask.FromResult<IReadOnlyList<AgentScheduledTaskView>>(scheduledTasks);
+    }
+
+    private ValueTask<AgentScheduledTaskCreationResult> CreateScheduledTaskFromAgentAsync(
+        AgentScheduledTaskCreationRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(request.Context.RequestId))
+        {
+            throw new ArgumentException("AI 定时任务请求 ID 不能为空。", nameof(request));
+        }
+
+        var currentWorkspaceId = ResolveAgentWorkspaceId(request.Context);
+        Guid? templateId = null;
+        string? prompt = null;
+        TaskTemplateTargetKind? targetKind = null;
+        Guid? workspaceId = null;
+        string? model = null;
+        string? thinkingLevel = null;
+        string? permissionMode = null;
+        if (!string.IsNullOrWhiteSpace(request.TemplateId))
+        {
+            if (!Guid.TryParse(request.TemplateId, out var parsedTemplateId))
+            {
+                throw new InvalidOperationException(
+                    "内置模板和未固定目标的模板不能直接关联；请先读取模板内容，再创建自定义定时任务。");
+            }
+
+            var template = TaskTemplates.FirstOrDefault(candidate => candidate.Id == parsedTemplateId) ??
+                throw new InvalidOperationException("定时任务关联的模板不存在或已被删除。");
+            if (!IsAgentTargetVisible(
+                    template.TargetKind,
+                    template.WorkspaceId,
+                    request.Context.ScopeKind,
+                    currentWorkspaceId))
+            {
+                throw new InvalidOperationException("当前任务无权关联该任务模板。");
+            }
+
+            if (template.TargetKind == TaskTemplateTargetKind.CurrentContext ||
+                template.TargetKind == TaskTemplateTargetKind.Workspace && template.WorkspaceId is null)
+            {
+                throw new InvalidOperationException(
+                    "只有绑定具体工作区或 Direct Chat 的已保存模板可以关联定时任务。");
+            }
+
+            templateId = template.Id;
+        }
+        else
+        {
+            targetKind = request.TargetKind ?? throw new InvalidOperationException("自定义定时任务必须指定运行位置。");
+            if (targetKind == TaskTemplateTargetKind.Workspace)
+            {
+                if (request.Context.ScopeKind != TaskScopeKind.Workspace || currentWorkspaceId is null)
+                {
+                    throw new InvalidOperationException("当前任务没有可用于定时运行的工作区。");
+                }
+
+                if (request.WorkspaceId is { } requestedWorkspaceId && requestedWorkspaceId != currentWorkspaceId)
+                {
+                    throw new InvalidOperationException("AI 只能为当前工作区创建定时任务。");
+                }
+
+                workspaceId = currentWorkspaceId;
+                permissionMode = request.PermissionMode ?? "read-only";
+            }
+            else if (targetKind == TaskTemplateTargetKind.GeneralChat)
+            {
+                if (request.Context.ScopeKind != TaskScopeKind.GeneralChat)
+                {
+                    throw new InvalidOperationException("AI 只能从 Direct Chat 创建 Direct Chat 定时任务。");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException("定时任务必须固定到当前工作区或 Direct Chat。");
+            }
+
+            prompt = request.Prompt;
+            model = request.Model;
+            thinkingLevel = request.ThinkingLevel;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var candidate = ScheduledTaskRules.Normalize(new ScheduledTask(
+            Guid.NewGuid(),
+            request.Name,
+            request.IsEnabled,
+            templateId,
+            prompt,
+            targetKind,
+            workspaceId,
+            model,
+            thinkingLevel,
+            permissionMode,
+            request.Frequency,
+            request.LocalStartAt,
+            request.DaysOfWeek,
+            request.TimeZoneId,
+            null,
+            now,
+            now));
+        var existing = ScheduledTasks.FirstOrDefault(task =>
+            string.Equals(task.Name, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
+            task.IsEnabled == candidate.IsEnabled &&
+            task.TemplateId == candidate.TemplateId &&
+            string.Equals(task.Prompt, candidate.Prompt, StringComparison.Ordinal) &&
+            task.TargetKind == candidate.TargetKind &&
+            task.WorkspaceId == candidate.WorkspaceId &&
+            string.Equals(task.Model, candidate.Model, StringComparison.Ordinal) &&
+            string.Equals(task.ThinkingLevel, candidate.ThinkingLevel, StringComparison.Ordinal) &&
+            string.Equals(task.PermissionMode, candidate.PermissionMode, StringComparison.Ordinal) &&
+            task.Frequency == candidate.Frequency &&
+            task.LocalStartAt == candidate.LocalStartAt &&
+            task.DaysOfWeek == candidate.DaysOfWeek &&
+            string.Equals(task.TimeZoneId, candidate.TimeZoneId, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            return ValueTask.FromResult(new AgentScheduledTaskCreationResult(existing, AlreadyExisted: true));
+        }
+
+        var saved = SaveScheduledTask(candidate);
+        return ValueTask.FromResult(new AgentScheduledTaskCreationResult(saved, AlreadyExisted: false));
+    }
+
+    private IReadOnlyList<AgentTaskTemplateView> GetVisibleTaskTemplates(
+        AgentCommandContext context,
+        bool includePrompt)
+    {
+        var currentWorkspaceId = ResolveAgentWorkspaceId(context);
+        var templates = new List<AgentTaskTemplateView>();
+        if (context.ScopeKind == TaskScopeKind.Workspace)
+        {
+            templates.AddRange(CreateBuiltInTaskTemplates(context.Language, includePrompt));
+        }
+
+        templates.AddRange(TaskTemplates
+            .Where(template => IsAgentTargetVisible(
+                template.TargetKind,
+                template.WorkspaceId,
+                context.ScopeKind,
+                currentWorkspaceId))
+            .Select(template => new AgentTaskTemplateView(
+                template.Id.ToString(),
+                template.Name,
+                includePrompt ? template.Prompt : null,
+                template.TargetKind,
+                template.WorkspaceId,
+                template.Model,
+                template.ThinkingLevel,
+                template.PermissionMode,
+                template.IsPinned,
+                template.CreatedAt,
+                template.UpdatedAt,
+                IsBuiltIn: false,
+                template.Origin.ToString())));
+        return templates;
+    }
+
+    private Guid? ResolveAgentWorkspaceId(AgentCommandContext context)
+    {
+        if (context.ScopeKind != TaskScopeKind.Workspace || string.IsNullOrWhiteSpace(context.WorkingDirectory))
+        {
+            return null;
+        }
+
+        string workingDirectory;
+        try
+        {
+            workingDirectory = NormalizeWorkspaceDirectory(context.WorkingDirectory);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        return Workspaces.FirstOrDefault(workspace => string.Equals(
+            NormalizeWorkspaceDirectory(workspace.WorkingDirectory),
+            workingDirectory,
+            StringComparison.OrdinalIgnoreCase))?.Id;
+    }
+
+    private static bool IsAgentTargetVisible(
+        TaskTemplateTargetKind targetKind,
+        Guid? workspaceId,
+        TaskScopeKind scopeKind,
+        Guid? currentWorkspaceId) =>
+        targetKind switch
+        {
+            TaskTemplateTargetKind.CurrentContext => true,
+            TaskTemplateTargetKind.GeneralChat => scopeKind == TaskScopeKind.GeneralChat,
+            TaskTemplateTargetKind.Workspace => scopeKind == TaskScopeKind.Workspace &&
+                (workspaceId is null || workspaceId == currentWorkspaceId),
+            _ => false,
+        };
+
+    private static AgentScheduledTaskView CreateAgentScheduledTaskView(
+        ScheduledTask scheduledTask,
+        IReadOnlyDictionary<Guid, TaskTemplate> templates)
+    {
+        TaskTemplate? template = null;
+        if (scheduledTask.TemplateId is { } templateId)
+        {
+            templates.TryGetValue(templateId, out template);
+        }
+
+        var targetKind = template?.TargetKind ?? scheduledTask.TargetKind ?? TaskTemplateTargetKind.CurrentContext;
+        var workspaceId = template?.WorkspaceId ?? scheduledTask.WorkspaceId;
+        return new AgentScheduledTaskView(
+            scheduledTask.Id,
+            scheduledTask.Name,
+            scheduledTask.IsEnabled,
+            scheduledTask.TemplateId,
+            template?.Name,
+            targetKind,
+            workspaceId,
+            scheduledTask.Frequency,
+            scheduledTask.LocalStartAt,
+            GetScheduledDayNames(scheduledTask.DaysOfWeek),
+            scheduledTask.TimeZoneId,
+            scheduledTask.NextRunAt,
+            scheduledTask.UpdatedAt);
+    }
+
+    private static IReadOnlyList<string> GetScheduledDayNames(ScheduledDaysOfWeek value) =>
+        Enum.GetValues<ScheduledDaysOfWeek>()
+            .Where(day => day != ScheduledDaysOfWeek.None && value.HasFlag(day))
+            .Select(day => day.ToString())
+            .ToArray();
+
+    private static IReadOnlyList<AgentTaskTemplateView> CreateBuiltInTaskTemplates(
+        string language,
+        bool includePrompt)
+    {
+        var english = string.Equals(language, "en-US", StringComparison.OrdinalIgnoreCase);
+        var timestamp = DateTimeOffset.UnixEpoch;
+        return
+        [
+            CreateBuiltInTaskTemplate(
+                "builtin:analyze-project",
+                english ? "Analyze project" : "分析工程",
+                english
+                    ? "Inspect this directory structure and summarize the main modules"
+                    : "检查这个目录的工程结构并总结主要模块",
+                includePrompt,
+                timestamp),
+            CreateBuiltInTaskTemplate(
+                "builtin:review-todos",
+                english ? "Review TODOs" : "检查 TODO",
+                english
+                    ? "Find TODOs that may need attention in this project and summarize them"
+                    : "查找这个工程中可能需要关注的 TODO 并给出摘要",
+                includePrompt,
+                timestamp),
+            CreateBuiltInTaskTemplate(
+                "builtin:read-docs",
+                english ? "Read documentation" : "阅读文档",
+                english
+                    ? "Read the README and project documentation and summarize the current implementation"
+                    : "阅读 README 和项目文档，概括当前实现状态",
+                includePrompt,
+                timestamp),
+        ];
+    }
+
+    private static AgentTaskTemplateView CreateBuiltInTaskTemplate(
+        string id,
+        string name,
+        string prompt,
+        bool includePrompt,
+        DateTimeOffset timestamp) =>
+        new(
+            id,
+            name,
+            includePrompt ? prompt : null,
+            TaskTemplateTargetKind.Workspace,
+            null,
+            null,
+            null,
+            "read-only",
+            IsPinned: true,
+            timestamp,
+            timestamp,
+            IsBuiltIn: true,
+            Origin: "BuiltIn");
 
     private ValueTask<AgentTaskTemplateCreationResult> CreateTaskTemplateFromAgentAsync(
         AgentTaskTemplateCreationRequest request,
@@ -559,9 +1005,32 @@ public sealed class TaskCoordinator : IDisposable
             cancellationToken,
             attachments,
             permissionMode,
-            scopeKind);
+            scopeKind,
+            selectTask: true);
 
-    private async Task StartCoreAsync(
+    public Task<TaskProjection> StartBackgroundTaskAsync(
+        string prompt,
+        string? workingDirectory,
+        string model,
+        string thinkingLevel,
+        DemoRunMode mode,
+        CancellationToken cancellationToken = default,
+        string? permissionMode = null,
+        TaskScopeKind scopeKind = TaskScopeKind.Workspace) =>
+        StartCoreAsync(
+            current: null,
+            prompt,
+            workingDirectory,
+            model,
+            thinkingLevel,
+            mode,
+            cancellationToken,
+            attachments: null,
+            permissionMode,
+            scopeKind,
+            selectTask: false);
+
+    private async Task<TaskProjection> StartCoreAsync(
         TaskProjection? current,
         string prompt,
         string? workingDirectory,
@@ -571,7 +1040,8 @@ public sealed class TaskCoordinator : IDisposable
         CancellationToken cancellationToken,
         IReadOnlyList<string>? attachments,
         string? permissionMode,
-        TaskScopeKind scopeKind)
+        TaskScopeKind scopeKind,
+        bool selectTask = true)
     {
         if (current?.Status.IsActive() == true)
         {
@@ -661,7 +1131,7 @@ public sealed class TaskCoordinator : IDisposable
             conversation.Add(projection);
             _taskConversations[taskId] = conversation;
             _latestTasks[taskId] = projection;
-            if (current is null || _current?.TaskId == taskId)
+            if (selectTask && (current is null || _current?.TaskId == taskId))
             {
                 _conversation = conversation;
                 _current = projection;
@@ -713,6 +1183,8 @@ public sealed class TaskCoordinator : IDisposable
                 },
                 "pi-companion-startup-v1"));
         }
+
+        return projection;
     }
 
     private async Task ScheduleRunAsync(

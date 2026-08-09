@@ -15,6 +15,8 @@ import type {
   TaskSnapshot,
   TaskTemplate,
   TaskTemplatesUpdated,
+  ScheduledTask,
+  ScheduledTasksUpdated,
   TranscriptBlock,
   WorkspaceHistoryEntry,
   WorkspaceGitCommitDiff,
@@ -28,6 +30,7 @@ interface TaskState {
   currentTask: TaskSnapshot | null
   workspaces: WorkspaceHistoryEntry[]
   taskTemplates: TaskTemplate[]
+  scheduledTasks: ScheduledTask[]
   recentTasks: TaskHistoryEntry[]
   historyTasks: TaskHistoryEntry[]
   recycleBinTasks: TaskHistoryEntry[]
@@ -125,6 +128,7 @@ export const useTaskStore = defineStore('task', {
     currentTask: null,
     workspaces: [],
     taskTemplates: [],
+    scheduledTasks: [],
     recentTasks: [],
     historyTasks: [],
     recycleBinTasks: [],
@@ -158,6 +162,7 @@ export const useTaskStore = defineStore('task', {
           this.currentTask = snapshot.currentTask
           this.workspaces = snapshot.workspaces ?? []
           this.taskTemplates = snapshot.taskTemplates ?? []
+          this.scheduledTasks = snapshot.scheduledTasks ?? []
           this.recentTasks = sortTasksByActivity(snapshot.recentTasks)
           this.historyTasks = sortTasksByActivity(snapshot.historyTasks)
           this.recycleBinTasks = snapshot.recycleBinTasks
@@ -172,6 +177,10 @@ export const useTaskStore = defineStore('task', {
         }
         case 'TaskTemplatesUpdated':
           this.taskTemplates = (message.payload as TaskTemplatesUpdated).taskTemplates
+          this.bridgeError = null
+          break
+        case 'ScheduledTasksUpdated':
+          this.scheduledTasks = (message.payload as ScheduledTasksUpdated).scheduledTasks
           this.bridgeError = null
           break
         case 'TaskUpdated': {

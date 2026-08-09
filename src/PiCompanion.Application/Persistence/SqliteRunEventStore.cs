@@ -575,6 +575,16 @@ public sealed class SqliteRunEventStore : IRunEventStore
         lock (_gate)
         {
             using var connection = OpenConnection();
+            using (var linked = connection.CreateCommand())
+            {
+                linked.CommandText = "SELECT COUNT(*) FROM scheduled_tasks WHERE template_id = $id;";
+                linked.Parameters.AddWithValue("$id", templateId.ToString("D"));
+                if (Convert.ToInt32(linked.ExecuteScalar(), CultureInfo.InvariantCulture) > 0)
+                {
+                    throw new InvalidOperationException("该模板仍被定时任务关联，请先解除关联或删除对应定时任务。");
+                }
+            }
+
             using var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM task_templates WHERE id = $id;";
             command.Parameters.AddWithValue("$id", templateId.ToString("D"));
@@ -582,6 +592,274 @@ public sealed class SqliteRunEventStore : IRunEventStore
             {
                 throw new InvalidOperationException("任务模板不存在或已被删除。");
             }
+        }
+    }
+
+    public IReadOnlyList<ScheduledTask> GetScheduledTasks()
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                SELECT s.id, s.name, s.is_enabled, s.template_id, s.prompt, s.target_kind,
+                       s.workspace_id, s.model, s.thinking_level, s.permission_mode,
+                       s.frequency, s.local_start_at, s.days_of_week, s.time_zone_id,
+                       s.next_run_at, s.created_at, s.updated_at,
+                       o.id, o.scheduled_for, o.status, o.task_id, o.run_id, o.error,
+                       o.resolved_draft_json, o.created_at, o.updated_at
+                FROM scheduled_tasks s
+                LEFT JOIN scheduled_task_occurrences o ON o.id = (
+                    SELECT latest.id
+                    FROM scheduled_task_occurrences latest
+                    WHERE latest.scheduled_task_id = s.id
+                    ORDER BY julianday(latest.created_at) DESC, latest.created_at DESC, latest.id DESC
+                    LIMIT 1
+                )
+                ORDER BY s.is_enabled DESC,
+                         CASE WHEN s.next_run_at IS NULL THEN 1 ELSE 0 END,
+                         julianday(s.next_run_at), s.next_run_at,
+                         s.name COLLATE NOCASE;
+                """;
+            using var reader = command.ExecuteReader();
+            var scheduledTasks = new List<ScheduledTask>();
+            while (reader.Read())
+            {
+                scheduledTasks.Add(ReadScheduledTask(reader));
+            }
+
+            return scheduledTasks;
+        }
+    }
+
+    public ScheduledTask UpsertScheduledTask(ScheduledTask scheduledTask)
+    {
+        var normalized = ScheduledTaskRules.Normalize(scheduledTask);
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            if (normalized.TemplateId is { } templateId)
+            {
+                using var template = connection.CreateCommand();
+                template.CommandText = "SELECT 1 FROM task_templates WHERE id = $id;";
+                template.Parameters.AddWithValue("$id", templateId.ToString("D"));
+                if (template.ExecuteScalar() is null)
+                {
+                    throw new InvalidOperationException("定时任务关联的模板不存在或已被删除。");
+                }
+            }
+
+            if (normalized.WorkspaceId is { } workspaceId)
+            {
+                using var workspace = connection.CreateCommand();
+                workspace.CommandText = "SELECT 1 FROM workspaces WHERE id = $id AND hidden_at IS NULL;";
+                workspace.Parameters.AddWithValue("$id", workspaceId.ToString("D"));
+                if (workspace.ExecuteScalar() is null)
+                {
+                    throw new InvalidOperationException("定时任务绑定的工作区不存在或已不可用。");
+                }
+            }
+
+            Execute(
+                connection,
+                null,
+                """
+                INSERT INTO scheduled_tasks (
+                    id, name, is_enabled, template_id, prompt, target_kind, workspace_id,
+                    model, thinking_level, permission_mode, frequency, local_start_at,
+                    days_of_week, time_zone_id, next_run_at, created_at, updated_at)
+                VALUES (
+                    $id, $name, $isEnabled, $templateId, $prompt, $targetKind, $workspaceId,
+                    $model, $thinkingLevel, $permissionMode, $frequency, $localStartAt,
+                    $daysOfWeek, $timeZoneId, $nextRunAt, $createdAt, $updatedAt)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    is_enabled = excluded.is_enabled,
+                    template_id = excluded.template_id,
+                    prompt = excluded.prompt,
+                    target_kind = excluded.target_kind,
+                    workspace_id = excluded.workspace_id,
+                    model = excluded.model,
+                    thinking_level = excluded.thinking_level,
+                    permission_mode = excluded.permission_mode,
+                    frequency = excluded.frequency,
+                    local_start_at = excluded.local_start_at,
+                    days_of_week = excluded.days_of_week,
+                    time_zone_id = excluded.time_zone_id,
+                    next_run_at = excluded.next_run_at,
+                    updated_at = excluded.updated_at;
+                """,
+                ("$id", normalized.Id.ToString("D")),
+                ("$name", normalized.Name),
+                ("$isEnabled", normalized.IsEnabled ? 1 : 0),
+                ("$templateId", normalized.TemplateId?.ToString("D")),
+                ("$prompt", normalized.Prompt),
+                ("$targetKind", normalized.TargetKind?.ToString()),
+                ("$workspaceId", normalized.WorkspaceId?.ToString("D")),
+                ("$model", normalized.Model),
+                ("$thinkingLevel", normalized.ThinkingLevel),
+                ("$permissionMode", normalized.PermissionMode),
+                ("$frequency", normalized.Frequency.ToString()),
+                ("$localStartAt", normalized.LocalStartAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$daysOfWeek", (int)normalized.DaysOfWeek),
+                ("$timeZoneId", normalized.TimeZoneId),
+                ("$nextRunAt", normalized.NextRunAt?.ToString("O", CultureInfo.InvariantCulture)),
+                ("$createdAt", normalized.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$updatedAt", normalized.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)));
+            return GetScheduledTask(connection, normalized.Id);
+        }
+    }
+
+    public void DeleteScheduledTask(Guid scheduledTaskId)
+    {
+        if (scheduledTaskId == Guid.Empty)
+        {
+            throw new ArgumentException("定时任务 ID 无效。", nameof(scheduledTaskId));
+        }
+
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM scheduled_tasks WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", scheduledTaskId.ToString("D"));
+            if (command.ExecuteNonQuery() == 0)
+            {
+                throw new InvalidOperationException("定时任务不存在或已被删除。");
+            }
+        }
+    }
+
+    public bool HasActiveScheduledTaskOccurrence(Guid scheduledTaskId)
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                SELECT 1
+                FROM scheduled_task_occurrences o
+                JOIN runs r ON r.id = o.run_id
+                WHERE o.scheduled_task_id = $id
+                  AND r.status IN ('Queued', 'Starting', 'Running', 'WaitingForApproval', 'WaitingForAnswer', 'Cancelling')
+                LIMIT 1;
+                """;
+            command.Parameters.AddWithValue("$id", scheduledTaskId.ToString("D"));
+            return command.ExecuteScalar() is not null;
+        }
+    }
+
+    public ScheduledTaskOccurrence? BeginScheduledTaskOccurrence(
+        ScheduledTaskOccurrence occurrence,
+        DateTimeOffset? nextRunAt,
+        bool disableSchedule,
+        bool advanceSchedule)
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            using var transaction = connection.BeginTransaction();
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText =
+                """
+                INSERT OR IGNORE INTO scheduled_task_occurrences (
+                    id, scheduled_task_id, scheduled_for, status, task_id, run_id, error,
+                    resolved_draft_json, created_at, updated_at)
+                VALUES (
+                    $id, $scheduledTaskId, $scheduledFor, $status, $taskId, $runId, $error,
+                    $resolvedDraftJson, $createdAt, $updatedAt);
+                """;
+            AddParameters(
+                insert,
+                ("$id", occurrence.Id.ToString("D")),
+                ("$scheduledTaskId", occurrence.ScheduledTaskId.ToString("D")),
+                ("$scheduledFor", occurrence.ScheduledFor.ToString("O", CultureInfo.InvariantCulture)),
+                ("$status", occurrence.Status.ToString()),
+                ("$taskId", occurrence.TaskId?.ToString("D")),
+                ("$runId", occurrence.RunId?.ToString("D")),
+                ("$error", occurrence.Error),
+                ("$resolvedDraftJson", occurrence.ResolvedDraftJson),
+                ("$createdAt", occurrence.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                ("$updatedAt", occurrence.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)));
+            if (insert.ExecuteNonQuery() == 0)
+            {
+                transaction.Rollback();
+                return null;
+            }
+
+            if (advanceSchedule)
+            {
+                Execute(
+                    connection,
+                    transaction,
+                    """
+                    UPDATE scheduled_tasks
+                    SET next_run_at = $nextRunAt,
+                        is_enabled = CASE WHEN $disableSchedule = 1 THEN 0 ELSE is_enabled END,
+                        updated_at = $updatedAt
+                    WHERE id = $id;
+                    """,
+                    ("$nextRunAt", nextRunAt?.ToString("O", CultureInfo.InvariantCulture)),
+                    ("$disableSchedule", disableSchedule ? 1 : 0),
+                    ("$updatedAt", occurrence.UpdatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                    ("$id", occurrence.ScheduledTaskId.ToString("D")));
+            }
+
+            transaction.Commit();
+            return occurrence;
+        }
+    }
+
+    public void CompleteScheduledTaskOccurrence(
+        Guid occurrenceId,
+        ScheduledTaskOccurrenceStatus status,
+        Guid? taskId,
+        Guid? runId,
+        string? error)
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            Execute(
+                connection,
+                null,
+                """
+                UPDATE scheduled_task_occurrences
+                SET status = $status,
+                    task_id = $taskId,
+                    run_id = $runId,
+                    error = $error,
+                    updated_at = $updatedAt
+                WHERE id = $id;
+                """,
+                ("$status", status.ToString()),
+                ("$taskId", taskId?.ToString("D")),
+                ("$runId", runId?.ToString("D")),
+                ("$error", error),
+                ("$updatedAt", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
+                ("$id", occurrenceId.ToString("D")));
+        }
+    }
+
+    public void RecoverDispatchingScheduledTaskOccurrences()
+    {
+        lock (_gate)
+        {
+            using var connection = OpenConnection();
+            Execute(
+                connection,
+                null,
+                """
+                UPDATE scheduled_task_occurrences
+                SET status = 'Failed',
+                    error = COALESCE(error, '应用在创建任务时退出。'),
+                    updated_at = $updatedAt
+                WHERE status = 'Dispatching';
+                """,
+                ("$updatedAt", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)));
         }
     }
 
@@ -1822,6 +2100,42 @@ public sealed class SqliteRunEventStore : IRunEventStore
                     source_task_id TEXT NULL,
                     source_run_id TEXT NULL
                 );
+                CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    template_id TEXT NULL REFERENCES task_templates(id) ON DELETE RESTRICT,
+                    prompt TEXT NULL,
+                    target_kind TEXT NULL,
+                    workspace_id TEXT NULL REFERENCES workspaces(id),
+                    model TEXT NULL,
+                    thinking_level TEXT NULL,
+                    permission_mode TEXT NULL,
+                    frequency TEXT NOT NULL,
+                    local_start_at TEXT NOT NULL,
+                    days_of_week INTEGER NOT NULL DEFAULT 0,
+                    time_zone_id TEXT NOT NULL,
+                    next_run_at TEXT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_scheduled_tasks_due
+                    ON scheduled_tasks(is_enabled, next_run_at);
+                CREATE TABLE IF NOT EXISTS scheduled_task_occurrences (
+                    id TEXT PRIMARY KEY,
+                    scheduled_task_id TEXT NOT NULL REFERENCES scheduled_tasks(id) ON DELETE CASCADE,
+                    scheduled_for TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    task_id TEXT NULL REFERENCES tasks(id) ON DELETE SET NULL,
+                    run_id TEXT NULL REFERENCES runs(id) ON DELETE SET NULL,
+                    error TEXT NULL,
+                    resolved_draft_json TEXT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(scheduled_task_id, scheduled_for)
+                );
+                CREATE INDEX IF NOT EXISTS ix_scheduled_occurrences_schedule
+                    ON scheduled_task_occurrences(scheduled_task_id, created_at DESC);
                 CREATE TABLE IF NOT EXISTS recycle_bin (task_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL, data_json TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS session_statistics_cache (
                     task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
@@ -2050,7 +2364,85 @@ public sealed class SqliteRunEventStore : IRunEventStore
                 INSERT OR IGNORE INTO schema_migrations (version, applied_at)
                 VALUES (17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
                 """);
+            Execute(
+                connection,
+                null,
+                """
+                INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+                VALUES (18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                """);
         }
+    }
+
+    private static ScheduledTask GetScheduledTask(SqliteConnection connection, Guid scheduledTaskId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT s.id, s.name, s.is_enabled, s.template_id, s.prompt, s.target_kind,
+                   s.workspace_id, s.model, s.thinking_level, s.permission_mode,
+                   s.frequency, s.local_start_at, s.days_of_week, s.time_zone_id,
+                   s.next_run_at, s.created_at, s.updated_at,
+                   o.id, o.scheduled_for, o.status, o.task_id, o.run_id, o.error,
+                   o.resolved_draft_json, o.created_at, o.updated_at
+            FROM scheduled_tasks s
+            LEFT JOIN scheduled_task_occurrences o ON o.id = (
+                SELECT latest.id
+                FROM scheduled_task_occurrences latest
+                WHERE latest.scheduled_task_id = s.id
+                ORDER BY julianday(latest.created_at) DESC, latest.created_at DESC, latest.id DESC
+                LIMIT 1
+            )
+            WHERE s.id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", scheduledTaskId.ToString("D"));
+        using var reader = command.ExecuteReader();
+        return reader.Read()
+            ? ReadScheduledTask(reader)
+            : throw new InvalidOperationException("定时任务不存在或已被删除。");
+    }
+
+    private static ScheduledTask ReadScheduledTask(SqliteDataReader reader)
+    {
+        ScheduledTaskOccurrence? lastOccurrence = null;
+        if (!reader.IsDBNull(17))
+        {
+            lastOccurrence = new ScheduledTaskOccurrence(
+                Guid.Parse(reader.GetString(17)),
+                Guid.Parse(reader.GetString(0)),
+                DateTimeOffset.Parse(reader.GetString(18), CultureInfo.InvariantCulture),
+                Enum.TryParse<ScheduledTaskOccurrenceStatus>(reader.GetString(19), out var status)
+                    ? status
+                    : ScheduledTaskOccurrenceStatus.Failed,
+                reader.IsDBNull(20) ? null : Guid.Parse(reader.GetString(20)),
+                reader.IsDBNull(21) ? null : Guid.Parse(reader.GetString(21)),
+                reader.IsDBNull(22) ? null : reader.GetString(22),
+                reader.IsDBNull(23) ? null : reader.GetString(23),
+                DateTimeOffset.Parse(reader.GetString(24), CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse(reader.GetString(25), CultureInfo.InvariantCulture));
+        }
+
+        return new ScheduledTask(
+            Guid.Parse(reader.GetString(0)),
+            reader.GetString(1),
+            reader.GetInt64(2) != 0,
+            reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.IsDBNull(5) ? null : ParseOptionalTaskTemplateTargetKind(reader.GetString(5)),
+            reader.IsDBNull(6) ? null : Guid.Parse(reader.GetString(6)),
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            Enum.TryParse<ScheduledTaskFrequency>(reader.GetString(10), out var frequency)
+                ? frequency
+                : ScheduledTaskFrequency.Once,
+            DateTime.Parse(reader.GetString(11), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            (ScheduledDaysOfWeek)reader.GetInt32(12),
+            reader.GetString(13),
+            reader.IsDBNull(14) ? null : DateTimeOffset.Parse(reader.GetString(14), CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse(reader.GetString(15), CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse(reader.GetString(16), CultureInfo.InvariantCulture),
+            lastOccurrence);
     }
 
     private static TaskTemplate ReadTaskTemplate(SqliteConnection connection, Guid templateId)
@@ -2091,6 +2483,11 @@ public sealed class SqliteRunEventStore : IRunEventStore
         Enum.TryParse<TaskTemplateTargetKind>(value, out var targetKind) && Enum.IsDefined(targetKind)
             ? targetKind
             : TaskTemplateTargetKind.CurrentContext;
+
+    private static TaskTemplateTargetKind? ParseOptionalTaskTemplateTargetKind(string value) =>
+        Enum.TryParse<TaskTemplateTargetKind>(value, out var targetKind) && Enum.IsDefined(targetKind)
+            ? targetKind
+            : null;
 
     private static TaskTemplateOrigin ParseTaskTemplateOrigin(string value) =>
         Enum.TryParse<TaskTemplateOrigin>(value, out var origin) && Enum.IsDefined(origin)

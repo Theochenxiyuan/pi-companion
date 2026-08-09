@@ -16,6 +16,7 @@
 ## 当前实现进展
 
 - [`stage-8-progress.md`](stage-8-progress.md)：直接对话、Provider 原生 Web Search 与本地 Git 写入。
+- [`stage-9-scheduled-tasks-progress.md`](stage-9-scheduled-tasks-progress.md)：定时任务定义、模板关联、后台调度与 occurrence 审计。
 - [`stage-10-progress.md`](stage-10-progress.md)：多任务并发、工作区实体和 Monitor 任务切换。
 
 ## 历史交付快照

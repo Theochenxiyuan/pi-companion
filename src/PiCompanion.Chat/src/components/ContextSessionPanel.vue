@@ -94,7 +94,7 @@ function formatCost(value: number) {
     </div>
 
     <div v-else class="context-session-content">
-      <section class="context-pressure-card" :class="pressureTone">
+      <section class="surface-card context-pressure-card" :class="pressureTone">
         <header>
           <span>{{ t('上下文压力') }}</span>
           <strong>{{ formatNumber(contextTokens) }} / {{ formatNumber(contextWindow || null) }}</strong>
@@ -110,7 +110,7 @@ function formatCost(value: number) {
       </section>
 
       <div v-if="!matchingUpdate" class="context-session-status">
-        <span class="context-session-spinner"></span>
+        <span class="ui-spinner context-session-spinner"></span>
         {{ t('正在读取 Session 统计…') }}
       </div>
 
@@ -123,16 +123,16 @@ function formatCost(value: number) {
         <section class="context-stat-section" :aria-label="t('消息统计')">
           <h3>{{ t('消息') }}</h3>
           <div class="context-stat-grid">
-            <article><span>{{ t('总计') }}</span><strong>{{ formatNumber(statistics.totalMessages) }}</strong></article>
-            <article><span>{{ t('用户') }}</span><strong>{{ formatNumber(statistics.userMessages) }}</strong></article>
-            <article><span>{{ t('助手') }}</span><strong>{{ formatNumber(statistics.assistantMessages) }}</strong></article>
-            <article><span>{{ t('工具调用') }}</span><strong>{{ formatNumber(statistics.toolCalls) }}</strong></article>
+            <article class="surface-card surface-card--sm"><span>{{ t('总计') }}</span><strong>{{ formatNumber(statistics.totalMessages) }}</strong></article>
+            <article class="surface-card surface-card--sm"><span>{{ t('用户') }}</span><strong>{{ formatNumber(statistics.userMessages) }}</strong></article>
+            <article class="surface-card surface-card--sm"><span>{{ t('助手') }}</span><strong>{{ formatNumber(statistics.assistantMessages) }}</strong></article>
+            <article class="surface-card surface-card--sm"><span>{{ t('工具调用') }}</span><strong>{{ formatNumber(statistics.toolCalls) }}</strong></article>
           </div>
         </section>
 
         <section class="context-stat-section context-token-section" :aria-label="t('累计 Token 统计')">
           <h3>{{ t('Session 累计') }}</h3>
-          <div class="context-token-card">
+          <div class="surface-card context-token-card">
             <article><span>{{ t('输入') }}</span><strong>{{ formatNumber(statistics.inputTokens) }}</strong></article>
             <article><span>{{ t('输出') }}</span><strong>{{ formatNumber(statistics.outputTokens) }}</strong></article>
             <article><span>{{ t('缓存读取') }}</span><strong>{{ formatNumber(statistics.cacheReadTokens) }}</strong></article>
@@ -151,7 +151,7 @@ function formatCost(value: number) {
 </template>
 
 <style scoped>
-.context-session-panel { min-width: 0; min-height: 0; overflow: auto; padding: 0 10px 18px; color: var(--color-text-primary); scrollbar-color: var(--color-scrollbar-thumb) transparent; }
+.context-session-panel { min-width: 0; min-height: 0; overflow: auto; padding: 0 10px 18px; color: var(--color-text-primary); }
 .context-session-heading { position: sticky; z-index: 2; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 57px; margin: 0 -2px; padding: 8px 2px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-sidebar); }
 .context-session-heading > div { display: grid; min-width: 0; gap: 3px; }
 .context-session-heading strong { overflow: hidden; font-size: var(--font-size-body-sm); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
@@ -160,14 +160,14 @@ function formatCost(value: number) {
 .context-session-heading button:hover:not(:disabled) { border-color: var(--color-border-default); background: var(--color-bg-hover); color: var(--color-text-primary); }
 .context-session-heading button:disabled { opacity: .35; cursor: default; }
 .context-session-heading svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
-.context-session-heading button.loading svg { animation: context-spinner 700ms linear infinite; }
+.context-session-heading button.loading svg { animation: ui-spin 700ms linear infinite; }
 .context-session-content { display: grid; gap: 14px; padding-top: 12px; }
-.context-pressure-card { padding: 12px; border: 1px solid var(--color-border-subtle); border-radius: 9px; background: var(--color-bg-surface); }
+.context-pressure-card { padding: 12px; }
 .context-pressure-card header, .context-pressure-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .context-pressure-card header span { color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
 .context-pressure-card header strong { color: var(--color-text-secondary); font: var(--font-size-caption) var(--font-family-mono); font-weight: var(--font-weight-medium); white-space: nowrap; }
 .context-pressure-track { height: 4px; margin: 10px 0 8px; overflow: hidden; border-radius: 999px; background: var(--color-tone-6); }
-.context-pressure-track > span { display: block; height: 100%; border-radius: inherit; background: var(--color-tone-12); transition: width 180ms ease, background 180ms ease; }
+.context-pressure-track > span { display: block; height: 100%; border-radius: inherit; background: var(--color-tone-12); transition: width var(--motion-duration-normal) ease, background var(--motion-duration-normal) ease; }
 .context-pressure-card.warning .context-pressure-track > span { background: var(--color-warning); }
 .context-pressure-card.critical .context-pressure-track > span { background: var(--color-danger); }
 .context-pressure-caption { align-items: baseline; }
@@ -176,17 +176,15 @@ function formatCost(value: number) {
 .context-stat-section { display: grid; gap: 7px; }
 .context-stat-section h3 { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-caption); font-weight: var(--font-weight-medium); }
 .context-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.context-stat-grid article, .context-token-card article { display: grid; gap: 4px; min-width: 0; padding: 10px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-bg-surface); }
+.context-stat-grid article, .context-token-card article { display: grid; gap: 4px; min-width: 0; padding: 10px; }
 .context-stat-grid span, .context-token-card span { color: var(--color-text-tertiary); font-size: var(--font-size-caption); }
 .context-stat-grid strong, .context-token-card strong { overflow: hidden; color: var(--color-tone-15); font: var(--font-size-body) var(--font-family-mono); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
-.context-token-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--color-border-subtle); border-radius: 9px; background: var(--color-bg-surface); }
+.context-token-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; }
 .context-token-card article { border: 0; border-radius: 0; background: transparent; }
 .context-token-card article:nth-child(odd) { border-right: 1px solid var(--color-border-subtle); }
 .context-token-card article:nth-child(n + 3) { border-top: 1px solid var(--color-border-subtle); }
 .context-session-status, .context-session-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 130px; padding: 18px; color: var(--color-text-tertiary); font-size: var(--font-size-caption); text-align: center; }
 .context-session-status strong, .context-session-empty strong { color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
 .context-session-status.error strong { color: var(--color-danger); }
-.context-session-spinner { width: 14px; height: 14px; border: 2px solid var(--color-border-default); border-top-color: var(--color-text-secondary); border-radius: 50%; animation: context-spinner 700ms linear infinite; }
 .context-session-footer { overflow: hidden; padding: 1px 2px; color: var(--color-tone-9); font: var(--font-size-micro) var(--font-family-mono); text-overflow: ellipsis; white-space: nowrap; }
-@keyframes context-spinner { to { transform: rotate(360deg); } }
 </style>

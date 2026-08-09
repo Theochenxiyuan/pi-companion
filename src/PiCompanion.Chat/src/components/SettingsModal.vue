@@ -983,7 +983,7 @@ function authLabel(provider: PiProviderInfo) {
             :class="companionSaveState"
             :role="companionSaveState === 'error' ? 'alert' : 'status'"
           >
-            <i v-if="companionSaveState === 'saving'" aria-hidden="true"></i>
+            <i v-if="companionSaveState === 'saving'" class="ui-spinner" aria-hidden="true"></i>
             <span>{{ companionSaveState === 'saving' ? t('保存中') : companionSaveState === 'saved' ? t('已自动保存') : companionSaveState === 'error' ? companionSaveMessage : t('更改会自动保存') }}</span>
           </div>
           <UiButton
@@ -994,7 +994,7 @@ function authLabel(provider: PiProviderInfo) {
             :aria-busy="pendingHeaderAction === 'save'"
             @click="saveAgentSettings"
           >
-            <i v-if="pendingHeaderAction === 'save'" aria-hidden="true"></i>
+            <i v-if="pendingHeaderAction === 'save'" class="ui-spinner" aria-hidden="true"></i>
             {{ t(pendingHeaderAction === 'save' ? '应用中' : '应用 Pi 设置') }}
           </UiButton>
           <UiButton
@@ -1272,7 +1272,7 @@ function authLabel(provider: PiProviderInfo) {
                   <footer class="custom-provider-actions">
                     <UiButton class="settings-secondary" type="button" :disabled="addingCustomProvider" @click="cancelCustomProviderCreation">{{ t('取消') }}</UiButton>
                     <UiButton class="settings-primary provider-save-key" type="submit" :disabled="addingCustomProvider">
-                      <i v-if="addingCustomProvider" aria-hidden="true"></i>
+                      <i v-if="addingCustomProvider" class="ui-spinner" aria-hidden="true"></i>
                       {{ t(addingCustomProvider ? '正在验证并保存' : editingCustomProviderId ? '保存更改' : '添加 Provider') }}
                     </UiButton>
                   </footer>
@@ -1309,7 +1309,7 @@ function authLabel(provider: PiProviderInfo) {
                       :aria-busy="loggingOutProviderId === selectedProvider.id"
                       @click="logoutProvider"
                     >
-                      <i v-if="loggingOutProviderId === selectedProvider.id" aria-hidden="true"></i>
+                       <i v-if="loggingOutProviderId === selectedProvider.id" class="ui-spinner" aria-hidden="true"></i>
                       {{ t(loggingOutProviderId === selectedProvider.id ? '退出中' : '退出') }}
                     </UiButton>
                   </div>
@@ -1317,7 +1317,7 @@ function authLabel(provider: PiProviderInfo) {
                 <form v-if="selectedProvider.supportsApiKey && !selectedProvider.configured" class="provider-key-form" @submit.prevent="saveApiKey">
                   <label>API Key<UiInput v-model="apiKey" type="password" autocomplete="off" :placeholder="t('输入后保存到 Pi')" /></label>
                   <UiButton class="settings-primary provider-save-key" type="submit" :disabled="!apiKey.trim() || savingApiKeyProviderId === selectedProvider.id">
-                    <i v-if="savingApiKeyProviderId === selectedProvider.id" aria-hidden="true"></i>
+                    <i v-if="savingApiKeyProviderId === selectedProvider.id" class="ui-spinner" aria-hidden="true"></i>
                     {{ t(savingApiKeyProviderId === selectedProvider.id ? '等待 Pi' : '保存到 Pi') }}
                   </UiButton>
                 </form>
@@ -1325,7 +1325,7 @@ function authLabel(provider: PiProviderInfo) {
                   <div><strong>{{ t('订阅 / OAuth') }}</strong><small>{{ t('在浏览器中完成账号授权，返回后这里会自动显示登录状态。') }}</small></div>
                   <div class="provider-login-actions">
                     <UiButton class="settings-secondary provider-login" type="button" :disabled="Boolean(loggingInProviderId)" :aria-busy="oauthLoginPhase === 'opening'" @click="beginOauthLogin">
-                      <i v-if="oauthLoginPhase === 'opening'" aria-hidden="true"></i>
+                      <i v-if="oauthLoginPhase === 'opening'" class="ui-spinner" aria-hidden="true"></i>
                       {{ t(oauthLoginPhase === 'opening' ? '正在打开浏览器' : oauthLoginPhase === 'waiting' ? '等待授权' : '在浏览器中登录') }}
                     </UiButton>
                     <template v-if="oauthLoginPhase === 'waiting'">
@@ -1552,7 +1552,7 @@ function authLabel(provider: PiProviderInfo) {
 .settings-search input, .provider-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text-primary); font-size: var(--font-size-body-sm); }
 .settings-search input::placeholder, .provider-search input::placeholder { color: var(--color-tone-10); }
 
-.settings-nav { display: block; min-height: 0; margin: 16px 0 0; flex: 1; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; scrollbar-width: thin; }
+.settings-nav { display: block; min-height: 0; margin: 16px 0 0; flex: 1; overflow-y: auto; }
 .settings-nav-group { display: grid; gap: 2px; }
 .settings-nav-group + .settings-nav-group { margin-top: 18px; }
 .settings-group-title { margin: 0 9px 7px; color: var(--color-tone-11); font-size: var(--font-size-caption); font-weight: var(--font-weight-semibold); letter-spacing: .065em; }
@@ -1609,7 +1609,7 @@ function authLabel(provider: PiProviderInfo) {
 .runtime-refresh:hover { border-color: var(--color-tone-9); background: var(--color-tone-5); color: var(--color-tone-14); }
 .runtime-refresh:disabled { cursor: default; opacity: .48; }
 .runtime-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.runtime-refresh[aria-busy="true"] svg { animation: provider-key-spin .7s linear infinite; }
+.runtime-refresh[aria-busy="true"] svg { animation: ui-spin 700ms linear infinite; }
 
 .settings-content { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
 .settings-heading {
@@ -1625,8 +1625,8 @@ function authLabel(provider: PiProviderInfo) {
 .settings-auto-save-status { display: inline-flex; align-items: center; gap: 7px; color: var(--color-tone-10); font-size: var(--font-size-caption); white-space: nowrap; }
 .settings-auto-save-status.saved { color: var(--color-success-emphasis); }
 .settings-auto-save-status.error { color: var(--color-danger-text); }
-.settings-auto-save-status > i { width: 12px; height: 12px; border: 2px solid var(--color-tone-8); border-top-color: var(--color-tone-12); border-radius: 50%; animation: provider-key-spin .7s linear infinite; }
-.settings-scroll { min-height: 0; padding: 26px clamp(20px, 3.5vw, 44px) 70px; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; }
+.settings-auto-save-status > i { width: 12px; height: 12px; border-color: var(--color-tone-8); border-top-color: var(--color-tone-12); }
+.settings-scroll { min-height: 0; padding: 26px clamp(20px, 3.5vw, 44px) 70px; overflow-y: auto; }
 .settings-scroll.provider-scroll { overflow: hidden; padding-bottom: 26px; }
 .settings-scroll.recycle-empty-scroll { display: grid; padding-block: 26px; place-items: center; }
 
@@ -1648,10 +1648,10 @@ function authLabel(provider: PiProviderInfo) {
   width: 210px;
 }
 .settings-row > .app-select :deep(.app-select-trigger) { min-height: 35px; padding: 6px 13px 6px 10px; border-color: var(--color-tone-8); border-radius: 7px; background: var(--color-tone-3); color: var(--color-tone-14); font-size: var(--font-size-body-sm); }
-.settings-row > .app-select :deep(.app-select-menu) { max-height: 310px; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; }
+.settings-row > .app-select :deep(.app-select-menu) { max-height: 310px; overflow-y: auto; }
 .agent-model-inputs { display: grid; width: 360px; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; }
 .agent-model-inputs :deep(.app-select-trigger) { min-height: 35px; padding: 6px 13px 6px 10px; border-color: var(--color-tone-8); border-radius: 7px; background: var(--color-tone-3); color: var(--color-tone-14); font-size: var(--font-size-body-sm); }
-.agent-model-inputs :deep(.app-select-menu) { max-height: 310px; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; }
+.agent-model-inputs :deep(.app-select-menu) { max-height: 310px; overflow-y: auto; }
 
 .toggle-row { cursor: default; }
 
@@ -1681,7 +1681,7 @@ function authLabel(provider: PiProviderInfo) {
 .settings-secondary:hover { border-color: var(--color-tone-10); background: var(--color-tone-5); color: var(--color-tone-15); }
 .settings-secondary:disabled { cursor: default; opacity: .48; }
 .header-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
-.header-action > i { width: 12px; height: 12px; border: 2px solid var(--color-control-ink-muted); border-top-color: var(--color-tone-3); border-radius: 50%; animation: provider-key-spin .7s linear infinite; }
+.header-action > i { width: 12px; height: 12px; border-color: var(--color-control-ink-muted); border-top-color: var(--color-tone-3); }
 .danger-button { border-color: var(--color-danger-border); background: var(--color-danger-surface); color: var(--color-danger); }
 .danger-button:hover { border-color: var(--color-danger-border-strong); background: var(--color-danger-surface-emphasis); color: var(--color-danger-text-strong); }
 .danger-button:disabled { cursor: default; opacity: .42; }
@@ -1706,7 +1706,7 @@ function authLabel(provider: PiProviderInfo) {
 .provider-add:hover { color: var(--color-tone-15); }
 .provider-add:focus-visible { outline: 2px solid var(--color-tone-10); outline-offset: -2px; }
 .provider-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.8; }
-.provider-items { display: grid; min-height: 0; padding-right: 4px; gap: 3px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--color-tone-8) transparent; scrollbar-width: thin; }
+.provider-items { display: grid; min-height: 0; padding-right: 4px; gap: 3px; overflow-y: auto; overscroll-behavior: contain; }
 .provider-items > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; min-height: 45px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--color-tone-12); cursor: pointer; text-align: left; }
 .provider-items > button:hover, .provider-items > button.active { background: var(--color-tone-5); color: var(--color-tone-15); }
 .provider-items > button > span:first-child { display: grid; min-width: 0; gap: 2px; }
@@ -1716,7 +1716,7 @@ function authLabel(provider: PiProviderInfo) {
 .provider-list-meta { display: flex; align-items: center; gap: 7px; }
 .provider-list-meta small { color: var(--color-tone-10); font-size: var(--font-size-caption); }
 .provider-list-meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 0 3px var(--color-success-halo); }
-.provider-detail { min-width: 0; padding: 30px 8px 24px 28px; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; }
+.provider-detail { min-width: 0; padding: 30px 8px 24px 28px; overflow-y: auto; }
 .provider-title { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
 .provider-title > div:first-child { min-width: min(180px, 100%); flex: 1 1 180px; }
 .provider-title h2 { margin: 0 0 4px; color: var(--color-tone-15); font-size: var(--font-size-title-md); }
@@ -1736,20 +1736,19 @@ function authLabel(provider: PiProviderInfo) {
 .provider-logout { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--color-danger); cursor: pointer; font-size: var(--font-size-caption); }
 .provider-logout:hover { background: var(--color-danger-surface-emphasis); color: var(--color-danger-text-strong); }
 .provider-logout:disabled { cursor: default; opacity: .7; }
-.provider-logout > i { width: 10px; height: 10px; border: 1.5px solid var(--color-danger-border); border-top-color: var(--color-danger-text); border-radius: 50%; animation: provider-key-spin .7s linear infinite; }
+.provider-logout > i { width: 10px; height: 10px; border-width: 1.5px; border-color: var(--color-danger-border); border-top-color: var(--color-danger-text); }
 .provider-key-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; margin-top: 24px; }
 .provider-key-form label { display: grid; gap: 7px; color: var(--color-tone-13); font-size: var(--font-size-body-sm); }
 .provider-key-form input { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--color-tone-8); border-radius: 7px; outline: 0; background: var(--color-tone-2); color: var(--color-tone-14); }
 .provider-key-form input:focus { border-color: var(--color-tone-10); }
 .provider-save-key { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
-.provider-save-key > i { width: 12px; height: 12px; border: 2px solid var(--color-control-ink-muted); border-top-color: var(--color-tone-3); border-radius: 50%; animation: provider-key-spin .7s linear infinite; }
+.provider-save-key > i { width: 12px; height: 12px; border-color: var(--color-control-ink-muted); border-top-color: var(--color-tone-3); }
 .provider-login { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
 .provider-login:disabled { opacity: 1; }
-.provider-login > i { width: 12px; height: 12px; border: 2px solid var(--color-tone-9); border-top-color: var(--color-tone-13); border-radius: 50%; animation: provider-key-spin .7s linear infinite; }
+.provider-login > i { width: 12px; height: 12px; border-color: var(--color-tone-9); border-top-color: var(--color-tone-13); }
 .provider-oauth .provider-login-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 .text-danger-button { padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--color-danger); cursor: pointer; font-size: var(--font-size-body-sm); }
 .text-danger-button:hover { background: var(--color-danger-surface-emphasis); color: var(--color-danger-text-strong); }
-@keyframes provider-key-spin { to { transform: rotate(360deg); } }
 .provider-oauth { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 22px; padding: 15px; border: 1px solid var(--color-tone-7); border-radius: 8px; background: var(--color-tone-3); }
 .provider-oauth div { display: grid; gap: 4px; }
 .provider-oauth strong { color: var(--color-tone-13); font-size: var(--font-size-body); }
@@ -1769,7 +1768,7 @@ function authLabel(provider: PiProviderInfo) {
 .provider-models-section > header button:hover:not(:disabled) { border-color: var(--color-tone-9); color: var(--color-tone-14); }
 .provider-models-section > header .provider-model-refresh { display: grid; width: 24px; height: 24px; padding: 0; place-items: center; border-color: transparent; background: transparent; }
 .provider-model-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.provider-model-refresh[aria-busy="true"] svg { animation: provider-key-spin .7s linear infinite; }
+.provider-model-refresh[aria-busy="true"] svg { animation: ui-spin 700ms linear infinite; }
 .provider-models-section button:disabled { cursor: default; opacity: .38; }
 .provider-model-search { display: flex; height: 34px; align-items: center; gap: 7px; margin-bottom: 8px; padding: 0 9px; border: 1px solid var(--color-tone-7); border-radius: 7px; background: var(--color-tone-3); color: var(--color-tone-10); }
 .provider-model-search:focus-within { border-color: var(--color-tone-9); }
@@ -1825,7 +1824,7 @@ function authLabel(provider: PiProviderInfo) {
 .custom-thinking-map summary > span { display: grid; min-width: 0; gap: 3px; }
 .custom-thinking-map summary strong { font-size: var(--font-size-body-sm); font-weight: var(--font-weight-medium); }
 .custom-thinking-map summary small { color: var(--color-tone-9); font-size: var(--font-size-caption); line-height: var(--line-height-control); }
-.custom-thinking-map summary svg { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--color-tone-10); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; transition: transform var(--duration-fast) var(--ease-standard); }
+.custom-thinking-map summary svg { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--color-tone-10); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; transition: transform var(--motion-duration-fast) ease; }
 .custom-thinking-map[open] summary svg { transform: rotate(90deg); }
 .custom-thinking-map-grid { display: grid; gap: 8px; margin-top: 13px; }
 .custom-thinking-map-row { display: grid; grid-template-columns: 74px 152px minmax(0, 1fr); align-items: center; gap: 8px; }

@@ -33,7 +33,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     vi.restoreAllMocks()
   })
 
-  it('loads grouped skill cards, the template manager, and the scheduled placeholder', async () => {
+  it('loads grouped skill cards, the template manager, and scheduled tasks', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
     window.chrome = {
@@ -244,9 +244,9 @@ describe('Agent Chat stage 5 acceptance', () => {
     const scheduledNavigation = wrapper.findAll('.sidebar > nav .nav-row')
       .find(button => button.text() === '定时任务')!
     await scheduledNavigation.trigger('click')
-    expect(wrapper.get('.feature-placeholder-view').classes()).toContain('management-scheduled')
+    expect(wrapper.find('.scheduled-tasks-view').exists()).toBe(true)
     expect(wrapper.get('.management-location strong').text()).toBe('定时任务')
-    expect(wrapper.get('.feature-placeholder-content').text()).toContain('暂未开放')
+    expect(wrapper.get('.scheduled-task-empty').text()).toContain('还没有定时任务')
   })
 
   it('round-trips an explicit workspace trust decision and refreshes skills', async () => {

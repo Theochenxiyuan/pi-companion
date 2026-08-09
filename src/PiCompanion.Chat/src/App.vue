@@ -23,6 +23,7 @@ import type {
   SettingsActionCompleted,
   SettingsSnapshot,
   SessionStatisticsSnapshot,
+  ScheduledTask,
   SkillsLoaded,
   SkillImportCompleted,
   SkillImportPreparation,
@@ -57,8 +58,9 @@ import CommitDiffDialog from '@/components/CommitDiffDialog.vue'
 import ComposerPanel from '@/components/ComposerPanel.vue'
 import ConversationRun from '@/components/ConversationRun.vue'
 import FileDiffDialog from '@/components/FileDiffDialog.vue'
-import FeaturePlaceholderView from '@/components/FeaturePlaceholderView.vue'
 import LocalMessageEditorDialog from '@/components/LocalMessageEditorDialog.vue'
+import ScheduledTaskEditorDialog from '@/components/ScheduledTaskEditorDialog.vue'
+import ScheduledTasksView from '@/components/ScheduledTasksView.vue'
 import SettingsModal from '@/components/SettingsModal.vue'
 import SkillManagementModal from '@/components/SkillManagementModal.vue'
 import SkillsView from '@/components/SkillsView.vue'
@@ -104,6 +106,8 @@ const settingsOpen = ref(false)
 const taskTemplatePickerOpen = ref(false)
 const editingTaskTemplate = ref<TaskTemplate | null | undefined>(undefined)
 const deletingTaskTemplate = ref<TaskTemplate | null>(null)
+const editingScheduledTask = ref<ScheduledTask | null | undefined>(undefined)
+const deletingScheduledTask = ref<ScheduledTask | null>(null)
 const replacingDraftWithTemplate = ref<TaskTemplate | null>(null)
 const pendingTaskTemplateApplication = ref<{
   template: TaskTemplate
@@ -134,6 +138,9 @@ const allTaskTemplates = computed(() => [
   ...builtInTaskTemplates.value,
   ...store.taskTemplates,
 ])
+const deletingTaskTemplateLinkedCount = computed(() => deletingTaskTemplate.value
+  ? store.scheduledTasks.filter(task => task.templateId === deletingTaskTemplate.value?.id).length
+  : 0)
 const homeTaskTemplates = computed(() => [
   ...builtInTaskTemplates.value,
   ...store.taskTemplates.filter(template => template.isPinned),
@@ -854,9 +861,60 @@ function cancelDeleteTaskTemplate() {
 
 function confirmDeleteTaskTemplate() {
   const template = deletingTaskTemplate.value
-  if (!template || template.isBuiltIn) return
+  if (!template || template.isBuiltIn || deletingTaskTemplateLinkedCount.value > 0) return
   postBridgeMessage('DeleteTaskTemplate', { templateId: template.id })
   deletingTaskTemplate.value = null
+}
+
+function createScheduledTask() {
+  editingScheduledTask.value = null
+}
+
+function editScheduledTask(scheduledTask: ScheduledTask) {
+  editingScheduledTask.value = scheduledTask
+}
+
+function saveScheduledTask(scheduledTask: ScheduledTask) {
+  postBridgeMessage('SaveScheduledTask', {
+    id: scheduledTask.id || null,
+    name: scheduledTask.name,
+    isEnabled: scheduledTask.isEnabled,
+    templateId: scheduledTask.templateId,
+    prompt: scheduledTask.prompt,
+    targetKind: scheduledTask.targetKind,
+    workspaceId: scheduledTask.workspaceId,
+    model: scheduledTask.model,
+    thinkingLevel: scheduledTask.thinkingLevel,
+    permissionMode: scheduledTask.permissionMode,
+    frequency: scheduledTask.frequency,
+    localStartAt: scheduledTask.localStartAt,
+    daysOfWeek: scheduledTask.daysOfWeek,
+    timeZoneId: scheduledTask.timeZoneId,
+  })
+  editingScheduledTask.value = undefined
+}
+
+function toggleScheduledTask(scheduledTask: ScheduledTask, enabled: boolean) {
+  saveScheduledTask({ ...scheduledTask, isEnabled: enabled })
+}
+
+function runScheduledTaskNow(scheduledTask: ScheduledTask) {
+  postBridgeMessage('RunScheduledTaskNow', { scheduledTaskId: scheduledTask.id })
+}
+
+function requestDeleteScheduledTask(scheduledTask: ScheduledTask) {
+  deletingScheduledTask.value = scheduledTask
+}
+
+function confirmDeleteScheduledTask() {
+  if (!deletingScheduledTask.value) return
+  postBridgeMessage('DeleteScheduledTask', { scheduledTaskId: deletingScheduledTask.value.id })
+  deletingScheduledTask.value = null
+}
+
+function openScheduledTaskRun(taskId: string) {
+  mainView.value = 'chat'
+  postBridgeMessage('SelectTask', { taskId })
 }
 
 function requestTaskTemplateApplication(template: TaskTemplate) {
@@ -2762,6 +2820,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
     <TaskTemplatesView
       v-else-if="mainView === 'templates'"
       :templates="allTaskTemplates"
+      :scheduled-tasks="store.scheduledTasks"
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
@@ -2772,11 +2831,19 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @delete="requestDeleteTaskTemplate"
     />
 
-    <FeaturePlaceholderView
-      v-else
-      :view="mainView"
+    <ScheduledTasksView
+      v-else-if="mainView === 'scheduled'"
+      :scheduled-tasks="store.scheduledTasks"
+      :templates="allTaskTemplates"
+      :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @create="createScheduledTask"
+      @edit="editScheduledTask"
+      @toggle="toggleScheduledTask"
+      @run-now="runScheduledTaskNow"
+      @delete="requestDeleteScheduledTask"
+      @open-task="openScheduledTaskRun"
     />
 
     <WorkspaceInspector
@@ -2859,20 +2926,50 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @cancel="cancelTaskTemplateEditing"
     />
 
+    <ScheduledTaskEditorDialog
+      v-if="editingScheduledTask !== undefined"
+      :scheduled-task="editingScheduledTask ?? null"
+      :templates="allTaskTemplates"
+      :workspaces="store.workspaces"
+      :model-options="modelOptions"
+      @save="saveScheduledTask"
+      @cancel="editingScheduledTask = undefined"
+    />
+
+    <UiDialog
+      v-if="deletingScheduledTask"
+      :title="t('删除定时任务？')"
+      :description="t('已创建的任务和运行历史会继续保留。')"
+      overlay-class="dialog-backdrop"
+      content-class="task-dialog"
+      alert
+      @close="deletingScheduledTask = null"
+    >
+      <h2>{{ t('删除定时任务？') }}</h2>
+      <p>{{ t('将删除“{name}”。已创建的任务和运行历史不会受到影响。', { name: deletingScheduledTask.name }) }}</p>
+      <div class="dialog-actions">
+        <UiButton type="button" @click="deletingScheduledTask = null">{{ t('取消') }}</UiButton>
+        <UiButton class="danger-action" type="button" @click="confirmDeleteScheduledTask">{{ t('删除') }}</UiButton>
+      </div>
+    </UiDialog>
+
     <UiDialog
       v-if="deletingTaskTemplate"
       :title="t('删除任务模板？')"
-      :description="t('删除后无法恢复，但不会影响已经创建的任务。')"
+      :description="deletingTaskTemplateLinkedCount
+        ? t('请先解除关联或删除使用该模板的定时任务。')
+        : t('删除后无法恢复，但不会影响已经创建的任务。')"
       overlay-class="dialog-backdrop"
       content-class="task-dialog"
       alert
       @close="cancelDeleteTaskTemplate"
     >
       <h2>{{ t('删除任务模板？') }}</h2>
-      <p>{{ t('将删除“{name}”。已经创建的任务不会受到影响。', { name: deletingTaskTemplate.name }) }}</p>
+      <p v-if="deletingTaskTemplateLinkedCount">{{ t('“{name}”正被 {count} 个定时任务关联，暂时不能删除。', { name: deletingTaskTemplate.name, count: deletingTaskTemplateLinkedCount }) }}</p>
+      <p v-else>{{ t('将删除“{name}”。已经创建的任务不会受到影响。', { name: deletingTaskTemplate.name }) }}</p>
       <div class="dialog-actions">
         <UiButton type="button" @click="cancelDeleteTaskTemplate">{{ t('取消') }}</UiButton>
-        <UiButton class="danger-action" type="button" @click="confirmDeleteTaskTemplate">{{ t('删除') }}</UiButton>
+        <UiButton class="danger-action" type="button" :disabled="deletingTaskTemplateLinkedCount > 0" @click="confirmDeleteTaskTemplate">{{ t('删除') }}</UiButton>
       </div>
     </UiDialog>
 

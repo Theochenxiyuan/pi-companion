@@ -1,4 +1,4 @@
-export const bridgeProtocolVersion = 63
+export const bridgeProtocolVersion = 64
 
 export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 
@@ -600,6 +600,40 @@ export interface TaskTemplate {
   isBuiltIn?: boolean
 }
 
+export type ScheduledTaskFrequency = 'Once' | 'Daily' | 'Weekdays' | 'Weekly'
+
+export interface ScheduledTaskOccurrence {
+  id: string
+  scheduledFor: string
+  status: 'Dispatching' | 'Enqueued' | 'Skipped' | 'Failed'
+  taskId: string | null
+  runId: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ScheduledTask {
+  id: string
+  name: string
+  isEnabled: boolean
+  templateId: string | null
+  prompt: string | null
+  targetKind: Exclude<TaskTemplateTargetKind, 'CurrentContext'> | null
+  workspaceId: string | null
+  model: string | null
+  thinkingLevel: string | null
+  permissionMode: Exclude<PermissionMode, 'full-access'> | null
+  frequency: ScheduledTaskFrequency
+  localStartAt: string
+  daysOfWeek: number
+  timeZoneId: string
+  nextRunAt: string | null
+  createdAt: string
+  updatedAt: string
+  lastOccurrence: ScheduledTaskOccurrence | null
+}
+
 export interface ComposerAttachment {
   path: string
   displayName: string
@@ -860,6 +894,7 @@ export interface InitializeSnapshot {
   lastSequence: number
   workspaces?: WorkspaceHistoryEntry[]
   taskTemplates?: TaskTemplate[]
+  scheduledTasks?: ScheduledTask[]
   recentTasks: TaskHistoryEntry[]
   historyTasks: TaskHistoryEntry[]
   historyHasMore?: boolean
@@ -871,6 +906,10 @@ export interface InitializeSnapshot {
 
 export interface TaskTemplatesUpdated {
   taskTemplates: TaskTemplate[]
+}
+
+export interface ScheduledTasksUpdated {
+  scheduledTasks: ScheduledTask[]
 }
 
 export interface TaskCollections {

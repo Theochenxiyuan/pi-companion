@@ -597,7 +597,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         <article
           v-for="skill in visibleSkills"
           :key="skill.id"
-          class="skill-card"
+          class="surface-card surface-card--lg skill-card"
           :class="`skill-${skillTone(skill)}`"
         >
           <header class="skill-card-header">
@@ -1104,7 +1104,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
 .skill-import-file-heading strong { color: var(--color-tone-13); font-size: var(--font-size-caption); }
 .skill-import-file-heading span { color: var(--color-tone-9); font-size: var(--font-size-micro); }
 .skill-import-file-list { min-height: 0; flex: 1; overflow: auto; border: 1px solid var(--color-tone-7); border-radius: 8px; background: var(--color-tone-4); scrollbar-gutter: stable; }
-.skill-import-file-list:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.skill-import-file-list:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset); }
 .skill-import-file { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 9px; min-height: 34px; padding: 7px 10px; border-bottom: 1px solid var(--color-tone-7); }
 .skill-import-file:last-child { border-bottom: 0; }
 .skill-import-file code { overflow: hidden; color: var(--color-tone-12); font-size: var(--font-size-micro); text-overflow: ellipsis; white-space: nowrap; }

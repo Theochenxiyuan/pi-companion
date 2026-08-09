@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     private ActivationPipeServer? _activationServer;
     private DesktopShell? _shell;
     private TaskCoordinator? _coordinator;
+    private ScheduledTaskService? _scheduledTaskService;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -68,23 +69,53 @@ public partial class App : System.Windows.Application
             var settings = new AppSettingsService(eventStore);
             var skillDiscovery = new SkillDiscoveryService();
             var piConfiguration = PiConfigurationService.CreateDefault();
+            string ResolveScheduledDefaultModel()
+            {
+                var snapshot = piConfiguration.CachedSnapshot;
+                if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.DefaultModel))
+                {
+                    snapshot = piConfiguration.RefreshSnapshotAsync().GetAwaiter().GetResult();
+                }
+                return snapshot.DefaultModel ?? settings.Current.Agent.DefaultModel;
+            }
+
+            string ResolveScheduledDefaultThinkingLevel()
+            {
+                var snapshot = piConfiguration.CachedSnapshot;
+                if (snapshot is null || string.IsNullOrWhiteSpace(snapshot.DefaultThinkingLevel))
+                {
+                    snapshot = piConfiguration.RefreshSnapshotAsync().GetAwaiter().GetResult();
+                }
+                return snapshot.DefaultThinkingLevel ?? settings.Current.Agent.DefaultThinkingLevel;
+            }
+
             _coordinator = new TaskCoordinator(
-                PiRpcBackend.CreateDefault(skillDiscovery),
+                PiRpcBackend.CreateDefault(
+                    skillDiscovery,
+                    () => settings.Current.General.Language),
                 eventStore,
                 metadataGenerator: PiTaskMetadataGenerator.CreateDefault(
                     () => settings.Current.General.Language),
                 taskSettingsResolver: () => settings.Current.Tasks,
                 attachmentStaging: AttachmentStagingService.CreateDefault(),
                 generalChatWorkspaces: GeneralChatWorkspaceService.CreateDefault());
+            _scheduledTaskService = new ScheduledTaskService(
+                _coordinator,
+                eventStore,
+                ResolveScheduledDefaultModel,
+                ResolveScheduledDefaultThinkingLevel,
+                () => settings.Current.Tasks.PermissionMode ?? "standard");
             _shell = new DesktopShell(
                 _coordinator,
                 settings,
                 piConfiguration,
-                skillDiscovery);
+                skillDiscovery,
+                _scheduledTaskService);
             _activationServer = new ActivationPipeServer(
                 request => _ = Dispatcher.InvokeAsync(() => _shell?.HandleExplorerActivation(request)),
                 exception => WriteLocalLog("activation-pipe-error.log", exception.ToString()));
             _activationServer.Start();
+            _scheduledTaskService.Start();
             _shell.Start(
                 initialActivation,
                 startInBackground: e.Args.Contains("--background", StringComparer.OrdinalIgnoreCase));
@@ -105,6 +136,7 @@ public partial class App : System.Windows.Application
     {
         _activationServer?.Dispose();
         _shell?.Dispose();
+        _scheduledTaskService?.Dispose();
         _coordinator?.Dispose();
         _instanceMutex?.Dispose();
         base.OnExit(e);

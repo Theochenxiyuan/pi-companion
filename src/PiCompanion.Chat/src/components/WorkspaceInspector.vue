@@ -609,7 +609,7 @@ function ignoreSourceText(source: string | null) {
         </BaseTree>
 
         <div v-else class="file-tree-empty" :class="{ error: error }">
-          <span v-if="loadingRoot || searching" class="file-loading-spinner"></span>
+          <span v-if="loadingRoot || searching" class="ui-spinner file-loading-spinner"></span>
           <span>{{ emptyText }}</span>
           <UiButton v-if="error && hasWorkspace" type="button" @click="refresh">{{ t('重试') }}</UiButton>
         </div>

@@ -99,7 +99,7 @@ describe('desktop bridge protocol contract', () => {
       '../PiCompanion.Application/Tasks/PiTaskMetadataGenerator.cs',
     ), 'utf8')
 
-    expect(bridgeProtocolVersion).toBe(63)
+    expect(bridgeProtocolVersion).toBe(64)
     expect(mainWindow).toContain('case "SetWorkspaceTrustDecision":')
     expect(mainWindow).toContain('case "LoadSkills":')
     expect(mainWindow).toContain('case "TrustSkillWorkspace":')

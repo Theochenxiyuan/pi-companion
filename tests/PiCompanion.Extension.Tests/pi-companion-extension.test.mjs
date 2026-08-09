@@ -223,6 +223,251 @@ test("create_task_template sends the authenticated runtime context and returns t
 	}
 });
 
+test("Companion template and scheduling tools expose strict localized schemas", () => {
+	const root = temporaryDirectory();
+	try {
+		const { tools } = loadExtension(root);
+		assert.equal(tools.get("list_task_templates").label, "列出任务模板");
+		assert.equal(tools.get("get_task_template").label, "读取任务模板");
+		assert.equal(tools.get("list_scheduled_tasks").label, "列出定时任务");
+		const createScheduledTask = tools.get("create_scheduled_task");
+		assert.equal(createScheduledTask.label, "创建定时任务");
+		assert.deepEqual(createScheduledTask.constrainedSampling, { type: "json_schema", strict: "prefer" });
+		assert.deepEqual(
+			new Set(createScheduledTask.parameters.required),
+			new Set(Object.keys(createScheduledTask.parameters.properties)),
+		);
+		assert.deepEqual(createScheduledTask.parameters.properties.frequency.enum, ["Once", "Daily", "Weekdays", "Weekly"]);
+		assert.deepEqual(createScheduledTask.parameters.properties.permissionMode.enum, [null, "read-only", "standard"]);
+		assert.equal(createScheduledTask.parameters.properties.prompt.maxLength, 100000);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("new Companion tools send authenticated commands and map their results", async () => {
+	const root = temporaryDirectory();
+	const pipeName = process.platform === "win32"
+		? `PiCompanion.ExtensionTests.${crypto.randomUUID()}`
+		: path.join(root, "agent-command.sock");
+	const pipePath = process.platform === "win32" ? `\\\\.\\pipe\\${pipeName}` : pipeName;
+	const taskId = "11111111-1111-1111-1111-111111111111";
+	const runId = "22222222-2222-2222-2222-222222222222";
+	const permissionToken = "0123456789abcdef0123456789abcdef";
+	const contextPath = path.join(root, "runtime-context.json");
+	fs.writeFileSync(contextPath, JSON.stringify({
+		schemaVersion: 4,
+		generation: 9,
+		taskId,
+		runId,
+		workingDirectory: root,
+		permissionMode: "read-only",
+		permissionToken,
+		readOnlyRoots: [],
+		skillReadOnlyRoots: [],
+		skillReadOnlyFiles: [],
+		scopeKind: "Workspace",
+		workspaceTrustStatus: "trusted",
+	}), "utf8");
+	const receivedCommands = [];
+	const server = net.createServer(socket => {
+		let received = Buffer.alloc(0);
+		socket.on("data", chunk => {
+			received = Buffer.concat([received, chunk]);
+			if (received.length < 4) return;
+			const length = received.readInt32LE(0);
+			if (received.length < length + 4) return;
+			const command = JSON.parse(received.subarray(4, length + 4).toString("utf8"));
+			receivedCommands.push(command);
+			const payload = command.type === "listTaskTemplates"
+				? {
+					requestId: command.requestId,
+					success: true,
+					error: null,
+					taskTemplates: [{ id: "builtin:read-docs", name: "阅读文档", targetKind: "Workspace", isBuiltIn: true }],
+				}
+				: command.type === "getTaskTemplate"
+					? {
+						requestId: command.requestId,
+						success: true,
+						error: null,
+						taskTemplate: {
+							id: command.templateId,
+							name: "Workspace review template",
+							prompt: "Review the linked workspace safely.",
+							targetKind: "Workspace",
+							workspaceId: "44444444-4444-4444-4444-444444444444",
+						},
+					}
+				: {
+					requestId: command.requestId,
+					success: true,
+					error: null,
+					scheduledTaskId: "33333333-3333-3333-3333-333333333333",
+					scheduledTaskName: command.scheduledTask.name,
+					nextRunAt: "2035-05-20T01:30:00+00:00",
+					alreadyExisted: false,
+				};
+			const response = Buffer.from(JSON.stringify(payload), "utf8");
+			const header = Buffer.alloc(4);
+			header.writeInt32LE(response.length, 0);
+			socket.end(Buffer.concat([header, response]));
+		});
+	});
+	try {
+		await new Promise((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(pipePath, resolve);
+		});
+		const { tools, handlers } = loadExtension(root, undefined, undefined, "read-only");
+		process.env.PI_COMPANION_CONTEXT_FILE = contextPath;
+		process.env.PI_COMPANION_COMMAND_PIPE = pipeName;
+		const listed = await tools.get("list_task_templates").execute("list-call", { query: null });
+		let approvalMessage = "";
+		const { context } = uiContext(async message => {
+			approvalMessage = message;
+			return permissionChoices.deny;
+		});
+		const approval = await handlers.get("tool_call")({
+			toolName: "create_scheduled_task",
+			toolCallId: "linked-schedule-call",
+			input: {
+				name: "Linked weekly review",
+				templateId: "55555555-5555-5555-5555-555555555555",
+				prompt: null,
+				targetKind: null,
+				workspaceId: null,
+				model: null,
+				thinkingLevel: null,
+				permissionMode: null,
+				frequency: "Weekly",
+				localStartAt: "2035-05-20T09:30",
+				daysOfWeek: ["Monday"],
+				timeZoneId: "China Standard Time",
+				isEnabled: true,
+			},
+		}, context);
+		const created = await tools.get("create_scheduled_task").execute("schedule-call", {
+			name: "Weekly review",
+			templateId: null,
+			prompt: "Review the workspace.",
+			targetKind: "Workspace",
+			workspaceId: null,
+			model: null,
+			thinkingLevel: "high",
+			permissionMode: "read-only",
+			frequency: "Weekly",
+			localStartAt: "2035-05-20T09:30",
+			daysOfWeek: ["Monday"],
+			timeZoneId: "China Standard Time",
+			isEnabled: true,
+		});
+
+		assert.equal(listed.isError, false);
+		assert.equal(listed.details.taskTemplates[0].id, "builtin:read-docs");
+		assert.equal(approval.block, true);
+		assert.match(approvalMessage, /Workspace review template/u);
+		assert.match(approvalMessage, /Review the linked workspace safely\./u);
+		assert.equal(created.isError, false);
+		assert.equal(created.details.scheduledTaskId, "33333333-3333-3333-3333-333333333333");
+		assert.deepEqual(receivedCommands.map(command => command.type), ["listTaskTemplates", "getTaskTemplate", "createScheduledTask"]);
+		assert.ok(receivedCommands.every(command => command.permissionToken === permissionToken));
+		assert.equal(receivedCommands[2].scheduledTask.daysOfWeek[0], "Monday");
+	} finally {
+		delete process.env.PI_COMPANION_CONTEXT_FILE;
+		delete process.env.PI_COMPANION_COMMAND_PIPE;
+		await new Promise(resolve => server.close(resolve));
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("create_scheduled_task always requires one-time confirmation and shows the full schedule", async () => {
+	const root = temporaryDirectory();
+	try {
+		process.env.PI_COMPANION_SCOPE_KIND = "Workspace";
+		const { handlers } = loadExtension(root, undefined, undefined, "full-access");
+		const calls = [];
+		const promptTail = "SCHEDULE_CONFIRMATION_TAIL";
+		const { context } = uiContext(async (message, choices) => {
+			calls.push({ message, choices });
+			return permissionChoices.deny;
+		});
+		const result = await handlers.get("tool_call")({
+			toolName: "create_scheduled_task",
+			toolCallId: "scheduled-tool-call",
+			input: {
+				name: "Weekly review",
+				templateId: null,
+				prompt: `${"x".repeat(2000)}${promptTail}`,
+				targetKind: "Workspace",
+				workspaceId: null,
+				model: null,
+				thinkingLevel: "high",
+				permissionMode: "read-only",
+				frequency: "Weekly",
+				localStartAt: "2035-05-20T09:30",
+				daysOfWeek: ["Monday", "Friday"],
+				timeZoneId: "UTC",
+				isEnabled: true,
+			},
+		}, context);
+
+		assert.equal(result.block, true);
+		assert.match(calls[0].message, /创建定时任务/u);
+		assert.match(calls[0].message, /Weekly.*Monday, Friday.*2035-05-20T09:30.*UTC/u);
+		assert.match(calls[0].message, new RegExp(promptTail, "u"));
+		assert.deepEqual(calls[0].choices, [permissionChoices.allowOnce, permissionChoices.deny]);
+	} finally {
+		delete process.env.PI_COMPANION_SCOPE_KIND;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("Companion read tools are allowed in read-only mode without confirmation", async () => {
+	const root = temporaryDirectory();
+	try {
+		const { handlers } = loadExtension(root, undefined, undefined, "read-only");
+		let selected = false;
+		const { context } = uiContext(async () => {
+			selected = true;
+			return permissionChoices.deny;
+		});
+		for (const toolName of ["list_task_templates", "get_task_template", "list_scheduled_tasks"]) {
+			const result = await handlers.get("tool_call")({
+				toolName,
+				toolCallId: `${toolName}-call`,
+				input: {},
+			}, context);
+			assert.equal(result, undefined, toolName);
+		}
+		assert.equal(selected, false);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("tool display names follow the English interface language", async () => {
+	const root = temporaryDirectory();
+	try {
+		process.env.PI_COMPANION_LANGUAGE = "en-US";
+		const moduleUrl = new URL("../../src/PiCompanion.Extension/pi-companion.mjs", import.meta.url);
+		const englishExtension = (await import(`${moduleUrl.href}?english=${crypto.randomUUID()}`)).default;
+		const tools = new Map();
+		englishExtension({
+			on: () => {},
+			registerTool: tool => tools.set(tool.name, tool),
+		});
+		assert.equal(tools.get("list_task_templates").label, "List task templates");
+		assert.equal(tools.get("get_task_template").label, "Read task template");
+		assert.equal(tools.get("list_scheduled_tasks").label, "List scheduled tasks");
+		assert.equal(tools.get("create_scheduled_task").label, "Create scheduled task");
+		assert.equal(tools.get("create_task_template").label, "Create task template");
+	} finally {
+		delete process.env.PI_COMPANION_LANGUAGE;
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("all Companion tools satisfy OpenAI strict required-property rules", () => {
 	const root = temporaryDirectory();
 	const artifactDirectory = path.join(root, "artifacts");

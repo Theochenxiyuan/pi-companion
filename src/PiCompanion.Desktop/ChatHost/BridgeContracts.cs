@@ -13,13 +13,14 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 63;
+    public const int ProtocolVersion = 64;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
         IReadOnlyList<TaskProjection> conversation,
         IReadOnlyList<WorkspaceHistoryEntry> workspaces,
         IReadOnlyList<TaskTemplate> taskTemplates,
+        IReadOnlyList<ScheduledTask> scheduledTasks,
         IReadOnlyList<TaskHistoryEntry> recentTasks,
         IReadOnlyList<TaskHistoryEntry> historyTasks,
         bool historyHasMore,
@@ -32,6 +33,7 @@ internal static class BridgeContracts
         projection?.LastSequence ?? 0,
         workspaces.Select(workspace => CreateWorkspace(workspace, projectTrustResolver)).ToArray(),
         taskTemplates.Select(CreateTaskTemplate).ToArray(),
+        scheduledTasks.Select(CreateScheduledTask).ToArray(),
         recentTasks.Select(CreateHistoryTask).ToArray(),
         historyTasks.Select(CreateHistoryTask).ToArray(),
         historyHasMore,
@@ -57,7 +59,7 @@ internal static class BridgeContracts
             "independent-workspaces", "workspace-new-task",
             "skill-native-discovery", "skill-content-fingerprints", "skill-pi-removal",
             "skill-local-direct-import", "skill-workspace-trust", "workspace-trust-preflight",
-            "task-templates", "agent-task-template-create",
+            "task-templates", "agent-task-template-create", "scheduled-tasks", "scheduled-task-template-link",
         });
 
     public static TaskTemplateDto CreateTaskTemplate(TaskTemplate template) => new(
@@ -75,6 +77,34 @@ internal static class BridgeContracts
         template.Origin.ToString(),
         template.SourceTaskId,
         template.SourceRunId);
+
+    public static ScheduledTaskDto CreateScheduledTask(ScheduledTask scheduledTask) => new(
+        scheduledTask.Id,
+        scheduledTask.Name,
+        scheduledTask.IsEnabled,
+        scheduledTask.TemplateId,
+        scheduledTask.Prompt,
+        scheduledTask.TargetKind?.ToString(),
+        scheduledTask.WorkspaceId,
+        scheduledTask.Model,
+        scheduledTask.ThinkingLevel,
+        scheduledTask.PermissionMode,
+        scheduledTask.Frequency.ToString(),
+        scheduledTask.LocalStartAt,
+        (int)scheduledTask.DaysOfWeek,
+        scheduledTask.TimeZoneId,
+        scheduledTask.NextRunAt,
+        scheduledTask.CreatedAt,
+        scheduledTask.UpdatedAt,
+        scheduledTask.LastOccurrence is null ? null : new ScheduledTaskOccurrenceDto(
+            scheduledTask.LastOccurrence.Id,
+            scheduledTask.LastOccurrence.ScheduledFor,
+            scheduledTask.LastOccurrence.Status.ToString(),
+            scheduledTask.LastOccurrence.TaskId,
+            scheduledTask.LastOccurrence.RunId,
+            scheduledTask.LastOccurrence.Error,
+            scheduledTask.LastOccurrence.CreatedAt,
+            scheduledTask.LastOccurrence.UpdatedAt));
 
     public static SkillsLoadedDto CreateSkillsLoaded(
         string requestId,
@@ -607,6 +637,7 @@ internal sealed record InitializeSnapshotDto(
     long LastSequence,
     IReadOnlyList<WorkspaceHistoryEntryDto> Workspaces,
     IReadOnlyList<TaskTemplateDto> TaskTemplates,
+    IReadOnlyList<ScheduledTaskDto> ScheduledTasks,
     IReadOnlyList<TaskHistoryEntryDto> RecentTasks,
     IReadOnlyList<TaskHistoryEntryDto> HistoryTasks,
     bool HistoryHasMore,
@@ -643,6 +674,54 @@ internal sealed record SaveTaskTemplateRequestDto(
     bool IsPinned);
 
 internal sealed record DeleteTaskTemplateRequestDto(Guid TemplateId);
+
+internal sealed record ScheduledTaskDto(
+    Guid Id,
+    string Name,
+    bool IsEnabled,
+    Guid? TemplateId,
+    string? Prompt,
+    string? TargetKind,
+    Guid? WorkspaceId,
+    string? Model,
+    string? ThinkingLevel,
+    string? PermissionMode,
+    string Frequency,
+    DateTime LocalStartAt,
+    int DaysOfWeek,
+    string TimeZoneId,
+    DateTimeOffset? NextRunAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    ScheduledTaskOccurrenceDto? LastOccurrence);
+
+internal sealed record ScheduledTaskOccurrenceDto(
+    Guid Id,
+    DateTimeOffset ScheduledFor,
+    string Status,
+    Guid? TaskId,
+    Guid? RunId,
+    string? Error,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+internal sealed record SaveScheduledTaskRequestDto(
+    Guid? Id,
+    string Name,
+    bool IsEnabled,
+    Guid? TemplateId,
+    string? Prompt,
+    string? TargetKind,
+    Guid? WorkspaceId,
+    string? Model,
+    string? ThinkingLevel,
+    string? PermissionMode,
+    string Frequency,
+    DateTime LocalStartAt,
+    int DaysOfWeek,
+    string TimeZoneId);
+
+internal sealed record ScheduledTaskRequestDto(Guid ScheduledTaskId);
 
 internal sealed record SettingsSnapshotDto(
     PiCompanionSettings Values,

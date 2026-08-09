@@ -283,7 +283,7 @@
                                                 <Setter Property="Margin" Value="0,0,0,5" />
                                                 <Setter Property="Padding" Value="10,8" />
                                                 <Setter Property="Cursor" Value="Hand" />
-                                                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                <Setter Property="FocusVisualStyle" Value="{StaticResource RoundedFocusVisual}" />
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="ListBoxItem">
@@ -302,9 +302,6 @@
                                                                 </Trigger>
                                                                 <Trigger Property="IsSelected" Value="True">
                                                                     <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource RaisedBrush}" />
-                                                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
-                                                                </Trigger>
-                                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                                                     <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
                                                                 </Trigger>
                                                             </ControlTemplate.Triggers>

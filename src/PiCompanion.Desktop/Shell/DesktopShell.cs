@@ -3,6 +3,7 @@ using PiCompanion.Application.Demo;
 using PiCompanion.Application.PiRpc;
 using PiCompanion.Application.Settings;
 using PiCompanion.Application.Skills;
+using PiCompanion.Application.Tasks;
 using PiCompanion.Core.Activation;
 using PiCompanion.Core.Runs;
 using PiCompanion.Core.Tasks;
@@ -31,7 +32,8 @@ public sealed class DesktopShell : IDisposable
         TaskCoordinator coordinator,
         AppSettingsService settings,
         PiConfigurationService piConfiguration,
-        SkillDiscoveryService skillDiscovery)
+        SkillDiscoveryService skillDiscovery,
+        ScheduledTaskService scheduledTaskService)
     {
         _coordinator = coordinator;
         _settings = settings;
@@ -63,6 +65,7 @@ public sealed class DesktopShell : IDisposable
             coordinator,
             _settings,
             piConfiguration,
+            scheduledTaskService,
             _themeManager.CurrentTheme,
             ApplySettings,
             _monitorWindow.ShowWithoutActivation,

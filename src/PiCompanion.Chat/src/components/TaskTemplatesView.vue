@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { UiButton, UiInput } from '@/components/ui'
-import type { TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
+import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { taskTemplateTargetLabel } from '@/utils/taskTemplates'
 import { useI18n } from '@/i18n'
 
 const { t } = useI18n()
 const props = defineProps<{
   templates: TaskTemplate[]
+  scheduledTasks?: ScheduledTask[]
   workspaces: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
 }>()
@@ -43,6 +44,10 @@ function preferenceRows(template: TaskTemplate) {
   return [
     { label: t('任务环境'), value: taskTemplateTargetLabel(template, props.workspaces, t) },
   ]
+}
+
+function linkedScheduleCount(templateId: string) {
+  return props.scheduledTasks?.filter(task => task.templateId === templateId).length ?? 0
 }
 </script>
 
@@ -84,7 +89,7 @@ function preferenceRows(template: TaskTemplate) {
           <span>{{ systemTemplates.length }}</span>
         </div>
         <div class="task-template-management-grid">
-          <article v-for="template in systemTemplates" :key="template.id" class="task-template-management-card system">
+          <article v-for="template in systemTemplates" :key="template.id" class="surface-card task-template-management-card system">
             <header>
               <strong>{{ template.name }}</strong>
               <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
@@ -109,9 +114,10 @@ function preferenceRows(template: TaskTemplate) {
           <span>{{ userTemplates.length }}</span>
         </div>
         <div v-if="userTemplates.length" class="task-template-management-grid">
-          <article v-for="template in userTemplates" :key="template.id" class="task-template-management-card">
+          <article v-for="template in userTemplates" :key="template.id" class="surface-card task-template-management-card">
             <header>
               <strong><b v-if="template.isPinned" :title="t('已固定到新任务首页')" aria-label="t('已固定到新任务首页')">★</b>{{ template.name }}</strong>
+              <small v-if="linkedScheduleCount(template.id)">{{ t('被 {count} 个定时任务关联', { count: linkedScheduleCount(template.id) }) }}</small>
               <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
             </header>
             <p>{{ template.prompt }}</p>

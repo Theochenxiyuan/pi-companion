@@ -542,24 +542,16 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <Grid Width="16"
-                                              Height="16"
-                                              VerticalAlignment="Center">
-                                            <Grid.RenderTransform>
+                                        <Control Width="16"
+                                                 Height="16"
+                                                 VerticalAlignment="Center"
+                                                 Style="{StaticResource LoadingSpinner}">
+                                            <Control.RenderTransform>
                                                 <RotateTransform x:Name="ResultSummarySpinnerRotate"
                                                                  CenterX="8"
                                                                  CenterY="8" />
-                                            </Grid.RenderTransform>
-                                            <Ellipse Stroke="{DynamicResource AccentBrush}"
-                                                     StrokeThickness="2"
-                                                     Opacity="0.18" />
-                                            <Path Data="M 8,1 A 7,7 0 0 1 15,8"
-                                                  Stroke="{DynamicResource AccentBrush}"
-                                                  StrokeThickness="2"
-                                                  StrokeStartLineCap="Round"
-                                                  StrokeEndLineCap="Round"
-                                                  Fill="Transparent" />
-                                        </Grid>
+                                            </Control.RenderTransform>
+                                        </Control>
                                         <TextBlock Grid.Column="1"
                                                    Margin="8,0,0,0"
                                                    Text="正在生成 AI 总结"

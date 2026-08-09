@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
 }
 .app-select-search:focus { border-color: var(--color-tone-9); }
 .app-select-search::-webkit-search-cancel-button { filter: invert(.6); }
-.app-select-options { min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-color: var(--color-tone-8) transparent; }
+.app-select-options { min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .app-select-group + .app-select-group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--color-border-subtle); }
 .app-select-group-label { padding: 5px 8px 4px; color: var(--color-tone-12); font-size: var(--font-size-caption); font-weight: var(--font-weight-semibold); letter-spacing: .025em; }
 .app-select-option {

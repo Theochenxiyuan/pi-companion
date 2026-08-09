@@ -97,7 +97,7 @@ function recoveryLabel(status: string) {
 </script>
 
 <template>
-  <section v-if="visible" class="evidence-panel">
+  <section v-if="visible" class="surface-card surface-card--sm surface-card--muted evidence-panel">
     <header class="evidence-header">
       <UiButton
         class="evidence-toggle"

@@ -14,6 +14,100 @@ namespace PiCompanion.Core.Tests;
 public sealed class DemoTaskCoordinatorTests
 {
     [Fact]
+    public async Task StartBackgroundTaskAsync_DoesNotAppendToOrSelectTheVisibleTask()
+    {
+        var root = Directory.CreateTempSubdirectory("pi-companion-background-task-tests-").FullName;
+        try
+        {
+            var firstWorkspace = Directory.CreateDirectory(Path.Combine(root, "first")).FullName;
+            var secondWorkspace = Directory.CreateDirectory(Path.Combine(root, "second")).FullName;
+            var backend = new RecordingBackend();
+            using var coordinator = new TaskCoordinator(backend);
+            await coordinator.StartAsync(
+                "visible task",
+                firstWorkspace,
+                "provider/model",
+                "high",
+                DemoRunMode.Success,
+                TestContext.Current.CancellationToken);
+            var visibleTaskId = coordinator.Current!.TaskId;
+
+            var background = await coordinator.StartBackgroundTaskAsync(
+                "scheduled task",
+                secondWorkspace,
+                "provider/model",
+                "high",
+                DemoRunMode.Success,
+                TestContext.Current.CancellationToken,
+                "read-only");
+
+            Assert.Equal(visibleTaskId, coordinator.Current?.TaskId);
+            Assert.NotEqual(visibleTaskId, background.TaskId);
+            Assert.Equal(2, backend.Requests.Count);
+            Assert.Equal("scheduled task", backend.Requests[1].Prompt);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScheduledTaskService_RunNowCreatesAuditedBackgroundTask()
+    {
+        var root = Directory.CreateTempSubdirectory("pi-companion-scheduler-service-tests-").FullName;
+        try
+        {
+            var workspaceDirectory = Directory.CreateDirectory(Path.Combine(root, "workspace")).FullName;
+            var store = new SqliteRunEventStore(Path.Combine(root, "state.db"));
+            var backend = new RecordingBackend();
+            using var coordinator = new TaskCoordinator(backend, store);
+            var workspace = coordinator.CreateWorkspace(workspaceDirectory);
+            var scheduledTask = coordinator.SaveScheduledTask(new ScheduledTask(
+                Guid.NewGuid(),
+                "Review now",
+                true,
+                null,
+                "Review the workspace.",
+                TaskTemplateTargetKind.Workspace,
+                workspace.Id,
+                "provider/model",
+                "high",
+                "read-only",
+                ScheduledTaskFrequency.Once,
+                DateTime.UtcNow.AddHours(1),
+                ScheduledDaysOfWeek.None,
+                "UTC",
+                null,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
+            using var scheduler = new ScheduledTaskService(
+                coordinator,
+                store,
+                () => "provider/default",
+                () => "high",
+                () => "standard");
+
+            await scheduler.RunNowAsync(scheduledTask.Id, TestContext.Current.CancellationToken);
+
+            Assert.Null(coordinator.Current);
+            var request = Assert.Single(backend.Requests);
+            Assert.Equal("Review the workspace.", request.Prompt);
+            Assert.Equal("read-only", request.PermissionMode);
+            var occurrence = Assert.Single(store.GetScheduledTasks()).LastOccurrence;
+            Assert.NotNull(occurrence);
+            Assert.Equal(ScheduledTaskOccurrenceStatus.Enqueued, occurrence.Status);
+            Assert.Equal(request.TaskId, occurrence.TaskId);
+            Assert.Equal(request.RunId, occurrence.RunId);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task InvalidateRuntimeResources_BlocksRunningScopeAndReleasesIdleWorkers()
     {
         var backend = new RecordingBackend();
@@ -1148,6 +1242,116 @@ public sealed class DemoTaskCoordinatorTests
         Assert.Single(coordinator.TaskTemplates);
     }
 
+    [Fact]
+    public async Task AgentCompanionCommands_FilterByCurrentWorkspaceAndDeduplicateScheduledTasks()
+    {
+        var root = Directory.CreateTempSubdirectory("pi-companion-agent-schedule-tests-").FullName;
+        try
+        {
+            var firstDirectory = Directory.CreateDirectory(Path.Combine(root, "first")).FullName;
+            var secondDirectory = Directory.CreateDirectory(Path.Combine(root, "second")).FullName;
+            var backend = new RecordingBackend();
+            using var coordinator = new TaskCoordinator(backend);
+            var firstWorkspace = coordinator.CreateWorkspace(firstDirectory);
+            var secondWorkspace = coordinator.CreateWorkspace(secondDirectory);
+            var now = DateTimeOffset.UtcNow;
+            var firstTemplate = coordinator.SaveTaskTemplate(new TaskTemplate(
+                Guid.NewGuid(),
+                "First workspace review",
+                "Review only the first workspace.",
+                TaskTemplateTargetKind.Workspace,
+                firstWorkspace.Id,
+                null,
+                "high",
+                "read-only",
+                false,
+                now,
+                now));
+            coordinator.SaveTaskTemplate(new TaskTemplate(
+                Guid.NewGuid(),
+                "Second workspace secret",
+                "This content must not cross workspace boundaries.",
+                TaskTemplateTargetKind.Workspace,
+                secondWorkspace.Id,
+                null,
+                null,
+                "read-only",
+                false,
+                now,
+                now));
+            coordinator.SaveTaskTemplate(new TaskTemplate(
+                Guid.NewGuid(),
+                "Any current context",
+                "Visible in either task scope.",
+                TaskTemplateTargetKind.CurrentContext,
+                null,
+                null,
+                null,
+                null,
+                false,
+                now,
+                now));
+            var context = new AgentCommandContext(
+                "tool-call-list",
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                TaskScopeKind.Workspace,
+                firstDirectory,
+                "en-US");
+
+            var templates = await backend.ListTaskTemplatesAsync(
+                new AgentTaskTemplateListRequest(context, null),
+                TestContext.Current.CancellationToken);
+
+            Assert.Contains(templates, template => template.Id == "builtin:analyze-project" && template.Name == "Analyze project");
+            Assert.Contains(templates, template => template.Id == firstTemplate.Id.ToString());
+            Assert.Contains(templates, template => template.Name == "Any current context");
+            Assert.DoesNotContain(templates, template => template.Name == "Second workspace secret");
+            Assert.All(templates, template => Assert.Null(template.Prompt));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => backend.GetTaskTemplateAsync(
+                new AgentTaskTemplateGetRequest(context, coordinator.TaskTemplates.Single(
+                    template => template.Name == "Second workspace secret").Id.ToString()),
+                TestContext.Current.CancellationToken).AsTask());
+
+            var scheduledRequest = new AgentScheduledTaskCreationRequest(
+                context with { RequestId = "tool-call-create" },
+                "Weekly first review",
+                firstTemplate.Id.ToString(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                ScheduledTaskFrequency.Weekly,
+                DateTime.SpecifyKind(DateTime.UtcNow.AddDays(2), DateTimeKind.Unspecified),
+                ScheduledDaysOfWeek.Monday,
+                "UTC",
+                true);
+            var first = await backend.CreateScheduledTaskAsync(
+                scheduledRequest,
+                TestContext.Current.CancellationToken);
+            var repeated = await backend.CreateScheduledTaskAsync(
+                scheduledRequest with { Context = context with { RequestId = "tool-call-create-2" } },
+                TestContext.Current.CancellationToken);
+            var visibleSchedules = await backend.ListScheduledTasksAsync(
+                new AgentScheduledTaskListRequest(context, null, true),
+                TestContext.Current.CancellationToken);
+
+            Assert.False(first.AlreadyExisted);
+            Assert.True(repeated.AlreadyExisted);
+            Assert.Equal(first.ScheduledTask.Id, repeated.ScheduledTask.Id);
+            var visible = Assert.Single(visibleSchedules);
+            Assert.Equal("Weekly first review", visible.Name);
+            Assert.Equal("First workspace review", visible.TemplateName);
+            Assert.Equal(["Monday"], visible.DaysOfWeek);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static CompanionRunEvent SettledEvent(Guid taskId, Guid runId, DateTimeOffset timestamp) => new(
         Guid.NewGuid(),
         taskId,
@@ -1237,10 +1441,18 @@ public sealed class DemoTaskCoordinatorTests
 
     private sealed class RecordingBackend : IAgentBackend, IAgentBackendPrewarmer,
         IAgentBackendWorkspaceReleaser, IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider,
-        IAgentTaskTemplateCommandSource
+        IAgentCompanionCommandSource
     {
+        private Func<AgentTaskTemplateListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentTaskTemplateView>>>?
+            _taskTemplateListHandler;
+        private Func<AgentTaskTemplateGetRequest, CancellationToken, ValueTask<AgentTaskTemplateView>>?
+            _taskTemplateGetHandler;
         private Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>?
             _taskTemplateCreationHandler;
+        private Func<AgentScheduledTaskListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentScheduledTaskView>>>?
+            _scheduledTaskListHandler;
+        private Func<AgentScheduledTaskCreationRequest, CancellationToken, ValueTask<AgentScheduledTaskCreationResult>>?
+            _scheduledTaskCreationHandler;
 
         public List<AgentRunRequest> Requests { get; } = [];
 
@@ -1266,6 +1478,14 @@ public sealed class DemoTaskCoordinatorTests
 
         public event Action<AgentToolExecution>? ToolExecutionCompleted;
 
+        public void SetTaskTemplateListHandler(
+            Func<AgentTaskTemplateListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentTaskTemplateView>>> handler) =>
+            _taskTemplateListHandler = handler;
+
+        public void SetTaskTemplateGetHandler(
+            Func<AgentTaskTemplateGetRequest, CancellationToken, ValueTask<AgentTaskTemplateView>> handler) =>
+            _taskTemplateGetHandler = handler;
+
         public void SetTaskTemplateCreationHandler(
             Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>> handler) =>
             _taskTemplateCreationHandler = handler;
@@ -1275,6 +1495,38 @@ public sealed class DemoTaskCoordinatorTests
             CancellationToken cancellationToken = default) =>
             Assert.IsType<Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>>(
                 _taskTemplateCreationHandler)(request, cancellationToken);
+
+        public void SetScheduledTaskListHandler(
+            Func<AgentScheduledTaskListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentScheduledTaskView>>> handler) =>
+            _scheduledTaskListHandler = handler;
+
+        public void SetScheduledTaskCreationHandler(
+            Func<AgentScheduledTaskCreationRequest, CancellationToken, ValueTask<AgentScheduledTaskCreationResult>> handler) =>
+            _scheduledTaskCreationHandler = handler;
+
+        public ValueTask<IReadOnlyList<AgentTaskTemplateView>> ListTaskTemplatesAsync(
+            AgentTaskTemplateListRequest request,
+            CancellationToken cancellationToken = default) =>
+            Assert.IsType<Func<AgentTaskTemplateListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentTaskTemplateView>>>>(
+                _taskTemplateListHandler)(request, cancellationToken);
+
+        public ValueTask<AgentTaskTemplateView> GetTaskTemplateAsync(
+            AgentTaskTemplateGetRequest request,
+            CancellationToken cancellationToken = default) =>
+            Assert.IsType<Func<AgentTaskTemplateGetRequest, CancellationToken, ValueTask<AgentTaskTemplateView>>>(
+                _taskTemplateGetHandler)(request, cancellationToken);
+
+        public ValueTask<IReadOnlyList<AgentScheduledTaskView>> ListScheduledTasksAsync(
+            AgentScheduledTaskListRequest request,
+            CancellationToken cancellationToken = default) =>
+            Assert.IsType<Func<AgentScheduledTaskListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentScheduledTaskView>>>>(
+                _scheduledTaskListHandler)(request, cancellationToken);
+
+        public ValueTask<AgentScheduledTaskCreationResult> CreateScheduledTaskAsync(
+            AgentScheduledTaskCreationRequest request,
+            CancellationToken cancellationToken = default) =>
+            Assert.IsType<Func<AgentScheduledTaskCreationRequest, CancellationToken, ValueTask<AgentScheduledTaskCreationResult>>>(
+                _scheduledTaskCreationHandler)(request, cancellationToken);
 
         public void PublishToolExecution(AgentToolExecution execution) =>
             ToolExecutionCompleted?.Invoke(execution);

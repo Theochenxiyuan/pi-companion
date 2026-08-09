@@ -5,8 +5,8 @@ namespace PiCompanion.Application.PiRpc;
 
 internal sealed class AgentCommandPipeServer : IDisposable
 {
-    public const int MaximumRequestBytes = 256 * 1024;
-    public const int MaximumResponseBytes = 32 * 1024;
+    public const int MaximumRequestBytes = 1024 * 1024;
+    public const int MaximumResponseBytes = 1024 * 1024;
 
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<byte[]>> _handler;
     private readonly Action<Exception>? _onError;

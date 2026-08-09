@@ -22,6 +22,47 @@
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         </Style>
 
+        <Style x:Key="RoundedFocusVisual" TargetType="{x:Type Control}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border Margin="1"
+                                BorderBrush="{DynamicResource FocusBrush}"
+                                BorderThickness="2"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True">
+                            <AdornedElementPlaceholder />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LoadingSpinner" TargetType="Control">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Control">
+                        <Viewbox Stretch="Uniform">
+                            <Grid Width="16" Height="16">
+                                <Ellipse Stroke="{TemplateBinding Foreground}"
+                                         StrokeThickness="2"
+                                         Opacity="0.18" />
+                                <Path Data="M 8,1 A 7,7 0 0 1 15,8"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      Fill="Transparent" />
+                            </Grid>
+                        </Viewbox>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style TargetType="ToolTip">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             <Setter Property="Background" Value="{DynamicResource RaisedBrush}" />
@@ -54,6 +95,7 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="16,9" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource RoundedFocusVisual}" />
             <Setter Property="FontWeight" Value="{StaticResource TypographyWeightSemibold}" />
             <Setter Property="Template">
                 <Setter.Value>

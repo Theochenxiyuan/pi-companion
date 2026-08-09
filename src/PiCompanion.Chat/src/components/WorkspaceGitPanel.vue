@@ -333,7 +333,7 @@ function formatCommitDate(value: string) {
     </form>
 
     <div v-if="!workingDirectory" class="git-panel-empty">{{ t('选择工作目录后显示 Git 变更') }}</div>
-    <div v-else-if="!snapshot" class="git-panel-empty"><span class="file-loading-spinner"></span>{{ t('正在读取 Git 状态…') }}</div>
+    <div v-else-if="!snapshot" class="git-panel-empty"><span class="ui-spinner file-loading-spinner"></span>{{ t('正在读取 Git 状态…') }}</div>
     <div v-else-if="snapshot.error" class="git-panel-empty error">{{ snapshot.error }}</div>
     <div v-else-if="!snapshot.isRepository" class="git-panel-empty">{{ t('当前工作目录不是 Git 仓库') }}</div>
 
@@ -431,7 +431,7 @@ function formatCommitDate(value: string) {
               :disabled="!canGenerateCommitMessage"
               @click="emit('generateCommitMessage')"
             >
-              <span v-if="commitMessageLoading" class="file-loading-spinner"></span>
+              <span v-if="commitMessageLoading" class="ui-spinner file-loading-spinner"></span>
               <svg v-else viewBox="0 0 18 18" aria-hidden="true"><path d="m9 2 .8 2.7L12.5 6l-2.7.8L9 9.5l-.8-2.7L5.5 6l2.7-1.3zM14 10l.6 1.9 1.9.6-1.9.6L14 15l-.6-1.9-1.9-.6 1.9-.6z" /></svg>
               <span>{{ t('生成') }}</span>
             </UiButton>
@@ -448,7 +448,7 @@ function formatCommitDate(value: string) {
             @keydown.ctrl.enter.prevent="runCommit"
           ></UiTextarea>
           <UiButton class="primary" type="submit" :disabled="!canCommit">
-            <span v-if="pendingAction === 'commit'" class="file-loading-spinner"></span>
+            <span v-if="pendingAction === 'commit'" class="ui-spinner file-loading-spinner"></span>
             {{ t('提交') }}
           </UiButton>
           <p v-if="commitMessageResult?.error" class="git-commit-message-notice error">
@@ -522,7 +522,7 @@ function formatCommitDate(value: string) {
 
       <section v-else class="git-history-view">
         <div v-if="!history" class="git-panel-empty">
-          <span v-if="historyLoading" class="file-loading-spinner"></span>
+          <span v-if="historyLoading" class="ui-spinner file-loading-spinner"></span>
           {{ t('正在读取提交历史…') }}
         </div>
         <div v-else-if="history.error && !history.entries.length" class="git-panel-empty error">{{ history.error }}</div>
@@ -545,7 +545,7 @@ function formatCommitDate(value: string) {
           <p v-if="history.error" class="git-history-load-error">{{ history.error }}</p>
           <div v-if="history.hasMore" class="git-history-load-more">
             <UiButton type="button" :disabled="historyLoading" @click="emit('refreshHistory', true)">
-              <span v-if="historyLoading" class="file-loading-spinner"></span>
+              <span v-if="historyLoading" class="ui-spinner file-loading-spinner"></span>
               {{ t(historyLoading ? '正在加载…' : '加载更多') }}
             </UiButton>
           </div>

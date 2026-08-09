@@ -10,6 +10,7 @@ const source = (relativePath: string) => readFileSync(
 const monitorCode = source('../../PiCompanion.Desktop/Monitor/MonitorWindow.xaml.cs')
 const monitorAnimationCode = source('../../PiCompanion.Desktop/Monitor/MonitorWindow.StatusAnimation.cs')
 const monitorView = source('../../PiCompanion.Desktop/Monitor/MonitorWindow.xaml')
+const appView = source('../../PiCompanion.Desktop/App.xaml')
 const promptComposerCode = source('../../PiCompanion.Desktop/PromptComposer/PromptComposerWindow.xaml.cs')
 const promptComposerView = source('../../PiCompanion.Desktop/PromptComposer/PromptComposerWindow.xaml')
 const skillCompletionCode = source('../../PiCompanion.Desktop/Skills/SkillCompletionController.cs')
@@ -332,8 +333,10 @@ describe('Monitor expand and collapse behavior', () => {
     expect(monitorView).toContain('x:Name="ResultSummaryLoading"')
     expect(monitorView).toContain('x:Name="ResultSummarySpinnerRotate"')
     expect(monitorView).toContain('Text="正在生成 AI 总结"')
+    expect(appView).toContain('x:Key="LoadingSpinner"')
+    expect(appView).toContain('Data="M 8,1 A 7,7 0 0 1 15,8"')
     const summarySpinner = monitorView.match(
-      /<Grid Width="16"[\s\S]*?x:Name="ResultSummarySpinnerRotate"[\s\S]*?<\/Grid\.RenderTransform>/u,
+      /<Control Width="16"[\s\S]*?Style="\{StaticResource LoadingSpinner\}"[\s\S]*?x:Name="ResultSummarySpinnerRotate"[\s\S]*?<\/Control\.RenderTransform>/u,
     )?.[0]
     expect(summarySpinner).toContain('CenterX="8"')
     expect(summarySpinner).toContain('CenterY="8"')

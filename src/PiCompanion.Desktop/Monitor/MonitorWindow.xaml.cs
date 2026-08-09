@@ -78,7 +78,7 @@ public partial class MonitorWindow : Window
         Action exit)
     {
         InitializeComponent();
-        Icon = PiAppIcon.WindowIcon;
+        PiAppIcon.ApplyTo(this);
         _coordinator = coordinator;
         _appSettings = appSettings;
         _openChat = openChat;

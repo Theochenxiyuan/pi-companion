@@ -370,7 +370,7 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
           <section
             v-for="workspace in column"
             :key="workspace.key"
-            class="management-workspace"
+            class="surface-card surface-card--lg management-workspace"
           >
             <div class="management-workspace-header">
               <UiButton

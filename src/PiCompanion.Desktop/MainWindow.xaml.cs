@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using PiCompanion.Application.Demo;
@@ -58,6 +59,7 @@ public partial class MainWindow : Window
     private readonly HashSet<string> _clipboardDraftAttachments = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettingsService _settings;
     private readonly PiConfigurationService _piConfiguration;
+    private readonly ScheduledTaskService _scheduledTaskService;
     private readonly Action<PiCompanionSettings> _applySettings;
     private readonly Action _showMonitor;
     private readonly Action _toggleMonitor;
@@ -67,6 +69,7 @@ public partial class MainWindow : Window
     private bool _bridgeReady;
     private bool _isInitializing;
     private bool _isInitialized;
+    private string? _loadingErrorDetail;
     private bool _openCurrentTaskWhenReady;
     private Guid? _incrementalTaskId;
     private Guid? _incrementalRunId;
@@ -81,6 +84,7 @@ public partial class MainWindow : Window
         TaskCoordinator coordinator,
         AppSettingsService settings,
         PiConfigurationService piConfiguration,
+        ScheduledTaskService scheduledTaskService,
         AppTheme theme,
         Action<PiCompanionSettings> applySettings,
         Action showMonitor,
@@ -88,10 +92,11 @@ public partial class MainWindow : Window
         Action exit)
     {
         InitializeComponent();
-        Icon = PiAppIcon.WindowIcon;
+        PiAppIcon.ApplyTo(this);
         _coordinator = coordinator;
         _settings = settings;
         _piConfiguration = piConfiguration;
+        _scheduledTaskService = scheduledTaskService;
         _theme = theme;
         _applySettings = applySettings;
         _showMonitor = showMonitor;
@@ -103,6 +108,7 @@ public partial class MainWindow : Window
         _coordinator.RunEventReceived += OnRunEventReceived;
         _coordinator.EvidenceChanged += OnEvidenceChanged;
         _coordinator.TaskTemplatesChanged += OnTaskTemplatesChanged;
+        _coordinator.ScheduledTasksChanged += OnScheduledTasksChanged;
         DesktopLocalizer.Apply(this);
     }
 
@@ -234,9 +240,12 @@ public partial class MainWindow : Window
     private async Task InitializeWebViewAsync()
     {
         _isInitializing = true;
+        _loadingErrorDetail = null;
         ChatWebView.Visibility = Visibility.Hidden;
         LoadingPanel.Visibility = Visibility.Visible;
-        RetryButton.Visibility = Visibility.Collapsed;
+        LoadingErrorActions.Visibility = Visibility.Collapsed;
+        RetryButton.IsEnabled = false;
+        StartLoadingAnimation();
         LoadingTitle.Text = DesktopLocalizer.Text("正在准备智能体对话", "Preparing Agent Chat");
         LoadingDetail.Text = DesktopLocalizer.Text("启动 WebView2 并加载本地 Vue 应用", "Starting WebView2 and loading the local Vue app");
 
@@ -280,11 +289,10 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ChatWebView.Visibility = Visibility.Hidden;
-            LoadingPanel.Visibility = Visibility.Visible;
-            LoadingTitle.Text = DesktopLocalizer.Text("智能体对话启动失败", "Agent Chat failed to start");
-            LoadingDetail.Text = exception.Message;
-            RetryButton.Visibility = Visibility.Visible;
+            ShowLoadingError(
+                DesktopLocalizer.Text("智能体对话启动失败", "Agent Chat failed to start"),
+                exception.Message,
+                exception.ToString());
         }
         finally
         {
@@ -304,17 +312,59 @@ public partial class MainWindow : Window
     {
         if (e.IsSuccess)
         {
+            StopLoadingAnimation();
+            _loadingErrorDetail = null;
+            LoadingErrorActions.Visibility = Visibility.Collapsed;
             LoadingPanel.Visibility = Visibility.Collapsed;
             ChatWebView.Visibility = Visibility.Visible;
         }
         else
         {
-            ChatWebView.Visibility = Visibility.Hidden;
-            LoadingPanel.Visibility = Visibility.Visible;
-            LoadingTitle.Text = DesktopLocalizer.Text("本地 Vue 应用加载失败", "The local Vue app failed to load");
-            LoadingDetail.Text = $"WebView2 error: {e.WebErrorStatus}";
-            RetryButton.Visibility = Visibility.Visible;
+            var detail = $"WebView2 error: {e.WebErrorStatus}";
+            ShowLoadingError(
+                DesktopLocalizer.Text("本地 Vue 应用加载失败", "The local Vue app failed to load"),
+                detail,
+                detail);
         }
+    }
+
+    private void StartLoadingAnimation()
+    {
+        LoadingSpinner.Visibility = Visibility.Visible;
+        LoadingSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        LoadingSpinnerRotate.Angle = 0;
+        if (!_settings.Current.Monitor.AnimationsEnabled || !SystemParameters.ClientAreaAnimation)
+        {
+            return;
+        }
+
+        LoadingSpinnerRotate.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(900))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+            },
+            HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private void StopLoadingAnimation()
+    {
+        LoadingSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        LoadingSpinnerRotate.Angle = 0;
+        LoadingSpinner.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowLoadingError(string title, string detail, string diagnosticDetail)
+    {
+        StopLoadingAnimation();
+        _loadingErrorDetail = diagnosticDetail;
+        ChatWebView.Visibility = Visibility.Hidden;
+        LoadingPanel.Visibility = Visibility.Visible;
+        LoadingTitle.Text = title;
+        LoadingDetail.Text = detail;
+        CopyLoadingErrorButton.Content = DesktopLocalizer.Text("复制错误信息", "Copy error details");
+        RetryButton.IsEnabled = true;
+        LoadingErrorActions.Visibility = Visibility.Visible;
     }
 
     private void ApplyChatZoom(int percent)
@@ -456,6 +506,15 @@ public partial class MainWindow : Window
                     break;
                 case "DeleteTaskTemplate":
                     DeleteTaskTemplate(payload);
+                    break;
+                case "SaveScheduledTask":
+                    SaveScheduledTask(payload);
+                    break;
+                case "DeleteScheduledTask":
+                    DeleteScheduledTask(payload);
+                    break;
+                case "RunScheduledTaskNow":
+                    await RunScheduledTaskNowAsync(payload);
                     break;
                 case "SelectTask":
                     SelectTask(Guid.Parse(ReadString(payload, "taskId")));
@@ -860,6 +919,7 @@ public partial class MainWindow : Window
             _coordinator.CurrentConversation,
             _coordinator.Workspaces,
             _coordinator.TaskTemplates,
+            _coordinator.ScheduledTasks,
             _coordinator.RecentTasks,
             historyPage.Items,
             historyPage.HasMore,
@@ -918,6 +978,78 @@ public partial class MainWindow : Window
         PostMessage(
             "TaskTemplatesUpdated",
             new { taskTemplates = _coordinator.TaskTemplates.Select(BridgeContracts.CreateTaskTemplate).ToArray() });
+    }
+
+    private void SaveScheduledTask(JsonElement payload)
+    {
+        var request = payload.Deserialize<SaveScheduledTaskRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("定时任务保存请求无效。");
+        if (!Enum.TryParse<ScheduledTaskFrequency>(request.Frequency, ignoreCase: true, out var frequency) ||
+            !Enum.IsDefined(frequency))
+        {
+            throw new InvalidOperationException("定时任务频率无效。");
+        }
+
+        TaskTemplateTargetKind? targetKind = null;
+        if (!string.IsNullOrWhiteSpace(request.TargetKind))
+        {
+            if (!Enum.TryParse<TaskTemplateTargetKind>(request.TargetKind, ignoreCase: true, out var parsedTarget) ||
+                !Enum.IsDefined(parsedTarget))
+            {
+                throw new InvalidOperationException("定时任务运行位置无效。");
+            }
+            targetKind = parsedTarget;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var existing = request.Id is { } scheduledTaskId
+            ? _coordinator.ScheduledTasks.FirstOrDefault(task => task.Id == scheduledTaskId)
+            : null;
+        _coordinator.SaveScheduledTask(new ScheduledTask(
+            request.Id ?? Guid.NewGuid(),
+            request.Name,
+            request.IsEnabled,
+            request.TemplateId,
+            request.Prompt,
+            targetKind,
+            request.WorkspaceId,
+            request.Model,
+            request.ThinkingLevel,
+            request.PermissionMode,
+            frequency,
+            request.LocalStartAt,
+            (ScheduledDaysOfWeek)request.DaysOfWeek,
+            request.TimeZoneId,
+            null,
+            existing?.CreatedAt ?? now,
+            now,
+            existing?.LastOccurrence));
+    }
+
+    private void DeleteScheduledTask(JsonElement payload)
+    {
+        var request = payload.Deserialize<ScheduledTaskRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("定时任务删除请求无效。");
+        _coordinator.DeleteScheduledTask(request.ScheduledTaskId);
+    }
+
+    private async Task RunScheduledTaskNowAsync(JsonElement payload)
+    {
+        var request = payload.Deserialize<ScheduledTaskRequestDto>(JsonOptions) ??
+            throw new InvalidOperationException("定时任务立即运行请求无效。");
+        await _scheduledTaskService.RunNowAsync(request.ScheduledTaskId);
+    }
+
+    private void PostScheduledTasks()
+    {
+        if (!_bridgeReady)
+        {
+            return;
+        }
+
+        PostMessage(
+            "ScheduledTasksUpdated",
+            new { scheduledTasks = _coordinator.ScheduledTasks.Select(BridgeContracts.CreateScheduledTask).ToArray() });
     }
 
     private async Task PostSkillsAsync(JsonElement payload)
@@ -2151,6 +2283,16 @@ public partial class MainWindow : Window
         _ = Dispatcher.InvokeAsync(PostTaskTemplates);
     }
 
+    private void OnScheduledTasksChanged()
+    {
+        if (!_bridgeReady)
+        {
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(PostScheduledTasks);
+    }
+
     private void PostFileDiff(Guid changeId)
     {
         var diff = _coordinator.GetFileDiff(changeId) ??
@@ -2932,10 +3074,34 @@ public partial class MainWindow : Window
 
     private async void OnRetryClick(object sender, RoutedEventArgs e)
     {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        RetryButton.IsEnabled = false;
         ChatWebView.Visibility = Visibility.Hidden;
         LoadingPanel.Visibility = Visibility.Visible;
         _isInitialized = false;
         await InitializeWebViewAsync();
+    }
+
+    private void OnCopyLoadingErrorClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_loadingErrorDetail))
+        {
+            return;
+        }
+
+        try
+        {
+            System.Windows.Clipboard.SetText(_loadingErrorDetail);
+            CopyLoadingErrorButton.Content = DesktopLocalizer.Text("已复制", "Copied");
+        }
+        catch (ExternalException)
+        {
+            CopyLoadingErrorButton.Content = DesktopLocalizer.Text("复制失败", "Copy failed");
+        }
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -2960,8 +3126,10 @@ public partial class MainWindow : Window
         _coordinator.RunEventReceived -= OnRunEventReceived;
         _coordinator.EvidenceChanged -= OnEvidenceChanged;
         _coordinator.TaskTemplatesChanged -= OnTaskTemplatesChanged;
+        _coordinator.ScheduledTasksChanged -= OnScheduledTasksChanged;
         CancelPendingSkillImports();
         DiscardDraft();
+        StopLoadingAnimation();
         ChatWebView.Dispose();
     }
 

@@ -32,6 +32,29 @@ public interface IRunEventStore
 
     void DeleteTaskTemplate(Guid templateId);
 
+    IReadOnlyList<ScheduledTask> GetScheduledTasks();
+
+    ScheduledTask UpsertScheduledTask(ScheduledTask scheduledTask);
+
+    void DeleteScheduledTask(Guid scheduledTaskId);
+
+    bool HasActiveScheduledTaskOccurrence(Guid scheduledTaskId);
+
+    ScheduledTaskOccurrence? BeginScheduledTaskOccurrence(
+        ScheduledTaskOccurrence occurrence,
+        DateTimeOffset? nextRunAt,
+        bool disableSchedule,
+        bool advanceSchedule);
+
+    void CompleteScheduledTaskOccurrence(
+        Guid occurrenceId,
+        ScheduledTaskOccurrenceStatus status,
+        Guid? taskId,
+        Guid? runId,
+        string? error);
+
+    void RecoverDispatchingScheduledTaskOccurrences();
+
     WorkspaceHistoryEntry UpdateWorkspacePresentation(
         Guid workspaceId,
         string? displayName,

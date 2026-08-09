@@ -108,6 +108,159 @@ public sealed class PiRpcBackendTests
     }
 
     [Fact]
+    public async Task AgentCommandPipe_ReadsTemplatesAndParsesScheduledTaskCreation()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var cancellationToken = TestContext.Current.CancellationToken;
+            var pipeName = $"PiCompanion.Tests.AgentCommands.{Guid.NewGuid():N}";
+            using var backend = CreateBackend(root, agentCommandPipeName: pipeName);
+            var largePrompt = new string('任', TaskTemplateRules.MaximumPromptLength);
+            var templateId = Guid.NewGuid();
+            backend.SetTaskTemplateListHandler((request, _) => ValueTask.FromResult<IReadOnlyList<AgentTaskTemplateView>>(
+            [
+                new AgentTaskTemplateView(
+                    templateId.ToString(),
+                    "Review changes",
+                    null,
+                    TaskTemplateTargetKind.Workspace,
+                    null,
+                    null,
+                    "high",
+                    "read-only",
+                    false,
+                    DateTimeOffset.UnixEpoch,
+                    DateTimeOffset.UnixEpoch,
+                    false,
+                    "User"),
+            ]));
+            backend.SetTaskTemplateGetHandler((request, _) => ValueTask.FromResult(new AgentTaskTemplateView(
+                request.TemplateId,
+                "Review changes",
+                largePrompt,
+                TaskTemplateTargetKind.Workspace,
+                null,
+                null,
+                "high",
+                "read-only",
+                false,
+                DateTimeOffset.UnixEpoch,
+                DateTimeOffset.UnixEpoch,
+                false,
+                "User")));
+            AgentScheduledTaskCreationRequest? receivedScheduledTask = null;
+            backend.SetScheduledTaskCreationHandler((request, _) =>
+            {
+                receivedScheduledTask = request;
+                var now = DateTimeOffset.UtcNow;
+                return ValueTask.FromResult(new AgentScheduledTaskCreationResult(
+                    new ScheduledTask(
+                        Guid.NewGuid(),
+                        request.Name,
+                        request.IsEnabled,
+                        null,
+                        request.Prompt,
+                        request.TargetKind,
+                        request.WorkspaceId,
+                        request.Model,
+                        request.ThinkingLevel,
+                        request.PermissionMode,
+                        request.Frequency,
+                        request.LocalStartAt,
+                        request.DaysOfWeek,
+                        request.TimeZoneId,
+                        now.AddDays(1),
+                        now,
+                        now),
+                    AlreadyExisted: false));
+            });
+            var run = CreateRequest(root, "retry-wait");
+            await backend.StartRunAsync(run, cancellationToken);
+            var contextPath = Assert.Single(Directory.GetFiles(
+                Path.Combine(root, "sessions", ".runtime"),
+                "*.context.json"));
+            using var context = JsonDocument.Parse(File.ReadAllText(contextPath));
+            var runtime = context.RootElement;
+            var token = runtime.GetProperty("permissionToken").GetString();
+            var generation = runtime.GetProperty("generation").GetInt64();
+            object Envelope(string type, string requestId, object? extra = null) => new
+            {
+                type,
+                requestId,
+                taskId = run.TaskId,
+                runId = run.RunId,
+                generation,
+                permissionToken = token,
+                templateId = extra as string,
+            };
+
+            using var listed = await SendAgentCommandAsync(
+                pipeName,
+                new
+                {
+                    type = "listTaskTemplates",
+                    requestId = "list-templates",
+                    taskId = run.TaskId,
+                    runId = run.RunId,
+                    generation,
+                    permissionToken = token,
+                    query = "review",
+                },
+                cancellationToken);
+            using var read = await SendAgentCommandAsync(
+                pipeName,
+                Envelope("getTaskTemplate", "get-template", templateId.ToString()),
+                cancellationToken);
+            using var created = await SendAgentCommandAsync(
+                pipeName,
+                new
+                {
+                    type = "createScheduledTask",
+                    requestId = "create-schedule",
+                    taskId = run.TaskId,
+                    runId = run.RunId,
+                    generation,
+                    permissionToken = token,
+                    scheduledTask = new
+                    {
+                        name = "Weekly review",
+                        templateId = (string?)null,
+                        prompt = "Review the workspace.",
+                        targetKind = "Workspace",
+                        workspaceId = (string?)null,
+                        model = (string?)null,
+                        thinkingLevel = "high",
+                        permissionMode = "read-only",
+                        frequency = "Weekly",
+                        localStartAt = "2035-05-20T09:30",
+                        daysOfWeek = new[] { "Monday", "Friday" },
+                        timeZoneId = (string?)null,
+                        isEnabled = true,
+                    },
+                },
+                cancellationToken);
+
+            Assert.True(
+                listed.RootElement.GetProperty("success").GetBoolean(),
+                listed.RootElement.GetProperty("error").GetString());
+            Assert.Equal("Workspace", listed.RootElement.GetProperty("taskTemplates")[0].GetProperty("targetKind").GetString());
+            Assert.Equal(largePrompt.Length, read.RootElement.GetProperty("taskTemplate").GetProperty("prompt").GetString()!.Length);
+            Assert.True(created.RootElement.GetProperty("success").GetBoolean());
+            Assert.NotNull(receivedScheduledTask);
+            Assert.Equal(ScheduledTaskFrequency.Weekly, receivedScheduledTask.Frequency);
+            Assert.Equal(ScheduledDaysOfWeek.Monday | ScheduledDaysOfWeek.Friday, receivedScheduledTask.DaysOfWeek);
+            Assert.Equal(DateTimeKind.Unspecified, receivedScheduledTask.LocalStartAt.Kind);
+            Assert.Equal(TimeZoneInfo.Local.Id, receivedScheduledTask.TimeZoneId);
+            await backend.AbortAsync(run.RunId, cancellationToken);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task StartRunAsync_ExposesEffectiveSkillPathsWithoutOverridingNativeLoading()
     {
         var root = CreateTemporaryDirectory();
@@ -1682,7 +1835,7 @@ public sealed class PiRpcBackendTests
         await pipe.FlushAsync(cancellationToken);
         await pipe.ReadExactlyAsync(header, cancellationToken);
         var responseLength = BinaryPrimitives.ReadInt32LittleEndian(header);
-        Assert.InRange(responseLength, 1, 32 * 1024);
+        Assert.InRange(responseLength, 1, 1024 * 1024);
         var response = new byte[responseLength];
         await pipe.ReadExactlyAsync(response, cancellationToken);
         return JsonDocument.Parse(response);

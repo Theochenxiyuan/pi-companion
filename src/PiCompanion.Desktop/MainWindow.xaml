@@ -190,16 +190,34 @@
 
             <Border x:Name="LoadingPanel" Background="{DynamicResource WindowBrush}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Border Width="54" Height="54" CornerRadius="18" Background="{DynamicResource RaisedBrush}">
-                        <TextBlock Text="π" FontFamily="{StaticResource TypographyFontBrand}" FontSize="{StaticResource TypographySizeBrandLarge}" Foreground="{DynamicResource AccentHoverBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    <Grid Width="62" Height="62" HorizontalAlignment="Center">
+                        <Border Width="54" Height="54" CornerRadius="18" Background="{DynamicResource RaisedBrush}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="π" FontFamily="{StaticResource TypographyFontBrand}" FontSize="{StaticResource TypographySizeBrandLarge}" Foreground="{DynamicResource AccentHoverBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Control x:Name="LoadingSpinner"
+                                 Width="18"
+                                 Height="18"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Bottom"
+                                 Style="{StaticResource LoadingSpinner}">
+                            <Control.RenderTransform>
+                                <RotateTransform x:Name="LoadingSpinnerRotate" CenterX="9" CenterY="9" />
+                            </Control.RenderTransform>
+                        </Control>
+                    </Grid>
                     <TextBlock x:Name="LoadingTitle" Text="正在准备智能体对话" Margin="0,18,0,0"
-                               FontSize="{StaticResource TypographySizeTitleSmall}" FontWeight="{StaticResource TypographyWeightSemibold}" HorizontalAlignment="Center" />
+                                FontSize="{StaticResource TypographySizeTitleSmall}" FontWeight="{StaticResource TypographyWeightSemibold}" HorizontalAlignment="Center" />
                     <TextBlock x:Name="LoadingDetail" Text="启动 WebView2 并加载本地 Vue 应用" Margin="0,7,0,0"
-                               FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" />
-                    <Button x:Name="RetryButton" Content="重试" Margin="0,18,0,0" Visibility="Collapsed"
-                            Click="OnRetryClick" />
+                                MaxWidth="560" TextWrapping="Wrap" TextAlignment="Center"
+                                FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" />
+                    <StackPanel x:Name="LoadingErrorActions" Orientation="Horizontal" HorizontalAlignment="Center"
+                                Margin="0,18,0,0" Visibility="Collapsed">
+                        <Button x:Name="RetryButton" Content="重试" Click="OnRetryClick" />
+                        <Button x:Name="CopyLoadingErrorButton" Content="复制错误信息" Margin="8,0,0,0"
+                                Style="{StaticResource SecondaryButton}" Click="OnCopyLoadingErrorClick" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>

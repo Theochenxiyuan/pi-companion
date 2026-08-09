@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -13,7 +14,7 @@ namespace PiCompanion.Application.PiRpc;
 
 public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgentBackendWorkspaceReleaser,
     IAgentBackendResourceInvalidator, IAgentSessionStatisticsProvider, IAgentSessionCommandController,
-    IAgentTaskTemplateCommandSource, IDisposable
+    IAgentCompanionCommandSource, IDisposable
 {
     private const int ToolOutputMaximumLength = 24_000;
     private const string OtherChoice = "其他…";
@@ -45,12 +46,21 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     private readonly string _grantDirectory;
     private readonly SkillDiscoveryService? _skillDiscovery;
     private readonly PiProjectTrustService _projectTrust;
+    private readonly Func<string?>? _languageResolver;
     private readonly AgentCommandPipeServer _agentCommandPipeServer;
     private readonly Timer _warmCleanupTimer;
     private readonly Dictionary<Guid, RunContext> _active = [];
     private readonly List<RunContext> _warm = [];
     private Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>?
         _taskTemplateCreationHandler;
+    private Func<AgentTaskTemplateListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentTaskTemplateView>>>?
+        _taskTemplateListHandler;
+    private Func<AgentTaskTemplateGetRequest, CancellationToken, ValueTask<AgentTaskTemplateView>>?
+        _taskTemplateGetHandler;
+    private Func<AgentScheduledTaskListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentScheduledTaskView>>>?
+        _scheduledTaskListHandler;
+    private Func<AgentScheduledTaskCreationRequest, CancellationToken, ValueTask<AgentScheduledTaskCreationResult>>?
+        _scheduledTaskCreationHandler;
     private bool _disposed;
 
     public PiRpcBackend(
@@ -63,7 +73,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         string? webSearchExtensionPath = null,
         SkillDiscoveryService? skillDiscovery = null,
         PiProjectTrustService? projectTrust = null,
-        string? agentCommandPipeName = null)
+        string? agentCommandPipeName = null,
+        Func<string?>? languageResolver = null)
     {
         _runtimeResolver = runtimeResolver ?? throw new ArgumentNullException(nameof(runtimeResolver));
         _sessionDirectory = Path.GetFullPath(sessionDirectory);
@@ -76,6 +87,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         _grantDirectory = Path.GetFullPath(grantDirectory ?? Path.Combine(_sessionDirectory, "..", "permission-grants"));
         _skillDiscovery = skillDiscovery;
         _projectTrust = projectTrust ?? new PiProjectTrustService();
+        _languageResolver = languageResolver;
         _agentCommandPipeServer = new AgentCommandPipeServer(
             HandleAgentCommandAsync,
             pipeName: agentCommandPipeName);
@@ -88,7 +100,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     }
 
     public static PiRpcBackend CreateDefault(
-        SkillDiscoveryService? skillDiscovery = null)
+        SkillDiscoveryService? skillDiscovery = null,
+        Func<string?>? languageResolver = null)
     {
         var dataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -101,12 +114,45 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             Path.Combine(dataDirectory, "backups"),
             Path.Combine(dataDirectory, "permission-grants"),
             Path.Combine(AppContext.BaseDirectory, "PiExtension", "pi-web-search.mjs"),
-            skillDiscovery ?? new SkillDiscoveryService());
+            skillDiscovery ?? new SkillDiscoveryService(),
+            languageResolver: languageResolver);
     }
 
     public event Action<CompanionRunEvent>? EventReceived;
 
     public event Action<AgentToolExecution>? ToolExecutionCompleted;
+
+    public void SetTaskTemplateListHandler(
+        Func<AgentTaskTemplateListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentTaskTemplateView>>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_taskTemplateListHandler is not null)
+            {
+                throw new InvalidOperationException("AI 任务模板列表处理器已经注册。");
+            }
+
+            _taskTemplateListHandler = handler;
+        }
+    }
+
+    public void SetTaskTemplateGetHandler(
+        Func<AgentTaskTemplateGetRequest, CancellationToken, ValueTask<AgentTaskTemplateView>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_taskTemplateGetHandler is not null)
+            {
+                throw new InvalidOperationException("AI 任务模板读取处理器已经注册。");
+            }
+
+            _taskTemplateGetHandler = handler;
+        }
+    }
 
     public void SetTaskTemplateCreationHandler(
         Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>> handler)
@@ -121,6 +167,38 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             }
 
             _taskTemplateCreationHandler = handler;
+        }
+    }
+
+    public void SetScheduledTaskListHandler(
+        Func<AgentScheduledTaskListRequest, CancellationToken, ValueTask<IReadOnlyList<AgentScheduledTaskView>>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_scheduledTaskListHandler is not null)
+            {
+                throw new InvalidOperationException("AI 定时任务列表处理器已经注册。");
+            }
+
+            _scheduledTaskListHandler = handler;
+        }
+    }
+
+    public void SetScheduledTaskCreationHandler(
+        Func<AgentScheduledTaskCreationRequest, CancellationToken, ValueTask<AgentScheduledTaskCreationResult>> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_scheduledTaskCreationHandler is not null)
+            {
+                throw new InvalidOperationException("AI 定时任务创建处理器已经注册。");
+            }
+
+            _scheduledTaskCreationHandler = handler;
         }
     }
 
@@ -1099,6 +1177,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             webSearchExtensionVersion,
             Path.GetFullPath(request.WorkingDirectory),
             request.ScopeKind.ToString(),
+            NormalizeInterfaceLanguage(_languageResolver?.Invoke()),
             ResolveWorkspaceTrustStatus(request),
             string.IsNullOrWhiteSpace(request.ArtifactDirectory)
                 ? string.Empty
@@ -1210,25 +1289,24 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 throw new InvalidDataException("Agent 命令请求 ID 无效。");
             }
 
-            if (!string.Equals(command.Type, "createTaskTemplate", StringComparison.Ordinal))
+            var commandType = command.Type?.Trim() ?? string.Empty;
+            if (commandType is not (
+                "listTaskTemplates" or
+                "getTaskTemplate" or
+                "createTaskTemplate" or
+                "listScheduledTasks" or
+                "createScheduledTask"))
             {
                 throw new InvalidDataException("Agent 命令类型不受支持。");
             }
 
-            if (command.Template is null)
-            {
-                throw new InvalidDataException("AI 任务模板内容缺失。");
-            }
-
             RunContext context;
-            Func<AgentTaskTemplateCreationRequest, CancellationToken, ValueTask<AgentTaskTemplateCreationResult>>
-                handler;
             lock (_gate)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 if (!_active.TryGetValue(command.RunId, out context!) || context.IsTerminal)
                 {
-                    throw new InvalidOperationException("AI 任务模板请求对应的 Run 已不再活动。");
+                    throw new InvalidOperationException("AI Companion 请求对应的 Run 已不再活动。");
                 }
 
                 if (context.Request.TaskId != command.TaskId ||
@@ -1236,50 +1314,185 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                     context.Generation != command.Generation ||
                     !SecureEquals(context.PermissionToken, command.PermissionToken))
                 {
-                    throw new UnauthorizedAccessException("AI 任务模板请求的运行上下文无效或已过期。");
+                    throw new UnauthorizedAccessException("AI Companion 请求的运行上下文无效或已过期。");
                 }
 
                 if (context.AgentCommandResponses.TryGetValue(requestId, out var cached))
                 {
                     return cached;
                 }
-
-                handler = _taskTemplateCreationHandler ??
-                    throw new InvalidOperationException("应用尚未注册 AI 任务模板创建处理器。");
             }
 
-            if (!Enum.TryParse<TaskTemplateTargetKind>(
-                    command.Template.TargetKind,
-                    ignoreCase: true,
-                    out var targetKind) ||
-                !Enum.IsDefined(targetKind))
-            {
-                throw new InvalidDataException("AI 任务模板运行位置无效。");
-            }
-
-            var result = await handler(
-                new AgentTaskTemplateCreationRequest(
-                    requestId,
-                    context.Request.TaskId,
-                    context.Request.RunId,
-                    command.Template.Name ?? string.Empty,
-                    command.Template.Prompt ?? string.Empty,
-                    targetKind,
-                    command.Template.WorkspaceId,
-                    command.Template.Model,
-                    command.Template.ThinkingLevel,
-                    command.Template.PermissionMode,
-                    command.Template.IsPinned),
-                cancellationToken).ConfigureAwait(false);
-            var response = SerializeAgentCommandResponse(new AgentCommandResponseDto(
+            var agentContext = new AgentCommandContext(
                 requestId,
-                Success: true,
-                Error: null,
-                TemplateId: result.Template.Id,
-                TemplateName: result.Template.Name,
-                result.AlreadyExisted));
-            context.AgentCommandResponses.TryAdd(requestId, response);
-            return response;
+                context.Request.TaskId,
+                context.Request.RunId,
+                context.Request.ScopeKind,
+                context.Request.WorkingDirectory,
+                NormalizeInterfaceLanguage(_languageResolver?.Invoke()));
+            AgentCommandResponseDto response;
+            switch (commandType)
+            {
+                case "listTaskTemplates":
+                {
+                    var handler = _taskTemplateListHandler ??
+                        throw new InvalidOperationException("应用尚未注册 AI 任务模板列表处理器。");
+                    var templates = await handler(
+                        new AgentTaskTemplateListRequest(agentContext, command.Query),
+                        cancellationToken).ConfigureAwait(false);
+                    response = new AgentCommandResponseDto(requestId, Success: true, Error: null)
+                    {
+                        TaskTemplates = templates,
+                    };
+                    break;
+                }
+                case "getTaskTemplate":
+                {
+                    var templateId = command.TemplateId?.Trim() ?? string.Empty;
+                    if (templateId.Length is <= 0 or > 128)
+                    {
+                        throw new InvalidDataException("任务模板 ID 无效。");
+                    }
+
+                    var handler = _taskTemplateGetHandler ??
+                        throw new InvalidOperationException("应用尚未注册 AI 任务模板读取处理器。");
+                    var template = await handler(
+                        new AgentTaskTemplateGetRequest(agentContext, templateId),
+                        cancellationToken).ConfigureAwait(false);
+                    response = new AgentCommandResponseDto(requestId, Success: true, Error: null)
+                    {
+                        TaskTemplate = template,
+                    };
+                    break;
+                }
+                case "createTaskTemplate":
+                {
+                    if (command.Template is null)
+                    {
+                        throw new InvalidDataException("AI 任务模板内容缺失。");
+                    }
+
+                    if (!Enum.TryParse<TaskTemplateTargetKind>(
+                            command.Template.TargetKind,
+                            ignoreCase: true,
+                            out var targetKind) ||
+                        !Enum.IsDefined(targetKind))
+                    {
+                        throw new InvalidDataException("AI 任务模板运行位置无效。");
+                    }
+
+                    var handler = _taskTemplateCreationHandler ??
+                        throw new InvalidOperationException("应用尚未注册 AI 任务模板创建处理器。");
+                    var result = await handler(
+                        new AgentTaskTemplateCreationRequest(
+                            requestId,
+                            context.Request.TaskId,
+                            context.Request.RunId,
+                            command.Template.Name ?? string.Empty,
+                            command.Template.Prompt ?? string.Empty,
+                            targetKind,
+                            command.Template.WorkspaceId,
+                            command.Template.Model,
+                            command.Template.ThinkingLevel,
+                            command.Template.PermissionMode,
+                            command.Template.IsPinned),
+                        cancellationToken).ConfigureAwait(false);
+                    response = new AgentCommandResponseDto(requestId, Success: true, Error: null)
+                    {
+                        TemplateId = result.Template.Id.ToString(),
+                        TemplateName = result.Template.Name,
+                        AlreadyExisted = result.AlreadyExisted,
+                    };
+                    break;
+                }
+                case "listScheduledTasks":
+                {
+                    var handler = _scheduledTaskListHandler ??
+                        throw new InvalidOperationException("应用尚未注册 AI 定时任务列表处理器。");
+                    var scheduledTasks = await handler(
+                        new AgentScheduledTaskListRequest(agentContext, command.Query, command.IsEnabled),
+                        cancellationToken).ConfigureAwait(false);
+                    response = new AgentCommandResponseDto(requestId, Success: true, Error: null)
+                    {
+                        ScheduledTasks = scheduledTasks,
+                    };
+                    break;
+                }
+                case "createScheduledTask":
+                {
+                    if (command.ScheduledTask is null)
+                    {
+                        throw new InvalidDataException("AI 定时任务内容缺失。");
+                    }
+
+                    TaskTemplateTargetKind? targetKind = null;
+                    if (!string.IsNullOrWhiteSpace(command.ScheduledTask.TargetKind))
+                    {
+                        if (!Enum.TryParse<TaskTemplateTargetKind>(
+                                command.ScheduledTask.TargetKind,
+                                ignoreCase: true,
+                                out var parsedTargetKind) ||
+                            !Enum.IsDefined(parsedTargetKind))
+                        {
+                            throw new InvalidDataException("AI 定时任务运行位置无效。");
+                        }
+
+                        targetKind = parsedTargetKind;
+                    }
+
+                    if (!Enum.TryParse<ScheduledTaskFrequency>(
+                            command.ScheduledTask.Frequency,
+                            ignoreCase: true,
+                            out var frequency) ||
+                        !Enum.IsDefined(frequency))
+                    {
+                        throw new InvalidDataException("AI 定时任务频率无效。");
+                    }
+
+                    if (!TryParseLocalDateTime(command.ScheduledTask.LocalStartAt, out var localStartAt))
+                    {
+                        throw new InvalidDataException("AI 定时任务本地开始时间无效。");
+                    }
+
+                    var daysOfWeek = ParseScheduledDays(command.ScheduledTask.DaysOfWeek);
+                    var timeZoneId = string.IsNullOrWhiteSpace(command.ScheduledTask.TimeZoneId)
+                        ? TimeZoneInfo.Local.Id
+                        : command.ScheduledTask.TimeZoneId.Trim();
+                    var handler = _scheduledTaskCreationHandler ??
+                        throw new InvalidOperationException("应用尚未注册 AI 定时任务创建处理器。");
+                    var result = await handler(
+                        new AgentScheduledTaskCreationRequest(
+                            agentContext,
+                            command.ScheduledTask.Name ?? string.Empty,
+                            command.ScheduledTask.TemplateId,
+                            command.ScheduledTask.Prompt,
+                            targetKind,
+                            command.ScheduledTask.WorkspaceId,
+                            command.ScheduledTask.Model,
+                            command.ScheduledTask.ThinkingLevel,
+                            command.ScheduledTask.PermissionMode,
+                            frequency,
+                            localStartAt,
+                            daysOfWeek,
+                            timeZoneId,
+                            command.ScheduledTask.IsEnabled),
+                        cancellationToken).ConfigureAwait(false);
+                    response = new AgentCommandResponseDto(requestId, Success: true, Error: null)
+                    {
+                        ScheduledTaskId = result.ScheduledTask.Id,
+                        ScheduledTaskName = result.ScheduledTask.Name,
+                        NextRunAt = result.ScheduledTask.NextRunAt,
+                        AlreadyExisted = result.AlreadyExisted,
+                    };
+                    break;
+                }
+                default:
+                    throw new InvalidDataException("Agent 命令类型不受支持。");
+            }
+
+            var serialized = SerializeAgentCommandResponse(response);
+            context.AgentCommandResponses.TryAdd(requestId, serialized);
+            return serialized;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1290,12 +1503,47 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             return SerializeAgentCommandResponse(new AgentCommandResponseDto(
                 requestId,
                 Success: false,
-                Error: exception.Message.Length <= 800 ? exception.Message : exception.Message[..800],
-                TemplateId: null,
-                TemplateName: null,
-                AlreadyExisted: false));
+                Error: exception.Message.Length <= 800 ? exception.Message : exception.Message[..800]));
         }
     }
+
+    private static bool TryParseLocalDateTime(string? value, out DateTime localStartAt)
+    {
+        if (DateTime.TryParseExact(
+                value?.Trim(),
+                ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsed))
+        {
+            localStartAt = DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified);
+            return true;
+        }
+
+        localStartAt = default;
+        return false;
+    }
+
+    private static ScheduledDaysOfWeek ParseScheduledDays(IReadOnlyList<string>? values)
+    {
+        var result = ScheduledDaysOfWeek.None;
+        foreach (var value in values ?? [])
+        {
+            if (!Enum.TryParse<ScheduledDaysOfWeek>(value, ignoreCase: true, out var day) ||
+                !Enum.IsDefined(day) ||
+                day == ScheduledDaysOfWeek.None)
+            {
+                throw new InvalidDataException($"AI 定时任务星期值无效：{value}");
+            }
+
+            result |= day;
+        }
+
+        return result;
+    }
+
+    private static string NormalizeInterfaceLanguage(string? language) =>
+        string.Equals(language, "en-US", StringComparison.OrdinalIgnoreCase) ? "en-US" : "zh-CN";
 
     private static byte[] SerializeAgentCommandResponse(AgentCommandResponseDto response) =>
         JsonSerializer.SerializeToUtf8Bytes(response, JsonOptions);
@@ -1611,6 +1859,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         startInfo.Environment["PI_COMPANION_PERMISSION_TOKEN"] = permissionToken;
         startInfo.Environment["PI_COMPANION_PERMISSION_MODE"] = permissionMode;
         startInfo.Environment["PI_COMPANION_SCOPE_KIND"] = request.ScopeKind.ToString();
+        startInfo.Environment["PI_COMPANION_LANGUAGE"] = NormalizeInterfaceLanguage(_languageResolver?.Invoke());
+        startInfo.Environment["PI_COMPANION_TIME_ZONE_ID"] = TimeZoneInfo.Local.Id;
         var workspaceTrustStatus = ResolveWorkspaceTrustStatus(request);
         startInfo.Environment["PI_COMPANION_WORKSPACE_TRUST_STATUS"] = workspaceTrustStatus;
         startInfo.Environment["PI_WEB_SEARCH_CONFIG"] = $"{runtimeContextPath}.web-search-config";
@@ -3516,7 +3766,11 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         Guid RunId,
         long Generation,
         string? PermissionToken,
-        AgentTaskTemplatePayloadDto? Template);
+        string? Query,
+        bool? IsEnabled,
+        string? TemplateId,
+        AgentTaskTemplatePayloadDto? Template,
+        AgentScheduledTaskPayloadDto? ScheduledTask);
 
     private sealed record AgentTaskTemplatePayloadDto(
         string? Name,
@@ -3528,13 +3782,44 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         string? PermissionMode,
         bool IsPinned);
 
+    private sealed record AgentScheduledTaskPayloadDto(
+        string? Name,
+        string? TemplateId,
+        string? Prompt,
+        string? TargetKind,
+        Guid? WorkspaceId,
+        string? Model,
+        string? ThinkingLevel,
+        string? PermissionMode,
+        string? Frequency,
+        string? LocalStartAt,
+        IReadOnlyList<string>? DaysOfWeek,
+        string? TimeZoneId,
+        bool IsEnabled);
+
     private sealed record AgentCommandResponseDto(
         string RequestId,
         bool Success,
-        string? Error,
-        Guid? TemplateId,
-        string? TemplateName,
-        bool AlreadyExisted);
+        string? Error)
+    {
+        public string? TemplateId { get; init; }
+
+        public string? TemplateName { get; init; }
+
+        public bool AlreadyExisted { get; init; }
+
+        public IReadOnlyList<AgentTaskTemplateView>? TaskTemplates { get; init; }
+
+        public AgentTaskTemplateView? TaskTemplate { get; init; }
+
+        public IReadOnlyList<AgentScheduledTaskView>? ScheduledTasks { get; init; }
+
+        public Guid? ScheduledTaskId { get; init; }
+
+        public string? ScheduledTaskName { get; init; }
+
+        public DateTimeOffset? NextRunAt { get; init; }
+    }
 
     private sealed record SkillReadAccess(
         IReadOnlyList<string> Roots,
