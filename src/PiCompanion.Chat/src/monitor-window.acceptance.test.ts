@@ -163,6 +163,17 @@ describe('Monitor expand and collapse behavior', () => {
     expect(monitorView).not.toContain('ExpandedPanel')
   })
 
+  it('restores fixed Monitor bounds after display reconnects and system resume', () => {
+    expect(monitorView).toContain('MinWidth="440"')
+    expect(monitorView).toContain('MaxWidth="440"')
+    expect(monitorCode).toContain('private const int WmDisplayChange = 0x007E;')
+    expect(monitorCode).toContain('private const int WmPowerBroadcast = 0x0218;')
+    expect(monitorCode).toContain('private const int WmDpiChanged = 0x02E0;')
+    expect(monitorCode).toContain('ScheduleDisplayBoundsRefresh();')
+    expect(monitorCode).toContain('WindowPlacementService.NormalizeFixedBounds(this, logicalWidth, logicalHeight);')
+    expect(monitorCode).toContain('Math.Abs(e.NewSize.Width - expectedWidth) > 1')
+  })
+
   it('grows Monitor text inputs until a rounded scrolling limit', () => {
     const growingTextBoxStyle = monitorView.match(
       /<Style x:Key="MonitorGrowingTextBox"[\s\S]*?<\/Style>/u,

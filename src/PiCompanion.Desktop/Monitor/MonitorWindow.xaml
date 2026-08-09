@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Pi Companion 任务监视器"
         Width="440"
+        MinWidth="440"
+        MaxWidth="440"
         Height="88"
         WindowStyle="None"
         AllowsTransparency="True"

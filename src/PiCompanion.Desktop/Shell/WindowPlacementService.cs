@@ -88,6 +88,62 @@ internal static partial class WindowPlacementService
             SwpNoActivate | SwpNoZOrder);
     }
 
+    public static void NormalizeFixedBounds(
+        Window window,
+        double logicalWidth,
+        double? logicalHeight = null)
+    {
+        if (!double.IsFinite(logicalWidth) || logicalWidth <= 0 ||
+            (logicalHeight is not null &&
+             (!double.IsFinite(logicalHeight.Value) || logicalHeight.Value <= 0)))
+        {
+            var parameterName = !double.IsFinite(logicalWidth) || logicalWidth <= 0
+                ? nameof(logicalWidth)
+                : nameof(logicalHeight);
+            throw new ArgumentOutOfRangeException(parameterName);
+        }
+
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero || !GetWindowRect(handle, out var windowRect))
+        {
+            return;
+        }
+
+        var dpi = GetDpiForWindow(handle);
+        var scale = (dpi == 0 ? 96u : dpi) / 96d;
+        var width = Math.Max(1, (int)Math.Round(logicalWidth * scale));
+        var height = logicalHeight is null
+            ? Math.Max(1, windowRect.Bottom - windowRect.Top)
+            : Math.Max(1, (int)Math.Round(logicalHeight.Value * scale));
+        var center = new NativePoint
+        {
+            X = windowRect.Left + (width / 2),
+            Y = windowRect.Top + (height / 2),
+        };
+        var monitor = MonitorFromPoint(center, MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return;
+        }
+
+        var constrained = WindowPlacementCalculator.ClampToWorkArea(
+            new PixelRect(
+                windowRect.Left,
+                windowRect.Top,
+                windowRect.Left + width,
+                windowRect.Top + height),
+            new PixelRect(info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom));
+        _ = SetWindowPos(
+            handle,
+            IntPtr.Zero,
+            constrained.Left,
+            constrained.Top,
+            constrained.Width,
+            constrained.Height,
+            SwpNoActivate | SwpNoZOrder);
+    }
+
     public static WindowPlacementState Capture(Window window)
     {
         var bounds = window.WindowState == WindowState.Normal
@@ -260,6 +316,9 @@ internal static partial class WindowPlacementService
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetWindowRect(IntPtr window, out NativeRect rect);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDpiForWindow(IntPtr window);
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr MonitorFromPoint(NativePoint point, uint flags);

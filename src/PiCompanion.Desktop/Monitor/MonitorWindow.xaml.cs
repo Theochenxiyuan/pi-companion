@@ -44,6 +44,13 @@ public partial class MonitorWindow : Window
     private const int TaskPickerWheelThreshold = 120;
     private const int TaskPickerWheelThrottleMilliseconds = 90;
     private const int TaskPickerAutoCloseDelayMilliseconds = 500;
+    private const int DisplayBoundsRefreshDelayMilliseconds = 250;
+    private const int WmDisplayChange = 0x007E;
+    private const int WmPowerBroadcast = 0x0218;
+    private const int WmDpiChanged = 0x02E0;
+    private const long PbtApmResumeCritical = 0x0006;
+    private const long PbtApmResumeSuspend = 0x0007;
+    private const long PbtApmResumeAutomatic = 0x0012;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
@@ -56,6 +63,8 @@ public partial class MonitorWindow : Window
     private readonly ObservableCollection<string> _activities = [];
     private readonly ObservableCollection<ResultInteractionSummary> _resultInteractions = [];
     private readonly DispatcherTimer _taskPickerAutoCloseTimer;
+    private readonly DispatcherTimer _displayBoundsRefreshTimer;
+    private HwndSource? _windowSource;
     private bool _isDragging;
     private bool _isExpanded;
     private bool _isContextMenuOpen;
@@ -118,6 +127,15 @@ public partial class MonitorWindow : Window
             _taskPickerAutoCloseTimer.Stop();
             TaskPickerPopup.IsOpen = false;
         };
+        _displayBoundsRefreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(DisplayBoundsRefreshDelayMilliseconds),
+        };
+        _displayBoundsRefreshTimer.Tick += (_, _) =>
+        {
+            _displayBoundsRefreshTimer.Stop();
+            NormalizeMonitorBounds();
+        };
         ActivityList.ItemsSource = _activities;
         ResultInteractionList.ItemsSource = _resultInteractions;
         IsVisibleChanged += OnMonitorVisibilityChanged;
@@ -126,6 +144,21 @@ public partial class MonitorWindow : Window
         DesktopLocalizer.Apply(this);
         UpdateExpandedHeaderState();
         Render(_coordinator.Current);
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        _windowSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        _windowSource?.AddHook(OnMonitorWindowMessage);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _displayBoundsRefreshTimer.Stop();
+        _windowSource?.RemoveHook(OnMonitorWindowMessage);
+        _windowSource = null;
+        base.OnClosed(e);
     }
 
     public void RefreshLocalization()
@@ -1076,12 +1109,79 @@ public partial class MonitorWindow : Window
 
     private void OnMonitorSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        var expectedWidth = _isExpanded ? ExpandedWidth : CapsuleWidth;
+        var hasUnexpectedWidth = Math.Abs(e.NewSize.Width - expectedWidth) > 1;
+        var hasUnexpectedCollapsedHeight =
+            !_isExpanded && Math.Abs(e.NewSize.Height - CapsuleHeight) > 1;
+        if (hasUnexpectedWidth || hasUnexpectedCollapsedHeight)
+        {
+            NormalizeMonitorBounds();
+            ScheduleDisplayBoundsRefresh();
+            return;
+        }
+
         if (!_isExpanded || !IsVisible || _hasUserPosition || _isDragging)
         {
             return;
         }
 
         WindowPlacementService.PlaceAtCorner(this, _settings.Position);
+    }
+
+    private IntPtr OnMonitorWindowMessage(
+        IntPtr window,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        var powerEvent = wParam.ToInt64();
+        if (message is WmDisplayChange or WmDpiChanged ||
+            (message == WmPowerBroadcast &&
+             powerEvent is PbtApmResumeCritical or PbtApmResumeSuspend or PbtApmResumeAutomatic))
+        {
+            ScheduleDisplayBoundsRefresh();
+        }
+
+        handled = false;
+        return IntPtr.Zero;
+    }
+
+    private void ScheduleDisplayBoundsRefresh()
+    {
+        _displayBoundsRefreshTimer.Stop();
+        _displayBoundsRefreshTimer.Start();
+    }
+
+    private void NormalizeMonitorBounds()
+    {
+        if (!IsVisible || _isDragging)
+        {
+            return;
+        }
+
+        if (WindowState != WindowState.Normal)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        var logicalWidth = _isExpanded ? ExpandedWidth : CapsuleWidth;
+        Width = logicalWidth;
+        double? logicalHeight = null;
+        if (!_isExpanded)
+        {
+            Height = CapsuleHeight;
+            logicalHeight = CapsuleHeight;
+        }
+
+        WindowPlacementService.NormalizeFixedBounds(this, logicalWidth, logicalHeight);
+        if (!_hasUserPosition)
+        {
+            var corner = string.Equals(_settings.Position, "last-position", StringComparison.Ordinal)
+                ? "top-right"
+                : _settings.Position;
+            WindowPlacementService.PlaceAtCorner(this, corner);
+        }
     }
 
     private void OnMonitorMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
