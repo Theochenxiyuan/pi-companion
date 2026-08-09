@@ -5,6 +5,7 @@
 ## 当前事实来源
 
 - [`../README.md`](../README.md)：项目定位、当前能力、环境要求和源码构建入口。
+- [`TESTER-GUIDE.md`](TESTER-GUIDE.md)：源码内测者的首次安装、更新、安全测试与反馈流程。
 - [`pi-companion-product-technical-plan.md`](pi-companion-product-technical-plan.md)：当前产品边界、实现架构和后续计划。标为计划或目标的内容不代表已经交付。
 - [`skill-management-implementation-plan.md`](skill-management-implementation-plan.md)：Skill 管理最终交付边界。
 - [`included-pi-extensions.md`](included-pi-extensions.md)：随应用分发的 Pi Extension 与第三方披露。

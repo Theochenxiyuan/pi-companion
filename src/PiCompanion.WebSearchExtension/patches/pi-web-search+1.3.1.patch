@@ -1,0 +1,89 @@
+diff --git a/node_modules/pi-web-search/src/api.ts b/node_modules/pi-web-search/src/api.ts
+index 958a37d..c692b3b 100644
+--- a/node_modules/pi-web-search/src/api.ts
++++ b/node_modules/pi-web-search/src/api.ts
+@@ -1,5 +1,5 @@
+ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/pi-coding-agent";
+-import type { Api, Model } from "@earendil-works/pi-ai";
++import type { Api, Model, ProviderHeaders } from "@earendil-works/pi-ai";
+ import { getEnvApiKey } from "@earendil-works/pi-ai/compat";
+ import { TextEncoder, TextDecoder } from "util";
+ 
+@@ -49,7 +49,7 @@ export function getConfig(model: Model<Api>): ProviderConfig {
+ // --- Auth Compatibility Layer ---
+ 
+ type ResolvedAuth = 
+-    | { ok: true; apiKey?: string; headers?: Record<string, string>; }
++    | { ok: true; apiKey?: string; headers?: ProviderHeaders; }
+     | { ok: false; error: string; };
+ 
+ function getEnvAuth(model: Model<Api>): Extract<ResolvedAuth, { ok: true }> | undefined {
+@@ -73,7 +73,7 @@ async function getAuth(ctx: ExtensionContext, model: Model<Api>): Promise<Resolv
+     return envAuth ? { ...resolved, apiKey: envAuth.apiKey } : resolved;
+ }
+ 
+-function hasAuthHeader(headers?: Record<string, string>): boolean {
++function hasAuthHeader(headers?: ProviderHeaders): boolean {
+     if (!headers) return false;
+     return Object.entries(headers).some(([name, value]) => {
+         if (!value) return false;
+@@ -82,6 +82,27 @@ function hasAuthHeader(headers?: Record<string, string>): boolean {
+     });
+ }
+ 
++function applyProviderHeaders(
++    target: Headers | Record<string, string>,
++    ...sources: Array<ProviderHeaders | undefined>
++): void {
++    for (const source of sources) {
++        if (!source) continue;
++        for (const [name, value] of Object.entries(source)) {
++            if (target instanceof Headers) {
++                if (value === null) target.delete(name);
++                else target.set(name, value);
++                continue;
++            }
++
++            const existingName = Object.keys(target)
++                .find((candidate) => candidate.toLowerCase() === name.toLowerCase());
++            if (existingName) delete target[existingName];
++            if (value !== null) target[name] = value;
++        }
++    }
++}
++
+ // --- Streaming API Call ---
+ 
+ export interface Source {
+@@ -531,9 +552,7 @@ async function callGoogleStream(
+     const req = config.buildRequest(model, body);
+ 
+     // Handle auth
+-    if (auth.headers) {
+-        Object.assign(req.headers, auth.headers);
+-    }
++    applyProviderHeaders(req.headers, auth.headers);
+     if (auth.apiKey) {
+         req.headers["x-goog-api-key"] = auth.apiKey;
+     }
+@@ -616,8 +635,7 @@ async function callOpenAIStream(
+     }
+ 
+     const headers = new Headers();
+-    for (const [name, value] of Object.entries(model.headers || {})) headers.set(name, value);
+-    for (const [name, value] of Object.entries(auth.headers || {})) headers.set(name, value);
++    applyProviderHeaders(headers, model.headers, auth.headers);
+     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+     if (!headers.has("Accept")) headers.set("Accept", "text/event-stream");
+     if (auth.apiKey && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${auth.apiKey}`);
+@@ -827,9 +845,8 @@ async function callAnthropicStream(
+         "Content-Type": "application/json",
+         "Accept": "text/event-stream",
+         "anthropic-version": "2023-06-01",
+-        ...(model.headers || {}),
+-        ...(auth.headers || {}),
+     };
++    applyProviderHeaders(headers, model.headers, auth.headers);
+ 
+     if (auth.apiKey) {
+         if (isOAuth) {

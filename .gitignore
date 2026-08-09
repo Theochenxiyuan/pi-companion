@@ -17,6 +17,10 @@ artifacts/
 .env
 .env.*
 !.env.example
+.npmrc
+**/.pi/
+**/auth.json
+**/secrets.json
 *.db
 *.db-shm
 *.db-wal
@@ -26,3 +30,10 @@ artifacts/
 *.p12
 *.pem
 *.key
+*.ppk
+*.snk
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+pi-companion-diagnostics-*.zip

@@ -177,12 +177,10 @@ input.on('line', (line) => {
         send({ type: 'agent_end', messages: [message] })
         send({ type: 'agent_settled' })
       } else if (!abortMode) {
-        const partial = { role: 'assistant', content: [], stopReason: 'stop' }
-        send({ type: 'message_start', message: partial })
+        send({ type: 'message_start', message: { role: 'assistant', content: [], stopReason: 'stop' } })
         send({
           type: 'message_update',
-          message: partial,
-          assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '真实回答', partial },
+          assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '真实回答' },
         })
         send({ type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read', args: { path: 'README.md' } })
         send({

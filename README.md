@@ -5,6 +5,29 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 > [!WARNING]
 > 项目仍处于早期开发阶段，目前没有经过代码签名的公开安装包。请仅在理解本地 Agent 权限边界的环境中构建和运行。
 
+## 源码内测快速开始
+
+这个流程适合愿意从源码测试、能看懂终端报错的朋友。首次安装会使用 WinGet 和 npm 补齐受支持的开发依赖，可能弹出安装界面或 UAC；脚本不会开启 Windows 开发人员模式，也不会创建或读取模型凭据。
+
+```powershell
+git clone https://github.com/Theochenxiyuan/pi-companion.git
+Set-Location pi-companion
+.\scripts\bootstrap.ps1 -InstallMissing
+.\scripts\doctor.ps1
+.\scripts\run.ps1
+```
+
+如果安装脚本提示新开终端，请关闭当前 PowerShell，在仓库目录重新运行 `bootstrap.ps1` 和 `doctor.ps1`。只想检查环境、不安装软件时，直接运行 `doctor.ps1`，或运行不带参数的 `bootstrap.ps1`。
+
+后续更新使用：
+
+```powershell
+.\scripts\update-dev.ps1
+.\scripts\run.ps1 -NoBuild
+```
+
+更新脚本只接受 fast-forward，并会在工作区有未提交改动时停止，不会覆盖测试者的本地工作。首次配置 Provider、安全测试方式、Explorer 右键菜单和问题反馈流程见 [源码内测指南](docs/TESTER-GUIDE.md)。
+
 ## 主要能力
 
 - 从应用或 Windows 11 资源管理器为指定目录创建任务。
@@ -37,9 +60,15 @@ Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把
 - Node.js 24 和 npm 11；
 - Visual Studio 2022 Build Tools，并安装 x64 C++ 工具链；
 - Microsoft Edge WebView2 Runtime；
-- 开发运行时需要 Pi RPC 0.83.0 Runtime，以及所选模型服务的有效账号或 API Key。
+- 开发运行时需要 Pi RPC 0.84.1 Runtime，以及所选模型服务的有效账号或 API Key。
 
 依赖版本由 `global.json`、npm lockfile 和 NuGet lockfile 固定。
+
+环境诊断结果也可以输出为便于 Agent 读取的 JSON：
+
+```powershell
+.\scripts\doctor.ps1 -Json
+```
 
 ## 从源码构建
 
@@ -134,7 +163,10 @@ Pi Companion 会在本机运行 Agent，并可能按所选权限读取或修改�
 
 ```powershell
 .\scripts\build.ps1 -Configuration Release
+.\scripts\audit-dependencies.ps1
 ```
+
+内测中遇到问题时，可以使用 [内测问题模板](https://github.com/Theochenxiyuan/pi-companion/issues/new/choose)。公开反馈前请移除个人路径、Prompt、文件内容和凭据；诊断 ZIP 应先自行检查，并通过私下渠道发送。
 
 ## 第三方组件
 

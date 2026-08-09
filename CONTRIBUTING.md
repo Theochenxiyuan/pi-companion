@@ -13,6 +13,15 @@ Pi Companion 当前只支持 Windows 11 x64。完整构建需要：
 
 请先阅读 [README](README.md) 中的项目状态和权限说明。较大的功能或架构改动建议先创建 Issue，确认范围后再投入实现。
 
+首次准备开发环境时，先运行：
+
+```powershell
+.\scripts\bootstrap.ps1 -InstallMissing
+.\scripts\doctor.ps1
+```
+
+自动安装仅覆盖仓库明确支持的基线；它不会启用 Windows 开发人员模式，也不会配置 Provider 凭据。
+
 ## 本地开发
 
 Fork 并克隆仓库后，从 `main` 创建短生命周期分支：
@@ -25,6 +34,7 @@ git switch -c feature/short-description
 
 ```powershell
 .\scripts\build.ps1 -Configuration Release
+.\scripts\audit-dependencies.ps1
 ```
 
 如果只修改某一层，可以在开发过程中先运行更小范围的检查：

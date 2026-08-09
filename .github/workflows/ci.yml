@@ -37,3 +37,7 @@ jobs:
       - name: Build and test
         shell: pwsh
         run: .\scripts\build.ps1 -Configuration Release
+
+      - name: Audit dependency advisories
+        shell: pwsh
+        run: .\scripts\audit-dependencies.ps1
