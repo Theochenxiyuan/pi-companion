@@ -23,6 +23,23 @@ describe('TaskManagementView workspaces', () => {
     window.localStorage.removeItem('pi-companion:task-management-collapsed-workspaces')
   })
 
+  it('distinguishes the initial loading state from an empty task result', () => {
+    const wrapper = mount(TaskManagementView, {
+      props: {
+        tasks: [],
+        workspaces: [],
+        sidebarCollapsed: false,
+        loading: true,
+        search: '',
+        status: 'all',
+      },
+    })
+
+    expect(wrapper.get('.management-content').attributes('aria-busy')).toBe('true')
+    expect(wrapper.findAll('.management-loading-skeleton .loading-skeleton-row')).toHaveLength(4)
+    expect(wrapper.find('.management-empty').exists()).toBe(false)
+  })
+
   it('renders an independent workspace with no tasks and starts its first task', async () => {
     const wrapper = mount(TaskManagementView, {
       props: {

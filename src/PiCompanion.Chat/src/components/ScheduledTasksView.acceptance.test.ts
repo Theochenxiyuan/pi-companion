@@ -64,4 +64,20 @@ describe('ScheduledTasksView', () => {
     expect(actionButtons[3]!.classes('danger-action')).toBe(true)
     expect(wrapper.get('[role="switch"]').attributes('aria-label')).toBe('暂停定时任务')
   })
+
+  it('disables mutating actions while a scheduled task request is pending', () => {
+    const wrapper = mount(ScheduledTasksView, {
+      props: {
+        ...baseProps,
+        scheduledTasks: [scheduledTask],
+        pendingAction: { taskId: scheduledTask.id, action: 'run' },
+      },
+    })
+    const actionButtons = wrapper.findAll('.scheduled-task-card footer button')
+
+    expect(wrapper.get('.scheduled-task-card').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[role="switch"]').attributes('disabled')).toBeDefined()
+    expect(actionButtons[0]!.attributes('disabled')).toBeUndefined()
+    expect(actionButtons.slice(1).every(button => button.attributes('disabled') !== undefined)).toBe(true)
+  })
 })

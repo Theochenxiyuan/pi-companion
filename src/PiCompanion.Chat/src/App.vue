@@ -172,11 +172,12 @@ const skillImportResult = ref<SkillImportCompleted | null>(null)
 const skillImportPhase = ref<'source' | 'target' | 'commit' | null>(null)
 const skillImportError = ref<string | null>(null)
 const skillManagerContext = ref<{ workspaceId: string | null; directChat: boolean } | null>(null)
-const transientNotice = ref<{
+const transientNotices = ref<Array<{
   id: string
   message: string
   succeeded: boolean
-} | null>(null)
+}>>([])
+const scheduledTaskPending = ref<{ taskId: string; action: 'save' | 'run' | 'delete' } | null>(null)
 const startupTheme = new URLSearchParams(window.location.search).get('theme')
 if (startupTheme === 'dark' || startupTheme === 'light' || startupTheme === 'system') {
   settingsSnapshot.value.values.general.theme = startupTheme
@@ -418,7 +419,8 @@ const workspaceStyle = computed(() => ({
 }))
 let disconnect: () => void = () => {}
 let transcriptScrollFrame = 0
-let transientNoticeTimer = 0
+const transientNoticeTimers = new Map<string, number>()
+let scheduledTaskPendingTimer = 0
 let workspaceGitRefreshTimer = 0
 let workspaceGitAutoRefreshTimer = 0
 let workspaceGitRequestSequence = 0
@@ -756,7 +758,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (transcriptScrollFrame) window.cancelAnimationFrame(transcriptScrollFrame)
-  if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer)
+  for (const timer of transientNoticeTimers.values()) window.clearTimeout(timer)
+  transientNoticeTimers.clear()
+  if (scheduledTaskPendingTimer) window.clearTimeout(scheduledTaskPendingTimer)
   if (workspaceGitRefreshTimer) window.clearTimeout(workspaceGitRefreshTimer)
   if (workspaceGitAutoRefreshTimer) window.clearTimeout(workspaceGitAutoRefreshTimer)
   if (sessionStatisticsRefreshTimer) window.clearTimeout(sessionStatisticsRefreshTimer)
@@ -875,6 +879,7 @@ function editScheduledTask(scheduledTask: ScheduledTask) {
 }
 
 function saveScheduledTask(scheduledTask: ScheduledTask) {
+  if (scheduledTask.id) setScheduledTaskPending(scheduledTask.id, 'save')
   postBridgeMessage('SaveScheduledTask', {
     id: scheduledTask.id || null,
     name: scheduledTask.name,
@@ -899,6 +904,7 @@ function toggleScheduledTask(scheduledTask: ScheduledTask, enabled: boolean) {
 }
 
 function runScheduledTaskNow(scheduledTask: ScheduledTask) {
+  setScheduledTaskPending(scheduledTask.id, 'run')
   postBridgeMessage('RunScheduledTaskNow', { scheduledTaskId: scheduledTask.id })
 }
 
@@ -908,8 +914,21 @@ function requestDeleteScheduledTask(scheduledTask: ScheduledTask) {
 
 function confirmDeleteScheduledTask() {
   if (!deletingScheduledTask.value) return
+  setScheduledTaskPending(deletingScheduledTask.value.id, 'delete')
   postBridgeMessage('DeleteScheduledTask', { scheduledTaskId: deletingScheduledTask.value.id })
   deletingScheduledTask.value = null
+}
+
+function setScheduledTaskPending(taskId: string, action: 'save' | 'run' | 'delete') {
+  scheduledTaskPending.value = { taskId, action }
+  if (scheduledTaskPendingTimer) window.clearTimeout(scheduledTaskPendingTimer)
+  scheduledTaskPendingTimer = window.setTimeout(clearScheduledTaskPending, 8000)
+}
+
+function clearScheduledTaskPending() {
+  scheduledTaskPending.value = null
+  if (scheduledTaskPendingTimer) window.clearTimeout(scheduledTaskPendingTimer)
+  scheduledTaskPendingTimer = 0
 }
 
 function openScheduledTaskRun(taskId: string) {
@@ -1594,11 +1613,7 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
         const pendingRun = pendingWorkspaceRun.value
         workspaceTrustDialogWorkspaceId.value = null
         pendingWorkspaceRun.value = null
-        transientNotice.value = {
-          id: `workspace-trust-${Date.now()}`,
-          message: result.message,
-          succeeded: true,
-        }
+        showTransientNotice(`workspace-trust-${Date.now()}`, result.message, true)
         if (pendingRun) {
           window.queueMicrotask(() => {
             postBridgeMessage(pendingRun.type, pendingRun.payload)
@@ -1664,7 +1679,10 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     historyLoading.value = false
     taskHistoryLoadAllPending = false
     historyLoadedCount.value = (message.payload as { historyTasks?: TaskHistoryEntry[] }).historyTasks?.length ?? 0
+  } else if (message.type === 'ScheduledTasksUpdated') {
+    clearScheduledTaskPending()
   } else if (message.type === 'BridgeError') {
+    clearScheduledTaskPending()
     if (historyLoading.value) {
       historyLoading.value = false
       taskHistoryLoadAllPending = false
@@ -2474,18 +2492,20 @@ function deletePiCustomProvider(providerId: string, modelsConfigRevision: string
 }
 
 function showTransientNotice(id: string, message: string, succeeded: boolean, duration = 4500) {
-  if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer)
-  transientNotice.value = { id, message, succeeded }
-  transientNoticeTimer = window.setTimeout(() => {
-    if (transientNotice.value?.id === id) transientNotice.value = null
-    transientNoticeTimer = 0
-  }, duration)
+  const existingTimer = transientNoticeTimers.get(id)
+  if (existingTimer) window.clearTimeout(existingTimer)
+  transientNotices.value = [
+    ...transientNotices.value.filter(notice => notice.id !== id),
+    { id, message, succeeded },
+  ]
+  transientNoticeTimers.set(id, window.setTimeout(() => dismissTransientNotice(id), duration))
 }
 
-function dismissTransientNotice() {
-  transientNotice.value = null
-  if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer)
-  transientNoticeTimer = 0
+function dismissTransientNotice(id: string) {
+  transientNotices.value = transientNotices.value.filter(notice => notice.id !== id)
+  const timer = transientNoticeTimers.get(id)
+  if (timer) window.clearTimeout(timer)
+  transientNoticeTimers.delete(id)
 }
 
 watch(settingsAction, action => {
@@ -2638,6 +2658,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             :class="`trust-${conversationWorkspaceTrustStatus}`"
             type="button"
             :title="t('查看或更改工作区信任')"
+            :aria-label="t('查看或更改工作区信任：{status}', { status: conversationWorkspaceTrustLabel })"
             @click="openWorkspaceTrust(conversationSkillsWorkspace)"
           >
             <span aria-hidden="true">{{ conversationWorkspaceTrustStatus === 'trusted' ? '✓' : conversationWorkspaceTrustStatus === 'declined' ? '–' : '?' }}</span>
@@ -2669,7 +2690,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
         </div>
       </header>
 
-      <section ref="transcript" class="transcript" @scroll.passive="handleTranscriptScroll">
+      <section ref="transcript" class="transcript" :aria-label="t('对话记录')" :aria-busy="store.isActive" @scroll.passive="handleTranscriptScroll">
         <div v-if="!store.currentTask" class="empty-state">
           <span class="empty-mark">π</span>
           <h1>{{ t('今天想完成什么？') }}</h1>
@@ -2778,6 +2799,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       v-model:status="historyStatus"
       :tasks="store.historyTasks"
       :workspaces="store.workspaces"
+      :loading="historyLoading"
       :sidebar-collapsed="sidebarCollapsed"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
       @select-task="selectTask"
@@ -2837,6 +2859,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :templates="allTaskTemplates"
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
+      :pending-action="scheduledTaskPending"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
       @create="createScheduledTask"
       @edit="editScheduledTask"
@@ -3089,9 +3112,15 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
         </div>
     </UiDialog>
 
-    <div v-if="store.recoveryNotice" class="recovery-notice" :class="store.recoveryNotice.succeeded ? 'success' : 'danger'">
+    <div
+      v-if="store.recoveryNotice"
+      class="recovery-notice"
+      :class="store.recoveryNotice.succeeded ? 'success' : 'danger'"
+      :role="store.recoveryNotice.succeeded ? 'status' : 'alert'"
+      :aria-live="store.recoveryNotice.succeeded ? 'polite' : 'assertive'"
+    >
       <span>{{ store.recoveryNotice.message }}</span>
-      <UiButton type="button" :aria-label="t('关闭恢复结果')" @click="store.clearRecoveryNotice()">×</UiButton>
+      <UiButton type="button" :aria-label="t('关闭恢复结果')" :title="t('关闭恢复结果')" @click="store.clearRecoveryNotice()">×</UiButton>
     </div>
 
     <TaskManagementOverlays
@@ -3171,9 +3200,10 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       @delete-recycle-task="taskId => postBridgeMessage('DeleteTaskPermanently', { taskId })"
     />
 
-    <Transition name="app-toast">
+    <TransitionGroup name="app-toast" tag="div" class="app-toast-stack">
       <div
-        v-if="transientNotice"
+        v-for="transientNotice in transientNotices"
+        :key="transientNotice.id"
         class="app-toast"
         :class="transientNotice.succeeded ? 'success' : 'danger'"
         :role="transientNotice.succeeded ? 'status' : 'alert'"
@@ -3181,9 +3211,9 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       >
         <span class="app-toast-icon" aria-hidden="true">{{ transientNotice.succeeded ? '✓' : '!' }}</span>
         <span>{{ transientNotice.message }}</span>
-        <UiButton type="button" :aria-label="t('关闭提醒')" @click="dismissTransientNotice">×</UiButton>
+        <UiButton type="button" :aria-label="t('关闭提醒')" :title="t('关闭提醒')" @click="dismissTransientNotice(transientNotice.id)">×</UiButton>
       </div>
-    </Transition>
+    </TransitionGroup>
 
     <div
       v-if="isAttachmentDragActive"

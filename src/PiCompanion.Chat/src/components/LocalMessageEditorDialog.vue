@@ -52,7 +52,7 @@ onMounted(() => {
         <div>
           <h2>{{ t('编辑待发送任务') }}</h2>
         </div>
-        <UiButton type="button" :aria-label="t('关闭')" @click="$emit('cancel')">×</UiButton>
+        <UiButton type="button" :aria-label="t('关闭')" :title="t('关闭')" @click="$emit('cancel')">×</UiButton>
       </header>
       <div class="local-message-editor-body">
         <label>

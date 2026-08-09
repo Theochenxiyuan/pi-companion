@@ -22,7 +22,7 @@ const displayName = computed(() => props.diff.path.replace(/[\\/]+$/, '').split(
   >
       <header>
         <div><strong>{{ displayName }}</strong><small>{{ diff.path }}</small></div>
-        <UiButton type="button" :aria-label="t('关闭 Diff')" @click="$emit('close')">×</UiButton>
+        <UiButton type="button" :aria-label="t('关闭 Diff')" :title="t('关闭 Diff')" @click="$emit('close')">×</UiButton>
       </header>
       <div class="diff-meta">
         <span class="diff-stat added">+{{ stats.added }}</span>

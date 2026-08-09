@@ -566,13 +566,15 @@ function ignoreSourceText(source: string | null) {
           :aria-label="t('工作区文件')"
         >
           <template #default="{ node, stat }">
-            <div
+            <UiButton
+              type="button"
               class="file-tree-row"
               :class="[
                 { directory: node.isDirectory, loading: isDirectoryLoading(node.relativePath), ignored: node.isIgnored },
                 gitDecoration(node) ? `git-${gitDecoration(node)?.tone}` : '',
               ]"
               :title="fileTreeRowTitle(node)"
+              :aria-expanded="node.isDirectory && node.hasChildren && !node.isReparsePoint ? stat.open : undefined"
               @click="toggleDirectory(node, stat)"
               @contextmenu.prevent.stop="openContextMenu($event, node)"
             >
@@ -604,12 +606,15 @@ function ignoreSourceText(source: string | null) {
                   :aria-label="gitDecoration(node)?.tooltip"
                 ></span>
               </span>
-            </div>
+            </UiButton>
           </template>
         </BaseTree>
 
+        <div v-else-if="loadingRoot || searching" class="loading-skeleton file-tree-skeleton" role="status">
+          <span class="ui-visually-hidden">{{ emptyText }}</span>
+          <span v-for="index in 6" :key="index" class="loading-skeleton-row"></span>
+        </div>
         <div v-else class="file-tree-empty" :class="{ error: error }">
-          <span v-if="loadingRoot || searching" class="ui-spinner file-loading-spinner"></span>
           <span>{{ emptyText }}</span>
           <UiButton v-if="error && hasWorkspace" type="button" @click="refresh">{{ t('重试') }}</UiButton>
         </div>

@@ -1196,7 +1196,7 @@ function authLabel(provider: PiProviderInfo) {
                   </UiButton>
                 </div>
                 <div class="provider-items">
-                  <UiButton v-for="provider in filteredProviders" :key="provider.id" type="button" :class="{ active: provider.id === selectedProviderId }" @click="selectProvider(provider)">
+                  <UiButton v-for="provider in filteredProviders" :key="provider.id" type="button" :class="{ active: provider.id === selectedProviderId }" :aria-pressed="provider.id === selectedProviderId" @click="selectProvider(provider)">
                     <span><strong>{{ provider.name }}</strong><small>{{ provider.id }}</small></span>
                     <span class="provider-list-meta">
                       <small v-if="!provider.configured && snapshot.pi.customProviders.some(item => item.id === provider.id)">{{ t('自定义') }}</small>

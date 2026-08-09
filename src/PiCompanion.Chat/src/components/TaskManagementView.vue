@@ -20,8 +20,10 @@ const props = withDefaults(defineProps<{
   tasks: TaskHistoryEntry[]
   workspaces?: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
+  loading?: boolean
 }>(), {
   workspaces: () => [],
+  loading: false,
 })
 
 const search = defineModel<string>('search', { required: true })
@@ -348,7 +350,7 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
       </div>
     </header>
 
-    <section class="management-content">
+    <section class="management-content" :aria-busy="loading">
       <div class="management-controls">
         <label class="management-search">
           <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
@@ -361,7 +363,10 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
         </UiButton>
       </div>
 
-      <div v-if="workspaceGroups.length" class="management-workspace-grid">
+      <div v-if="loading && !workspaceGroups.length" class="loading-skeleton management-loading-skeleton" role="status" :aria-label="t('正在读取任务…')">
+        <span v-for="index in 4" :key="index" class="loading-skeleton-row"></span>
+      </div>
+      <div v-else-if="workspaceGroups.length" class="management-workspace-grid">
         <div
           v-for="(column, columnIndex) in workspaceColumns"
           :key="columnIndex"
@@ -471,7 +476,7 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
                 >
                   <span class="management-task-copy">
                     <span class="management-task-primary-row">
-                      <strong>{{ task.title }}</strong>
+                      <strong :title="task.title">{{ task.title }}</strong>
                       <time :datetime="task.deletedAt ?? task.updatedAt" :title="fullTaskTime(task)">{{ formatDate(task) }}</time>
                     </span>
                     <span class="management-task-secondary-row">

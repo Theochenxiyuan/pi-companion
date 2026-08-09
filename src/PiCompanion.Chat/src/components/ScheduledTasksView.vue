@@ -10,6 +10,7 @@ const props = defineProps<{
   templates: TaskTemplate[]
   workspaces: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
+  pendingAction?: { taskId: string; action: 'save' | 'run' | 'delete' } | null
 }>()
 
 defineEmits<{
@@ -24,6 +25,10 @@ defineEmits<{
 
 const templateById = computed(() => new Map(props.templates.map(template => [template.id, template])))
 const workspaceById = computed(() => new Map(props.workspaces.map(workspace => [workspace.id, workspace])))
+
+function isPending(scheduledTask: ScheduledTask) {
+  return props.pendingAction?.taskId === scheduledTask.id
+}
 
 function sourceLabel(scheduledTask: ScheduledTask) {
   if (scheduledTask.templateId) {
@@ -97,7 +102,7 @@ function occurrenceLabel(scheduledTask: ScheduledTask) {
     <section class="management-content scheduled-task-content">
       <p class="scheduled-task-runtime-note">{{ t('Pi Companion 需要在后台运行才能准时触发；完全退出后会在下次启动时按错过策略处理。') }}</p>
       <div v-if="scheduledTasks.length" class="scheduled-task-grid">
-        <article v-for="scheduledTask in scheduledTasks" :key="scheduledTask.id" class="surface-card scheduled-task-card" :class="{ disabled: !scheduledTask.isEnabled }">
+        <article v-for="scheduledTask in scheduledTasks" :key="scheduledTask.id" class="surface-card scheduled-task-card" :class="{ disabled: !scheduledTask.isEnabled }" :aria-busy="isPending(scheduledTask)">
           <header>
             <div>
               <strong>{{ scheduledTask.name }}</strong>
@@ -106,6 +111,7 @@ function occurrenceLabel(scheduledTask: ScheduledTask) {
             <UiSwitch
               :model-value="scheduledTask.isEnabled"
               :aria-label="t(scheduledTask.isEnabled ? '暂停定时任务' : '启用定时任务')"
+              :disabled="isPending(scheduledTask)"
               @update:model-value="$emit('toggle', scheduledTask, $event)"
             />
           </header>
@@ -118,9 +124,9 @@ function occurrenceLabel(scheduledTask: ScheduledTask) {
             <span>{{ occurrenceLabel(scheduledTask) }}</span>
             <div>
               <UiButton v-if="scheduledTask.lastOccurrence?.taskId" variant="secondary" size="sm" type="button" @click="$emit('openTask', scheduledTask.lastOccurrence.taskId)">{{ t('打开任务') }}</UiButton>
-              <UiButton variant="secondary" size="sm" type="button" @click="$emit('runNow', scheduledTask)">{{ t('立即运行') }}</UiButton>
-              <UiButton variant="secondary" size="sm" type="button" @click="$emit('edit', scheduledTask)">{{ t('编辑') }}</UiButton>
-              <UiButton class="danger-action" variant="ghost" size="sm" type="button" @click="$emit('delete', scheduledTask)">{{ t('删除') }}</UiButton>
+              <UiButton variant="secondary" size="sm" type="button" :disabled="isPending(scheduledTask)" @click="$emit('runNow', scheduledTask)">{{ t('立即运行') }}</UiButton>
+              <UiButton variant="secondary" size="sm" type="button" :disabled="isPending(scheduledTask)" @click="$emit('edit', scheduledTask)">{{ t('编辑') }}</UiButton>
+              <UiButton class="danger-action" variant="ghost" size="sm" type="button" :disabled="isPending(scheduledTask)" @click="$emit('delete', scheduledTask)">{{ t('删除') }}</UiButton>
             </div>
           </footer>
         </article>

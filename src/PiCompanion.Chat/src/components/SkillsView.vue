@@ -577,9 +577,8 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         />
       </div>
 
-      <div v-if="loading && !snapshot" class="management-empty skills-loading" role="status">
-        <span class="management-empty-icon">π</span>
-        <strong>{{ t('正在读取本地技能…') }}</strong>
+      <div v-if="loading && !snapshot" class="loading-skeleton management-loading-skeleton skills-loading-skeleton" role="status" :aria-label="t('正在读取本地技能…')">
+        <span v-for="index in 4" :key="index" class="loading-skeleton-row"></span>
       </div>
       <div v-else-if="error && !snapshot" class="management-empty skills-error" role="alert">
         <span class="management-empty-icon">!</span>
@@ -1085,10 +1084,10 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
 .skill-import-target-ready code { color: var(--color-tone-10); font-size: var(--font-size-micro); overflow-wrap: anywhere; }
 .skill-import-inline-status { margin: 17px 0 0; color: var(--color-tone-10); font-size: var(--font-size-caption); }
 .skill-import-source-empty { display: flex; flex: 1; align-items: center; justify-content: center; gap: 10px; }
-:global(.skill-import-source-button) { min-height: 33px; padding: 6px 12px; appearance: none; border: 1px solid var(--color-tone-9); border-radius: 7px; background: var(--color-tone-4); color: var(--color-tone-14); cursor: pointer; }
-:global(.skill-import-source-button:hover) { border-color: var(--color-tone-11); background: var(--color-tone-6); }
-:global(.skill-import-source-button:disabled) { cursor: wait; opacity: .5; }
-:global(.skill-import-source-button.compact) { min-height: 29px; padding: 4px 8px; font-size: var(--font-size-caption); }
+:global(.ui-button.skill-import-source-button) { min-height: 33px; padding: 6px 12px; appearance: none; border: 1px solid var(--color-tone-9); border-radius: 7px; background: var(--color-tone-4); color: var(--color-tone-14); cursor: pointer; }
+:global(.ui-button.skill-import-source-button:hover) { border-color: var(--color-tone-11); background: var(--color-tone-6); }
+:global(.ui-button.skill-import-source-button:disabled) { cursor: wait; opacity: .5; }
+:global(.ui-button.skill-import-source-button.compact) { min-height: 29px; padding: 4px 8px; font-size: var(--font-size-caption); }
 .skill-import-source-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .skill-import-source-header > div:first-child { min-width: 0; }
 .skill-import-source-header > div:first-child > span { color: var(--color-tone-9); font-size: var(--font-size-micro); text-transform: uppercase; letter-spacing: .06em; }

@@ -50,7 +50,8 @@
                     </StackPanel>
 
                     <Button Grid.Column="1" Content="×" Style="{StaticResource GhostButton}" Margin="0,0,10,0"
-                            FontSize="{StaticResource TypographySizeTitleLarge}" Click="OnCancelClick" ToolTip="取消 (Esc)" />
+                            FontSize="{StaticResource TypographySizeTitleLarge}" Click="OnCancelClick" ToolTip="取消 (Esc)"
+                            AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=ToolTip}" />
                 </Grid>
             </Border>
 
@@ -168,7 +169,8 @@
                                                             Padding="0"
                                                             Style="{StaticResource GhostButton}"
                                                             Click="OnRemoveAttachmentClick"
-                                                            ToolTip="移除附件" />
+                                                            ToolTip="移除附件"
+                                                            AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=ToolTip}" />
                                                 </Grid>
                                             </Border>
                                             <DataTemplate.Triggers>

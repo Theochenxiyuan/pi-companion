@@ -55,6 +55,22 @@ describe('ComposerPanel options', () => {
     expect(wrapper.emitted('submit')).toHaveLength(1)
   })
 
+  it('guards the composer against duplicate submissions until the draft changes', async () => {
+    const wrapper = shallowMount(ComposerPanel, {
+      props: createProps({ prompt: '只发送一次' }),
+    })
+    const sendButton = wrapper.get('.send-button')
+
+    await sendButton.trigger('click')
+    await sendButton.trigger('click')
+
+    expect(wrapper.emitted('submit')).toHaveLength(1)
+    expect(wrapper.get('.send-button').attributes('disabled')).toBeDefined()
+
+    await wrapper.setProps({ prompt: '修改后的消息' })
+    expect(wrapper.get('.send-button').attributes('disabled')).toBeUndefined()
+  })
+
   it('allows an attachment-only task and previews images for vision models', async () => {
     const attachment = {
       path: 'C:\\Temp\\clipboard.png',

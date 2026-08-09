@@ -10,7 +10,8 @@
         SizeToContent="Manual"
         WindowStartupLocation="CenterScreen"
         Closing="OnClosing"
-        Loaded="OnLoaded">
+        Loaded="OnLoaded"
+        PreviewKeyDown="OnPreviewKeyDown">
     <Window.Resources>
         <ContextMenu x:Key="ChatMoreMenu"
                      x:Shared="False"
@@ -167,7 +168,8 @@
                 <TextBlock Grid.Column="1" Text="智能体对话" HorizontalAlignment="Center"
                            VerticalAlignment="Center" FontSize="{StaticResource TypographySizeBody}" FontWeight="{StaticResource TypographyWeightSemibold}"
                            Foreground="{DynamicResource TextMutedBrush}" />
-                <Button Grid.Column="2"
+                <Button x:Name="MoreButton"
+                         Grid.Column="2"
                         Width="36"
                         Height="34"
                         Padding="0"
@@ -175,6 +177,7 @@
                         FontFamily="{StaticResource TypographyFontSymbol}"
                         FontSize="{StaticResource TypographySizeTitleMedium}"
                         ToolTip="更多"
+                        AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=ToolTip}"
                         ContextMenu="{StaticResource ChatMoreMenu}"
                         Style="{StaticResource GhostButton}"
                         VerticalAlignment="Center"
@@ -186,9 +189,13 @@
             <wv2:WebView2 x:Name="ChatWebView"
                           MinHeight="0"
                           Visibility="Hidden"
+                          AutomationProperties.Name="智能体对话"
                           AllowExternalDrop="True" />
 
-            <Border x:Name="LoadingPanel" Background="{DynamicResource WindowBrush}">
+            <Border x:Name="LoadingPanel"
+                    Background="{DynamicResource WindowBrush}"
+                    AutomationProperties.Name="{Binding ElementName=LoadingTitle, Path=Text}"
+                    AutomationProperties.LiveSetting="Polite">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Grid Width="62" Height="62" HorizontalAlignment="Center">
                         <Border Width="54" Height="54" CornerRadius="18" Background="{DynamicResource RaisedBrush}"
@@ -209,13 +216,28 @@
                     </Grid>
                     <TextBlock x:Name="LoadingTitle" Text="正在准备智能体对话" Margin="0,18,0,0"
                                 FontSize="{StaticResource TypographySizeTitleSmall}" FontWeight="{StaticResource TypographyWeightSemibold}" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="LoadingDetail" Text="启动 WebView2 并加载本地 Vue 应用" Margin="0,7,0,0"
-                                MaxWidth="560" TextWrapping="Wrap" TextAlignment="Center"
-                                FontSize="{StaticResource TypographySizeCaption}" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" />
+                    <ScrollViewer MaxWidth="560"
+                                  MaxHeight="140"
+                                  Margin="0,7,0,0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <TextBlock x:Name="LoadingDetail"
+                                   Text="启动 WebView2 并加载本地 Vue 应用"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"
+                                   FontSize="{StaticResource TypographySizeCaption}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   HorizontalAlignment="Center" />
+                    </ScrollViewer>
                     <StackPanel x:Name="LoadingErrorActions" Orientation="Horizontal" HorizontalAlignment="Center"
                                 Margin="0,18,0,0" Visibility="Collapsed">
-                        <Button x:Name="RetryButton" Content="重试" Click="OnRetryClick" />
+                        <Button x:Name="RetryButton"
+                                Content="重试"
+                                AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=Content}"
+                                Click="OnRetryClick" />
                         <Button x:Name="CopyLoadingErrorButton" Content="复制错误信息" Margin="8,0,0,0"
+                                AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=Content}"
                                 Style="{StaticResource SecondaryButton}" Click="OnCopyLoadingErrorClick" />
                     </StackPanel>
                 </StackPanel>

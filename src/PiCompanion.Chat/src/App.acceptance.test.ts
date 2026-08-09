@@ -1398,7 +1398,7 @@ describe('Agent Chat stage 5 acceptance', () => {
       .toBe('second task unfinished prompt')
   })
 
-  it('automatically dismisses transient bridge errors', async () => {
+  it('queues and automatically dismisses transient bridge errors', async () => {
     vi.useFakeTimers()
     window.chrome = {
       webview: {
@@ -1415,6 +1415,14 @@ describe('Agent Chat stage 5 acceptance', () => {
     store.bridgeError = 'Temporary bridge error'
     await nextTick()
     expect(wrapper.get('.app-toast').text()).toContain('Temporary bridge error')
+
+    store.bridgeError = 'A second bridge error'
+    await nextTick()
+    expect(wrapper.findAll('.app-toast')).toHaveLength(2)
+    expect(wrapper.findAll('.app-toast').map(toast => toast.text())).toEqual(expect.arrayContaining([
+      expect.stringContaining('Temporary bridge error'),
+      expect.stringContaining('A second bridge error'),
+    ]))
 
     vi.advanceTimersByTime(4999)
     await nextTick()

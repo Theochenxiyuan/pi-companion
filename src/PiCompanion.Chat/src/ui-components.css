@@ -44,10 +44,17 @@
   color: inherit;
   font: inherit;
   line-height: var(--line-height-control);
+  transition:
+    background var(--motion-duration-fast) ease,
+    border-color var(--motion-duration-fast) ease,
+    color var(--motion-duration-fast) ease,
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) ease;
 }
 
 .ui-button:not(:disabled) { cursor: pointer; }
-.ui-button:disabled { cursor: default; }
+.ui-button:not(:disabled):active { transform: translateY(1px); }
+.ui-button:disabled { cursor: default; opacity: .48; }
 
 .ui-button:focus-visible,
 .ui-input:focus-visible,
@@ -63,23 +70,46 @@
   background: var(--color-accent);
   color: var(--color-text-inverse);
 }
+.ui-button--primary:not(:disabled):hover {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+}
+.ui-button--primary:not(:disabled):active {
+  border-color: var(--color-tone-13);
+  background: var(--color-tone-13);
+}
 
 .ui-button--secondary {
   border-color: var(--color-border-default);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
 }
+.ui-button--secondary:not(:disabled):hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-hover);
+}
+.ui-button--secondary:not(:disabled):active { background: var(--color-bg-active); }
 
 .ui-button--ghost {
   border-color: transparent;
   background: transparent;
   color: var(--color-text-secondary);
 }
+.ui-button--ghost:not(:disabled):hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.ui-button--ghost:not(:disabled):active { background: var(--color-bg-active); }
 
 .ui-button--danger {
   border-color: var(--color-danger-border);
   background: var(--color-danger-surface);
   color: var(--color-danger-text);
+}
+.ui-button--danger:not(:disabled):hover {
+  border-color: var(--color-danger-border-strong);
+  background: var(--color-danger-surface-emphasis);
+  color: var(--color-danger-text-strong);
 }
 
 .ui-button--sm {
@@ -114,7 +144,7 @@
   flex: none;
   border-style: solid;
   border-radius: 50%;
-  animation: ui-spin 700ms linear infinite;
+  animation: ui-spin var(--motion-duration-slow) linear infinite;
 }
 
 .ui-button-spinner {
@@ -163,6 +193,8 @@
 .ui-menu-item:focus-visible,
 .ui-menu-item[data-highlighted] {
   outline: 0;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .ui-menu-item--danger {
@@ -216,6 +248,11 @@
 .ui-switch[data-state="checked"] .ui-switch-thumb {
   transform: translateX(19px);
   background: var(--color-bg-surface);
+}
+
+.ui-switch:disabled {
+  cursor: default;
+  opacity: .48;
 }
 
 .ui-switch--sm {

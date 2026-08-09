@@ -219,7 +219,8 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 13px 5px 8px;
   font-size: var(--font-size-body-sm); font-weight: var(--font-weight-regular);
 }
-.app-select-trigger:hover, .app-select-trigger:focus-visible, .app-select.open .app-select-trigger { color: var(--color-text-primary); border-color: var(--color-tone-9); }
+.app-select-trigger:hover, .app-select.open .app-select-trigger { color: var(--color-text-primary); border-color: var(--color-tone-9); }
+.app-select-trigger:focus-visible { border-color: var(--color-tone-9); outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset); }
 .app-select.danger-selected .app-select-trigger { border-color: var(--color-danger-border); color: var(--color-danger-text-strong); }
 .app-select.danger-selected .app-select-trigger:hover, .app-select.danger-selected .app-select-trigger:focus-visible, .app-select.danger-selected.open .app-select-trigger {
   border-color: var(--color-danger-border-strong); color: var(--color-danger-text-strong);
@@ -228,11 +229,11 @@ onBeforeUnmount(() => {
 .app-select-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-select-trigger svg {
   fill: none; stroke: currentColor; stroke-width: 1.4px; stroke-linecap: round; stroke-linejoin: round;
-  flex: none; width: 12px; height: 12px; transition: transform .12s;
+  flex: none; width: 12px; height: 12px; transition: transform var(--motion-duration-fast) ease;
 }
 .app-select.open .app-select-trigger svg { transform: rotate(180deg); }
 .app-select-menu {
-  position: fixed; z-index: 1600; width: max-content;
+  position: fixed; z-index: var(--z-index-control-popup); width: max-content;
   border: 1px solid var(--color-border-default); background: var(--color-bg-surface); border-radius: 7px; padding: 4px;
   box-shadow: 0 12px 28px var(--color-overlay); display: flex; max-height: min(320px, calc(100vh - 24px)); flex-direction: column;
 }
@@ -242,6 +243,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border-subtle); border-radius: 5px; outline: 0; background: var(--color-tone-2); color: var(--color-text-primary); font-size: var(--font-size-body-sm);
 }
 .app-select-search:focus { border-color: var(--color-tone-9); }
+.app-select-search:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset); }
 .app-select-search::-webkit-search-cancel-button { filter: invert(.6); }
 .app-select-options { min-height: 0; overflow-x: hidden; overflow-y: auto; }
 .app-select-group + .app-select-group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--color-border-subtle); }

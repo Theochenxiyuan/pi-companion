@@ -80,10 +80,12 @@ const isExpanded = ref(false)
 const suggestionsDismissedFor = ref<string | null>(null)
 const activeSuggestionIndex = ref(0)
 const skillRequestPending = ref(false)
+const submitLocked = ref(false)
 const pendingSkillArgs = ref('')
 const draggedMessageId = ref<string | null>(null)
 const currentTime = ref(Date.now())
 let countdownTimer = 0
+let submitUnlockTimer = 0
 const permissionModeOptions = computed(() => [
   { value: 'read-only', label: t('只读'), tooltip: t('仅允许读取、网络搜索和向用户提问') },
   { value: 'standard', label: t('标准访问'), tooltip: t('允许工作区内普通文件修改；Shell、敏感操作和工作区外访问会请求授权') },
@@ -190,7 +192,7 @@ const placeholder = computed(() => {
 const primaryAction = computed(() =>
   t(props.hasCurrentTask && props.taskActive ? '加入' : '发送'))
 const canSubmit = computed(() =>
-  props.modeSelected && (prompt.value.trim().length > 0 || props.attachments.length > 0))
+  !submitLocked.value && props.modeSelected && (prompt.value.trim().length > 0 || props.attachments.length > 0))
 const autoStartItem = computed(() =>
   props.localQueuedMessages.find(message => message.id === props.localQueueAutoStartMessageId) ?? null)
 const autoStartRemainingSeconds = computed(() => {
@@ -199,9 +201,9 @@ const autoStartRemainingSeconds = computed(() => {
 })
 
 function handleKeydown(event: KeyboardEvent) {
-  if (props.modeSelected && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+  if (canSubmit.value && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault()
-    emit('submit')
+    submitPrompt()
     return
   }
   if (slashSuggestions.value.length) {
@@ -226,6 +228,20 @@ function handleKeydown(event: KeyboardEvent) {
       return
     }
   }
+}
+
+function submitPrompt() {
+  if (!canSubmit.value) return
+  submitLocked.value = true
+  emit('submit')
+  if (submitUnlockTimer) window.clearTimeout(submitUnlockTimer)
+  submitUnlockTimer = window.setTimeout(releaseSubmitLock, 800)
+}
+
+function releaseSubmitLock() {
+  submitLocked.value = false
+  if (submitUnlockTimer) window.clearTimeout(submitUnlockTimer)
+  submitUnlockTimer = 0
 }
 
 async function applySuggestion(suggestion: ComposerSuggestion) {
@@ -290,9 +306,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (countdownTimer) window.clearInterval(countdownTimer)
+  if (submitUnlockTimer) window.clearTimeout(submitUnlockTimer)
 })
 
 watch(prompt, value => {
+  releaseSubmitLock()
   if (suggestionsDismissedFor.value !== value) suggestionsDismissedFor.value = null
   activeSuggestionIndex.value = 0
   if (value.startsWith('/skill:') && !skillRequestPending.value) {
@@ -304,6 +322,9 @@ watch(prompt, value => {
     pendingSkillArgs.value = ''
   }
 })
+
+watch(() => props.attachments, releaseSubmitLock)
+watch(() => props.taskActive, releaseSubmitLock)
 
 watch(() => props.skillsLoading, loading => {
   if (!loading) skillRequestPending.value = false
@@ -482,7 +503,7 @@ defineExpose({ focus: () => input.value?.focus() })
         </div>
         <div class="composer-actions">
           <UiButton v-if="taskActive" class="abort-button" type="button" @click="$emit('abort')">{{ t('停止') }}</UiButton>
-          <UiButton class="send-button" type="button" :disabled="!canSubmit" @click="$emit('submit')">{{ primaryAction }} <b>↑</b></UiButton>
+          <UiButton class="send-button" type="button" :disabled="!canSubmit" @click="submitPrompt">{{ primaryAction }} <b>↑</b></UiButton>
         </div>
       </div>
     </div>

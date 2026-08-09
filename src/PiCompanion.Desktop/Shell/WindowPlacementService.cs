@@ -108,22 +108,13 @@ internal static partial class WindowPlacementService
             return false;
         }
 
-        var width = restoreSize ? Math.Max(window.MinWidth, state.Width) : window.Width;
-        var height = restoreSize ? Math.Max(window.MinHeight, state.Height) : window.Height;
-        var left = state.Left;
-        var top = state.Top;
-        var virtualBounds = new Rect(
-            SystemParameters.VirtualScreenLeft,
-            SystemParameters.VirtualScreenTop,
-            SystemParameters.VirtualScreenWidth,
-            SystemParameters.VirtualScreenHeight);
-        var candidate = new Rect(left, top, width, height);
-        if (!candidate.IntersectsWith(virtualBounds))
-        {
-            var workArea = SystemParameters.WorkArea;
-            left = Math.Clamp(left, workArea.Left, Math.Max(workArea.Left, workArea.Right - width));
-            top = Math.Clamp(top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - height));
-        }
+        var requestedWidth = restoreSize ? Math.Max(window.MinWidth, state.Width) : window.Width;
+        var requestedHeight = restoreSize ? Math.Max(window.MinHeight, state.Height) : window.Height;
+        var workArea = GetWorkArea(window, state.Left + (requestedWidth / 2), state.Top + (requestedHeight / 2));
+        var width = Math.Min(requestedWidth, Math.Max(window.MinWidth, workArea.Width));
+        var height = Math.Min(requestedHeight, Math.Max(window.MinHeight, workArea.Height));
+        var left = Math.Clamp(state.Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - width));
+        var top = Math.Clamp(state.Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - height));
 
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         if (restoreSize)
@@ -138,6 +129,33 @@ internal static partial class WindowPlacementService
             window.WindowState = WindowState.Maximized;
         }
         return true;
+    }
+
+    private static Rect GetWorkArea(Window window, double centerX, double centerY)
+    {
+        var source = PresentationSource.FromVisual(window);
+        if (source?.CompositionTarget is not { } compositionTarget)
+        {
+            return SystemParameters.WorkArea;
+        }
+
+        var deviceCenter = compositionTarget.TransformToDevice.Transform(new System.Windows.Point(centerX, centerY));
+        var monitor = MonitorFromPoint(
+            new NativePoint
+            {
+                X = (int)Math.Round(deviceCenter.X),
+                Y = (int)Math.Round(deviceCenter.Y),
+            },
+            MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return SystemParameters.WorkArea;
+        }
+
+        var topLeft = compositionTarget.TransformFromDevice.Transform(new System.Windows.Point(info.Work.Left, info.Work.Top));
+        var bottomRight = compositionTarget.TransformFromDevice.Transform(new System.Windows.Point(info.Work.Right, info.Work.Bottom));
+        return new Rect(topLeft, bottomRight);
     }
 
     private static bool IsUsable(WindowPlacementState state) =>

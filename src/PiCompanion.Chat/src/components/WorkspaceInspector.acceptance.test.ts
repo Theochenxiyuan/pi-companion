@@ -46,6 +46,7 @@ describe('WorkspaceInspector', () => {
     })
 
     const rootRequest = wrapper.emitted('loadDirectory')?.[0]
+    expect(wrapper.findAll('.file-tree-skeleton .loading-skeleton-row')).toHaveLength(6)
     await wrapper.setProps({
       directoryUpdate: {
         requestId: rootRequest?.[0] as string,
@@ -66,6 +67,8 @@ describe('WorkspaceInspector', () => {
       open: boolean
     }) => { open: boolean }
     expect(tree.props('defaultOpen')).toBe(false)
+    expect(wrapper.get('.file-tree-row').element.tagName).toBe('BUTTON')
+    expect(wrapper.get('.file-tree-row').attributes('aria-expanded')).toBe('false')
     expect(restore({ data: fileEntry({ name: 'beta', relativePath: 'beta', isDirectory: true, hasChildren: true, isReparsePoint: false }), open: true }).open).toBe(false)
 
     await wrapper.findAll('.file-tree-row')[0]!.trigger('click')

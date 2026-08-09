@@ -7,9 +7,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using PiCompanion.Application.Demo;
@@ -42,6 +44,7 @@ public partial class MainWindow : Window
     private const int DwmBorderColor = 34;
     private const int DwmCaptionColor = 35;
     private const int DwmTextColor = 36;
+    private static readonly TimeSpan BridgeReadyTimeout = TimeSpan.FromSeconds(10);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TaskCoordinator _coordinator;
     private readonly WorkspaceFileBrowser _workspaceFileBrowser = new();
@@ -64,11 +67,14 @@ public partial class MainWindow : Window
     private readonly Action _showMonitor;
     private readonly Action _toggleMonitor;
     private readonly Action _exit;
+    private readonly DispatcherTimer _bridgeReadyTimer = new();
     private AppTheme _theme;
     private ComposerDraft? _draft;
     private bool _bridgeReady;
     private bool _isInitializing;
     private bool _isInitialized;
+    private bool _navigationInProgress;
+    private bool _navigationSucceeded;
     private string? _loadingErrorDetail;
     private bool _openCurrentTaskWhenReady;
     private Guid? _incrementalTaskId;
@@ -102,6 +108,8 @@ public partial class MainWindow : Window
         _showMonitor = showMonitor;
         _toggleMonitor = toggleMonitor;
         _exit = exit;
+        _bridgeReadyTimer.Interval = BridgeReadyTimeout;
+        _bridgeReadyTimer.Tick += OnBridgeReadyTimeout;
         _piConfiguration.SnapshotChanged += OnPiConfigurationSnapshotChanged;
         _coordinator.ProjectionChanged += OnProjectionChanged;
         _coordinator.TaskChanged += OnTaskChanged;
@@ -110,6 +118,9 @@ public partial class MainWindow : Window
         _coordinator.TaskTemplatesChanged += OnTaskTemplatesChanged;
         _coordinator.ScheduledTasksChanged += OnScheduledTasksChanged;
         DesktopLocalizer.Apply(this);
+        System.Windows.Automation.AutomationProperties.SetName(
+            ChatWebView,
+            DesktopLocalizer.Text("智能体对话", "Agent Chat"));
     }
 
     public bool AllowClose { get; set; }
@@ -241,13 +252,13 @@ public partial class MainWindow : Window
     {
         _isInitializing = true;
         _loadingErrorDetail = null;
-        ChatWebView.Visibility = Visibility.Hidden;
-        LoadingPanel.Visibility = Visibility.Visible;
-        LoadingErrorActions.Visibility = Visibility.Collapsed;
+        _bridgeReady = false;
+        _navigationSucceeded = false;
+        _bridgeReadyTimer.Stop();
         RetryButton.IsEnabled = false;
-        StartLoadingAnimation();
-        LoadingTitle.Text = DesktopLocalizer.Text("正在准备智能体对话", "Preparing Agent Chat");
-        LoadingDetail.Text = DesktopLocalizer.Text("启动 WebView2 并加载本地 Vue 应用", "Starting WebView2 and loading the local Vue app");
+        ShowLoadingState(
+            DesktopLocalizer.Text("正在准备智能体对话", "Preparing Agent Chat"),
+            DesktopLocalizer.Text("启动 WebView2 并加载本地 Vue 应用", "Starting WebView2 and loading the local Vue app"));
 
         try
         {
@@ -305,21 +316,35 @@ public partial class MainWindow : Window
         if (!e.Uri.StartsWith("https://app.pi-companion.local/", StringComparison.OrdinalIgnoreCase))
         {
             e.Cancel = true;
+            return;
         }
+
+        _bridgeReadyTimer.Stop();
+        _bridgeReady = false;
+        _navigationInProgress = true;
+        _navigationSucceeded = false;
+        ShowLoadingState(
+            DesktopLocalizer.Text("正在加载智能体对话", "Loading Agent Chat"),
+            DesktopLocalizer.Text("正在等待本地界面完成初始化", "Waiting for the local interface to initialize"));
     }
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         if (e.IsSuccess)
         {
-            StopLoadingAnimation();
-            _loadingErrorDetail = null;
-            LoadingErrorActions.Visibility = Visibility.Collapsed;
-            LoadingPanel.Visibility = Visibility.Collapsed;
-            ChatWebView.Visibility = Visibility.Visible;
+            _navigationInProgress = false;
+            _navigationSucceeded = true;
+            if (!_bridgeReady)
+            {
+                LoadingTitle.Text = DesktopLocalizer.Text("正在初始化智能体对话", "Initializing Agent Chat");
+                LoadingDetail.Text = DesktopLocalizer.Text("正在连接桌面桥接", "Connecting to the desktop bridge");
+                _bridgeReadyTimer.Start();
+            }
+            TryRevealChat();
         }
         else
         {
+            _navigationInProgress = false;
             var detail = $"WebView2 error: {e.WebErrorStatus}";
             ShowLoadingError(
                 DesktopLocalizer.Text("本地 Vue 应用加载失败", "The local Vue app failed to load"),
@@ -354,8 +379,58 @@ public partial class MainWindow : Window
         LoadingSpinner.Visibility = Visibility.Collapsed;
     }
 
+    private void ShowLoadingState(string title, string detail)
+    {
+        LoadingPanel.BeginAnimation(OpacityProperty, null);
+        LoadingPanel.Opacity = 1;
+        ChatWebView.Visibility = Visibility.Hidden;
+        LoadingPanel.Visibility = Visibility.Visible;
+        LoadingErrorActions.Visibility = Visibility.Collapsed;
+        LoadingTitle.Text = title;
+        LoadingDetail.Text = detail;
+        StartLoadingAnimation();
+    }
+
+    private void TryRevealChat(bool force = false)
+    {
+        if (!_navigationSucceeded || (!_bridgeReady && !force))
+        {
+            return;
+        }
+
+        _bridgeReadyTimer.Stop();
+        _loadingErrorDetail = null;
+        LoadingErrorActions.Visibility = Visibility.Collapsed;
+        ChatWebView.Visibility = Visibility.Visible;
+        StopLoadingAnimation();
+
+        if (!_settings.Current.Monitor.AnimationsEnabled || !SystemParameters.ClientAreaAnimation)
+        {
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140));
+        fade.Completed += (_, _) =>
+        {
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            LoadingPanel.BeginAnimation(OpacityProperty, null);
+            LoadingPanel.Opacity = 1;
+        };
+        LoadingPanel.BeginAnimation(OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private void OnBridgeReadyTimeout(object? sender, EventArgs e)
+    {
+        _bridgeReadyTimer.Stop();
+        TryRevealChat(force: true);
+    }
+
     private void ShowLoadingError(string title, string detail, string diagnosticDetail)
     {
+        _bridgeReadyTimer.Stop();
+        _navigationInProgress = false;
+        _navigationSucceeded = false;
         StopLoadingAnimation();
         _loadingErrorDetail = diagnosticDetail;
         ChatWebView.Visibility = Visibility.Hidden;
@@ -411,6 +486,7 @@ public partial class MainWindow : Window
                 case "BridgeReady":
                     CancelPendingSkillImports();
                     _bridgeReady = true;
+                    TryRevealChat();
                     if (_piConfiguration.CachedSnapshot is { } cachedPiConfiguration)
                     {
                         ApplyPiConfigurationSnapshot(cachedPiConfiguration);
@@ -2982,6 +3058,55 @@ public partial class MainWindow : Window
                 .ToArray()
             : [];
 
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (HandleShellShortcut(e.Key, Keyboard.Modifiers))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool HandleShellShortcut(Key key, ModifierKeys modifiers)
+    {
+        var control = modifiers.HasFlag(ModifierKeys.Control);
+        if (control && key == Key.W)
+        {
+            Hide();
+            return true;
+        }
+
+        if (key == Key.F5 || (control && key == Key.R))
+        {
+            ReloadChat();
+            return true;
+        }
+
+        if (key == Key.Escape && MoreButton.ContextMenu?.IsOpen == true)
+        {
+            MoreButton.ContextMenu.IsOpen = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ReloadChat()
+    {
+        if (_isInitializing || _navigationInProgress)
+        {
+            return;
+        }
+
+        if (ChatWebView.CoreWebView2 is { } webView)
+        {
+            webView.Reload();
+            return;
+        }
+
+        _isInitialized = false;
+        _ = InitializeWebViewAsync();
+    }
+
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement button || button.ContextMenu is null)
@@ -3074,7 +3199,7 @@ public partial class MainWindow : Window
 
     private async void OnRetryClick(object sender, RoutedEventArgs e)
     {
-        if (_isInitializing)
+        if (_isInitializing || _navigationInProgress)
         {
             return;
         }
@@ -3127,6 +3252,8 @@ public partial class MainWindow : Window
         _coordinator.EvidenceChanged -= OnEvidenceChanged;
         _coordinator.TaskTemplatesChanged -= OnTaskTemplatesChanged;
         _coordinator.ScheduledTasksChanged -= OnScheduledTasksChanged;
+        _bridgeReadyTimer.Stop();
+        _bridgeReadyTimer.Tick -= OnBridgeReadyTimeout;
         CancelPendingSkillImports();
         DiscardDraft();
         StopLoadingAnimation();
