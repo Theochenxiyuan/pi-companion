@@ -284,6 +284,7 @@
                                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                                 <Setter Property="Margin" Value="0,0,0,5" />
                                                 <Setter Property="Padding" Value="10,8" />
+                                                <Setter Property="MaxHeight" Value="64" />
                                                 <Setter Property="Cursor" Value="Hand" />
                                                 <Setter Property="FocusVisualStyle" Value="{StaticResource RoundedFocusVisual}" />
                                                 <Setter Property="Template">
@@ -323,8 +324,9 @@
                                                         <TextBlock Text="{Binding DisplayName}"
                                                                    FontSize="{StaticResource TypographySizeBodySmall}"
                                                                    FontWeight="{StaticResource TypographyWeightSemibold}" />
-                                                        <TextBlock Text="{Binding Prompt}"
+                                                        <TextBlock Text="{Binding PromptPreview}"
                                                                    Margin="0,3,0,0"
+                                                                   TextWrapping="NoWrap"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    FontSize="{StaticResource TypographySizeCaption}"
                                                                    Foreground="{DynamicResource TextSecondaryBrush}" />

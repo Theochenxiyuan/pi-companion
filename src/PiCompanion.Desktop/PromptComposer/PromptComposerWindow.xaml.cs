@@ -1068,7 +1068,12 @@ public partial class PromptComposerWindow : Window
         string TargetLabel,
         string? Model,
         string? ThinkingLevel,
-        string? PermissionMode);
+        string? PermissionMode)
+    {
+        public string PromptPreview { get; } = string.Join(
+            ' ',
+            Prompt.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
 
     private static string ThinkingLevelLabel(string level) => level switch
     {
