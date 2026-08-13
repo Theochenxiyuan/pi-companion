@@ -9,9 +9,32 @@ import test from "node:test";
 import piCompanionExtension, {
 	classifyToolCall,
 	isPathInsideWorkspace,
+	longRunningShellTimeoutGuardReason,
+	minimumLongRunningShellTimeoutSeconds,
 	permissionChoices,
 	resolveToolTarget,
 } from "../../src/PiCompanion.Extension/pi-companion.mjs";
+
+test("long-running shell operations reject short explicit timeouts", () => {
+	const download = {
+		toolName: "bash",
+		input: { command: "curl -L https://example.com/archive.zip -o archive.zip", timeout: 180 },
+	};
+	assert.match(longRunningShellTimeoutGuardReason(download), /900/u);
+	assert.equal(minimumLongRunningShellTimeoutSeconds, 900);
+	assert.equal(longRunningShellTimeoutGuardReason({
+		...download,
+		input: { ...download.input, timeout: 900 },
+	}), undefined);
+	assert.equal(longRunningShellTimeoutGuardReason({
+		...download,
+		input: { command: download.input.command },
+	}), undefined);
+	assert.equal(longRunningShellTimeoutGuardReason({
+		toolName: "bash",
+		input: { command: "git status", timeout: 30 },
+	}), undefined);
+});
 import {
 	applyDeveloperRoleCapabilities,
 	computeModelsConfigRevision,

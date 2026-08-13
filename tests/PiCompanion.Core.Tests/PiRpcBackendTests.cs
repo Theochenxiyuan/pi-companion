@@ -331,6 +331,7 @@ public sealed class PiRpcBackendTests
             var promptIndex = Array.IndexOf(arguments, "--append-system-prompt");
             Assert.True(promptIndex >= 0 && promptIndex + 1 < arguments.Length);
             Assert.DoesNotContain("当前工作区未受 Pi 信任", arguments[promptIndex + 1]);
+            Assert.Contains("不能低于 900 秒", arguments[promptIndex + 1]);
         }
         finally
         {

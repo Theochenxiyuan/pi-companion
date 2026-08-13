@@ -551,8 +551,8 @@
                                Foreground="{DynamicResource DangerBrush}" />
                     <Button Grid.Column="1" Content="转到智能体对话" Style="{StaticResource SecondaryButton}"
                             Click="OnOpenChatClick" />
-                    <Button Grid.Column="3" Content="开始任务  ↵" Foreground="{DynamicResource TextInverseBrush}"
-                            IsDefault="True" Click="OnStartClick" />
+                    <Button x:Name="StartTaskButton" Grid.Column="3" Content="开始任务  ↵" Foreground="{DynamicResource TextInverseBrush}"
+                             IsDefault="True" Click="OnStartClick" />
                 </Grid>
             </Grid>
 
@@ -577,6 +577,77 @@
                     </ControlTemplate>
                 </Thumb.Template>
             </Thumb>
+
+            <Border x:Name="WorkspaceTrustConfirmationOverlay"
+                    Grid.RowSpan="2"
+                    Panel.ZIndex="110"
+                    KeyboardNavigation.TabNavigation="Cycle"
+                    Background="{DynamicResource GlassPanelBrush}"
+                    CornerRadius="13"
+                    Visibility="Collapsed">
+                <Border Width="450"
+                        Padding="22"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource ElevatedBrush}"
+                        BorderBrush="{DynamicResource FocusBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="24" ShadowDepth="7" Opacity="0.46" Color="{StaticResource ColorShadow}" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="是否信任此工作区？"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   FontSize="{StaticResource TypographySizeTitleSmall}"
+                                   FontWeight="{StaticResource TypographyWeightSemibold}" />
+                        <TextBlock Margin="0,9,0,0"
+                                   Text="信任后，Pi 可以加载此工作区提供的项目设置、技能和系统提示。这些内容可能改变智能体的行为。"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="{StaticResource TypographySizeBodySmall}"
+                                   LineHeight="20" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Text="工作区信任不会改变文件访问或命令执行权限；这些仍由任务权限模式控制。"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="{StaticResource TypographySizeCaption}"
+                                   LineHeight="19" />
+                        <Border Margin="0,14,0,0"
+                                Padding="10,8"
+                                Background="{DynamicResource RaisedBrush}"
+                                BorderBrush="{DynamicResource StrokeBrush}"
+                                BorderThickness="1"
+                                CornerRadius="7">
+                            <TextBlock x:Name="WorkspaceTrustPathText"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       FontFamily="{StaticResource TypographyFontMono}"
+                                       FontSize="{StaticResource TypographySizeCaption}" />
+                        </Border>
+                        <StackPanel Margin="0,20,0,0"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal">
+                            <Button x:Name="WorkspaceTrustCancelButton"
+                                    Content="取消"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,0"
+                                    Click="OnCancelWorkspaceTrustClick" />
+                            <Button x:Name="WorkspaceTrustDeclineButton"
+                                    Content="不信任并开始"
+                                    Tag="declined"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,0"
+                                    Click="OnWorkspaceTrustDecisionClick" />
+                            <Button x:Name="WorkspaceTrustAcceptButton"
+                                    Content="信任并开始"
+                                    Tag="trusted"
+                                    Foreground="{DynamicResource TextInverseBrush}"
+                                    Click="OnWorkspaceTrustDecisionClick" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
 
             <Border x:Name="FullAccessConfirmationOverlay"
                     Grid.RowSpan="2"

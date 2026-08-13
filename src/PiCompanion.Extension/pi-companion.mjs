@@ -21,6 +21,8 @@ const readOnlyTools = new Set([
 const companionMutationTools = new Set(["create_task_template", "create_scheduled_task"]);
 const permissionModes = new Set(["read-only", "standard", "full-access"]);
 const sensitiveNames = new Set([".env", ".git", ".npmrc", ".pypirc", "credentials", "id_rsa", "id_ed25519"]);
+export const minimumLongRunningShellTimeoutSeconds = 15 * 60;
+const longRunningShellCommandPattern = /\b(?:curl|wget|invoke-webrequest|start-bitstransfer|npm\s+(?:install|ci)|pnpm\s+install|yarn\s+install|pip(?:3)?\s+install|uv\s+(?:pip\s+)?install|winget\s+install|choco\s+install|scoop\s+install|apt(?:-get)?\s+install|dnf\s+install|yum\s+install|brew\s+install|dotnet\s+(?:restore|build|publish)|msbuild|cargo\s+build|go\s+build|docker\s+build|expand-archive|tar\s+)\b/i;
 
 function normalizeForComparison(value) {
 	const normalizedPath = path.normalize(value);
@@ -88,6 +90,23 @@ function commandRisk(command) {
 		return "shell-download";
 	}
 	return "shell";
+}
+
+export function longRunningShellTimeoutGuardReason(event) {
+	if (event?.toolName !== "bash" || !event.input || typeof event.input !== "object") return undefined;
+	const command = typeof event.input.command === "string" ? event.input.command : "";
+	const timeout = event.input.timeout;
+	if (!longRunningShellCommandPattern.test(command) ||
+		typeof timeout !== "number" ||
+		!Number.isFinite(timeout) ||
+		timeout >= minimumLongRunningShellTimeoutSeconds) {
+		return undefined;
+	}
+
+	return uiText(
+		`该命令包含下载、安装、解压或构建操作，但只设置了 ${timeout} 秒超时。请使用相同命令重试，并省略 timeout（推荐）或将其设为至少 ${minimumLongRunningShellTimeoutSeconds} 秒。`,
+		`This command performs a download, installation, extraction, or build but only allows ${timeout} seconds. Retry the same command with timeout omitted (recommended) or set to at least ${minimumLongRunningShellTimeoutSeconds} seconds.`,
+	);
 }
 
 function permissionFingerprint(value) {
@@ -908,6 +927,10 @@ export default function piCompanionExtension(pi) {
 			normalizeForComparison(canonicalizeWithExistingAncestor(ctx.cwd)) !==
 				normalizeForComparison(runtimeContext.workingDirectory)) {
 			return { block: true, reason: "Pi Companion 工作目录与当前 Session 不一致；操作已阻止。" };
+		}
+		const timeoutGuardReason = longRunningShellTimeoutGuardReason(event);
+		if (timeoutGuardReason) {
+			return { block: true, reason: timeoutGuardReason };
 		}
 
 		const taskGrants = loadTaskGrants(grantDirectory, runtimeContext.taskId);

@@ -1910,7 +1910,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         const string taskTemplateSystemPrompt =
             " 用户明确要求把内容保存为任务模板，或已经同意你的模板建议时，使用 create_task_template；模板内容必须是独立完整的任务草稿，不得包含密钥、附件或临时执行结果。工具未成功返回前不得声称模板已经创建。";
         var workspaceSystemPrompt =
-            "Pi Companion 会在工具执行前实施工作目录和用户授权策略。需要用户作出选择或补充信息时，必须调用 ask_user；不要自行猜测用户答案。被拒绝或阻止的操作不得换用其他工具绕过。" +
+            "Pi Companion 会在工具执行前实施工作目录和用户授权策略。需要用户作出选择或补充信息时，必须调用 ask_user；不要自行猜测用户答案。被拒绝或阻止的操作不得换用其他工具绕过。下载、安装、解压、依赖恢复、构建等耗时 Shell 命令必须省略 bash 的 timeout 参数；如果确实需要设置，不能低于 900 秒。" +
             taskTemplateSystemPrompt;
         if (request.ScopeKind == TaskScopeKind.Workspace &&
             !string.Equals(workspaceTrustStatus, "trusted", StringComparison.Ordinal))

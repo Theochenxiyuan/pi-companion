@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using PiCompanion.Application.Demo;
 using PiCompanion.Application.PiRpc;
 using PiCompanion.Application.Settings;
+using PiCompanion.Application.Skills;
 using PiCompanion.Core.Activation;
 using PiCompanion.Core.Runs;
 using PiCompanion.Core.Tasks;
@@ -30,6 +31,7 @@ public partial class PromptComposerWindow : Window
     private readonly TaskCoordinator _coordinator;
     private readonly AppSettingsService _settings;
     private readonly PiConfigurationService _piConfiguration;
+    private readonly PiProjectTrustService _piProjectTrust = new();
     private readonly Action<ComposerDraft> _openChat;
     private readonly Action _showMonitor;
     private readonly SkillCompletionController _skillCompletion;
@@ -43,6 +45,8 @@ public partial class PromptComposerWindow : Window
     private bool _suppressPermissionSelectionChanged;
     private string _previousPermissionMode = "standard";
     private string? _modelSelectionBeforeSearch;
+    private ComposerDraft? _pendingWorkspaceTrustDraft;
+    private bool _isStartPending;
     private CancellationTokenSource? _prewarmCancellation;
     private PiConfigurationSnapshot _piSnapshot = PiConfigurationSnapshot.Unavailable(
         DesktopLocalizer.Text("尚未读取 Pi 配置。", "Pi configuration has not been loaded."));
@@ -179,6 +183,11 @@ public partial class PromptComposerWindow : Window
 
     private async void OnStartClick(object sender, RoutedEventArgs e)
     {
+        if (_isStartPending)
+        {
+            return;
+        }
+
         if (_skillCompletion.CommitSelection())
         {
             return;
@@ -190,28 +199,100 @@ public partial class PromptComposerWindow : Window
             return;
         }
 
+        SetStartPending(true);
         try
         {
-            if (_coordinator.Current is { Status: var status } && !status.IsActive())
+            var trust = await Task.Run(() => _piProjectTrust.GetStatus(draft.WorkingDirectory));
+            if (string.Equals(trust.Status, "undecided", StringComparison.Ordinal))
             {
-                _coordinator.BeginNewTask();
+                _pendingWorkspaceTrustDraft = draft;
+                WorkspaceTrustPathText.Text = trust.WorkspacePath;
+                WorkspaceTrustConfirmationOverlay.Visibility = Visibility.Visible;
+                WorkspaceTrustAcceptButton.Focus();
+                return;
             }
 
-            await _coordinator.StartAsync(
-                draft.Prompt,
-                draft.WorkingDirectory,
-                draft.Model,
-                draft.ThinkingLevel,
-                DemoRunMode.InteractiveSuccess,
-                attachments: draft.Attachments.Select(attachment => attachment.Path).ToArray(),
-                permissionMode: draft.PermissionMode);
-            Hide();
-            _showMonitor();
+            await StartDraftAsync(draft);
         }
         catch (InvalidOperationException exception)
         {
             ValidationText.Text = exception.Message;
         }
+        finally
+        {
+            SetStartPending(false);
+        }
+    }
+
+    private async Task StartDraftAsync(ComposerDraft draft)
+    {
+        if (_coordinator.Current is { Status: var status } && !status.IsActive())
+        {
+            _coordinator.BeginNewTask();
+        }
+
+        await _coordinator.StartAsync(
+            draft.Prompt,
+            draft.WorkingDirectory,
+            draft.Model,
+            draft.ThinkingLevel,
+            DemoRunMode.InteractiveSuccess,
+            attachments: draft.Attachments.Select(attachment => attachment.Path).ToArray(),
+            permissionMode: draft.PermissionMode);
+        Hide();
+        _showMonitor();
+    }
+
+    private async void OnWorkspaceTrustDecisionClick(object sender, RoutedEventArgs e)
+    {
+        if (_pendingWorkspaceTrustDraft is not { } draft ||
+            sender is not FrameworkElement { Tag: string decision } ||
+            _isStartPending)
+        {
+            return;
+        }
+
+        var trusted = string.Equals(decision, "trusted", StringComparison.Ordinal);
+        SetStartPending(true);
+        try
+        {
+            await Task.Run(() => _piProjectTrust.SetDecision(draft.WorkingDirectory, trusted));
+            _pendingWorkspaceTrustDraft = null;
+            WorkspaceTrustConfirmationOverlay.Visibility = Visibility.Collapsed;
+            await StartDraftAsync(draft);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ValidationText.Text = exception.Message;
+        }
+        finally
+        {
+            SetStartPending(false);
+        }
+    }
+
+    private void OnCancelWorkspaceTrustClick(object sender, RoutedEventArgs e) =>
+        DismissWorkspaceTrustConfirmation();
+
+    private void DismissWorkspaceTrustConfirmation()
+    {
+        if (_isStartPending)
+        {
+            return;
+        }
+
+        _pendingWorkspaceTrustDraft = null;
+        WorkspaceTrustConfirmationOverlay.Visibility = Visibility.Collapsed;
+        FocusPromptInput();
+    }
+
+    private void SetStartPending(bool pending)
+    {
+        _isStartPending = pending;
+        StartTaskButton.IsEnabled = !pending;
+        WorkspaceTrustCancelButton.IsEnabled = !pending;
+        WorkspaceTrustDeclineButton.IsEnabled = !pending;
+        WorkspaceTrustAcceptButton.IsEnabled = !pending;
     }
 
     private void OnOpenChatClick(object sender, RoutedEventArgs e)
@@ -475,6 +556,23 @@ public partial class PromptComposerWindow : Window
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (WorkspaceTrustConfirmationOverlay.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Key.Escape)
+            {
+                DismissWorkspaceTrustConfirmation();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (_isStartPending)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (FullAccessConfirmationOverlay.Visibility == Visibility.Visible)
         {
             if (e.Key == Key.Escape)
