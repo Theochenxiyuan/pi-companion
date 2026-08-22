@@ -105,6 +105,9 @@ if (!streamedResult) {
 
 function getWebSearchSupport(model, builtInProviderIds) {
   if (!builtInProviderIds.has(model.provider)) return 'none'
+  if (model.provider === 'xiaomi' &&
+      model.api === 'openai-completions' &&
+      ['mimo-v2.5', 'mimo-v2.5-pro'].includes(model.id)) return 'native'
   if (model.provider === 'openai' && model.api === 'openai-responses') return 'native'
   if (model.provider === 'google' && model.api === 'google-generative-ai') return 'native'
   if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'native'
@@ -114,7 +117,7 @@ function getWebSearchSupport(model, builtInProviderIds) {
 
 function getProviderCapabilities(providerId, builtInProviderIds) {
   if (!builtInProviderIds.has(providerId)) return []
-  return ['openai', 'openai-codex', 'google', 'anthropic'].includes(providerId)
+  return ['openai', 'openai-codex', 'google', 'anthropic', 'xiaomi'].includes(providerId)
     ? ['web-search']
     : []
 }

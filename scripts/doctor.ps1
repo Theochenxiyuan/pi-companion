@@ -124,8 +124,8 @@ function Find-WebView2Version {
     return $versions | Sort-Object -Descending | Select-Object -First 1
 }
 
-$isWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
-if (!$isWindows) {
+$isWindowsHost = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+if (!$isWindowsHost) {
     Add-Check 'windows' 'Windows 11' 'fail' $true '当前系统不是 Windows。' '请在 Windows 11 x64 机器上构建和运行。'
 }
 else {

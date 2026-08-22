@@ -180,6 +180,14 @@ input.on('line', (line) => {
         send({ type: 'message_start', message: { role: 'assistant', content: [], stopReason: 'stop' } })
         send({
           type: 'message_update',
+          usage: {
+            input: 8,
+            output: 2,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 10,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
           assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '真实回答' },
         })
         send({ type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read', args: { path: 'README.md' } })

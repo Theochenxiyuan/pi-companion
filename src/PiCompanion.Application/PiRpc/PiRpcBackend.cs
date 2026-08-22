@@ -1160,9 +1160,9 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         var extensionVersion = _extensionPath is not null && File.Exists(_extensionPath)
             ? $"{_extensionPath}|{File.GetLastWriteTimeUtc(_extensionPath).Ticks}|{new FileInfo(_extensionPath).Length}"
             : _extensionPath ?? string.Empty;
-        var webSearchSupport = PiWebSearchCapabilities.ResolveModelReference(request.Model);
+        var webSearchIntegration = PiWebSearchCapabilities.ResolveModelReference(request.Model);
         var webSearchExtensionVersion =
-            webSearchSupport != PiWebSearchSupport.None &&
+            webSearchIntegration != PiWebSearchIntegration.None &&
             _webSearchExtensionPath is not null &&
             File.Exists(_webSearchExtensionPath)
                 ? $"{_webSearchExtensionPath}|{File.GetLastWriteTimeUtc(_webSearchExtensionPath).Ticks}|{new FileInfo(_webSearchExtensionPath).Length}"
@@ -1173,7 +1173,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             runtime.RuntimePath,
             string.Join('\0', runtime.PrefixArguments),
             extensionVersion,
-            webSearchSupport,
+            webSearchIntegration,
             webSearchExtensionVersion,
             Path.GetFullPath(request.WorkingDirectory),
             request.ScopeKind.ToString(),
@@ -1884,9 +1884,10 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 : "--no-approve");
         startInfo.ArgumentList.Add("--session-dir");
         startInfo.ArgumentList.Add(_sessionDirectory);
-        var webSearchSupport = PiWebSearchCapabilities.ResolveModelReference(request.Model);
-        var enableWebSearch = webSearchSupport != PiWebSearchSupport.None;
-        if (enableWebSearch && (_webSearchExtensionPath is null || !File.Exists(_webSearchExtensionPath)))
+        var webSearchIntegration = PiWebSearchCapabilities.ResolveModelReference(request.Model);
+        var loadWebSearchExtension = webSearchIntegration != PiWebSearchIntegration.None;
+        var enableWebSearchTool = webSearchIntegration == PiWebSearchIntegration.CompanionTool;
+        if (loadWebSearchExtension && (_webSearchExtensionPath is null || !File.Exists(_webSearchExtensionPath)))
         {
             throw new FileNotFoundException(
                 "当前模型支持自带网络搜索，但应用随附的 Web Search Extension 缺失。",
@@ -1896,11 +1897,11 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         var tools = request.ScopeKind == TaskScopeKind.GeneralChat
             ? "read,grep,find,ls,edit,write,ask_user,list_available_skills,publish_artifact,create_task_template"
             : "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template";
-        startInfo.ArgumentList.Add(enableWebSearch ? $"{tools},web_search" : tools);
+        startInfo.ArgumentList.Add(enableWebSearchTool ? $"{tools},web_search" : tools);
         startInfo.ArgumentList.Add("--no-extensions");
         startInfo.ArgumentList.Add("--extension");
         startInfo.ArgumentList.Add(_extensionPath!);
-        if (enableWebSearch)
+        if (loadWebSearchExtension)
         {
             startInfo.ArgumentList.Add("--extension");
             startInfo.ArgumentList.Add(_webSearchExtensionPath!);

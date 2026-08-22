@@ -906,6 +906,44 @@ public sealed class PiRpcBackendTests
     }
 
     [Fact]
+    public async Task StartRunAsync_LoadsMiMoSearchAdapterWithoutExposingCompanionTool()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var webSearchExtension = Path.Combine(root, "pi-web-search.mjs");
+            File.WriteAllText(webSearchExtension, "export default function () {}");
+            using var backend = CreateBackend(root, webSearchExtension);
+            var terminal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            backend.EventReceived += runEvent =>
+            {
+                if (runEvent.Kind == CompanionRunEventKind.RunSettled)
+                {
+                    terminal.TrySetResult();
+                }
+            };
+
+            var request = CreateRequest(root, "mimo-search") with { Model = "xiaomi/mimo-v2.5-pro" };
+            await backend.StartRunAsync(request, TestContext.Current.CancellationToken);
+            await terminal.Task.WaitAsync(TimeSpan.FromSeconds(8), TestContext.Current.CancellationToken);
+
+            var arguments = JsonSerializer.Deserialize<string[]>(
+                File.ReadAllText(Path.Combine(root, "sessions", "fake-args.json"))) ?? [];
+            var toolsIndex = Array.IndexOf(arguments, "--tools");
+            Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
+            Assert.Equal(
+                "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template",
+                arguments[toolsIndex + 1]);
+            Assert.Equal(2, arguments.Count(item => item == "--extension"));
+            Assert.Contains(webSearchExtension, arguments);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task StartRunAsync_ReportsRestoringAnExistingSessionDuringColdStartup()
     {
         var root = CreateTemporaryDirectory();
