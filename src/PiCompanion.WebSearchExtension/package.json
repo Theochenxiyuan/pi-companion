@@ -17,7 +17,7 @@
     "@earendil-works/pi-ai": "0.85.0",
     "@earendil-works/pi-coding-agent": "0.85.0",
     "@types/node": "26.1.1",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "patch-package": "8.0.1",
     "typescript": "5.9.3"
   }
