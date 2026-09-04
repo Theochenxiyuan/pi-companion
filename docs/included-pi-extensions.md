@@ -14,7 +14,7 @@
 - `pi-web-search` 以精确版本锁定，并与第一方适配器一起由 `src/PiCompanion.WebSearchExtension` 构建成应用私有单文件；不会执行 `pi install`，也不会修改用户的全局 Pi Extension。
 - Pi 内置的 OpenAI Responses、OpenAI Codex Responses、Google Generative AI 和 Anthropic Messages 模型通过 `pi-web-search` 执行搜索。
 - Pi 内置 Xiaomi Provider 的 `mimo-v2.5` 和 `mimo-v2.5-pro` 通过第一方请求适配器启用 MiMo 联网搜索。使用前必须在 MiMo 控制台开通联网服务插件；搜索调用和新增输入 Token 按 MiMo 规则计费。
-- MiMo 的搜索来源位于供应商响应的 `annotations` 中，Pi 0.84.2 的 OpenAI-compatible 响应解析不会保留该字段，因此当前对话可获得联网后的模型回答，但不会生成 Pi `web_search` 工具记录或可点击引用。
+- MiMo 的搜索来源位于供应商响应的 `annotations` 中，Pi 0.85.0 的 OpenAI-compatible 响应解析不会保留该字段，因此当前对话可获得联网后的模型回答，但不会生成 Pi `web_search` 工具记录或可点击引用。
 - 自定义 Provider 即使使用相同 API 协议也不会自动获得此能力。外部搜索服务（例如 Tavily、Brave 或 Serper）不在当前随附范围。
 - 自动化测试不调用真实 Provider。发布候选版本需分别完成已配置 Provider 的人工联网搜索、可点击引用、错误与取消测试。
 

@@ -748,6 +748,20 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         _ = ForceAbortAfterTimeoutAsync(context);
         try
         {
+            await SendCommandAsync(
+                context,
+                new Dictionary<string, object?> { ["type"] = "clear_queue" },
+                cancellationToken).ConfigureAwait(false);
+            context.PendingMessages = 0;
+        }
+        catch (Exception) when (context.AbortRequested)
+        {
+            // Continue with abort. The watchdog owns the terminal outcome if
+            // the runtime exits or stops accepting RPC commands.
+        }
+
+        try
+        {
             await SendCommandWithoutResponseAsync(
                 context,
                 new Dictionary<string, object?> { ["type"] = "abort" },

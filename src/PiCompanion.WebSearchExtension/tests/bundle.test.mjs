@@ -148,7 +148,7 @@ test('MiMo search injection rejects unsupported Xiaomi models', async () => {
   assert.equal(result, undefined)
 })
 
-test('Pi 0.84.2 provider header deletion markers are applied before native search requests', async () => {
+test('Pi provider header deletion markers are applied before native search requests', async () => {
   const extension = await import(pathToFileURL(resolve('dist/pi-web-search.mjs')))
   const tools = []
   const pi = {

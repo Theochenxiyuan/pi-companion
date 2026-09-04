@@ -45,9 +45,8 @@ public sealed class PiRuntimeResolver(
         {
             Path.Combine(privateRoot, "pi.exe"),
             Path.Combine(privateRoot, "dist", "pi.exe"),
-            Path.Combine(privateRoot, "dist", "cli.js"),
-            Path.Combine(privateRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js"),
-            Path.Combine(privateRoot, "node_modules", "@mariozechner", "pi-coding-agent", "dist", "cli.js"),
+            Path.Combine(privateRoot, "dist", "bundle", "cli.js"),
+            Path.Combine(privateRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js"),
         };
         if (IsDevelopmentBuild())
         {
@@ -63,7 +62,7 @@ public sealed class PiRuntimeResolver(
         {
             var message = IsDevelopmentBuild()
                 ? $"开发版未找到本机 Pi Runtime。请全局安装 @earendil-works/pi-coding-agent，或设置 {RuntimePathEnvironmentVariable}。"
-                : $"未找到应用私有 Pi Runtime。开发环境请显式设置 {RuntimePathEnvironmentVariable} 为 pi.exe 或 dist\\cli.js；正式发布版不会回退到用户全局 Pi。";
+                : $"未找到应用私有 Pi Runtime。开发环境请显式设置 {RuntimePathEnvironmentVariable} 为 pi.exe 或 dist\\bundle\\cli.js；正式发布版不会回退到用户全局 Pi。";
             throw new FileNotFoundException(
                 message,
                 privateRoot);
@@ -83,8 +82,7 @@ public sealed class PiRuntimeResolver(
             var fullRoot = Path.GetFullPath(root);
             var candidates = new[]
             {
-                Path.Combine(fullRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js"),
-                Path.Combine(fullRoot, "node_modules", "@mariozechner", "pi-coding-agent", "dist", "cli.js"),
+                Path.Combine(fullRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js"),
             };
             var runtime = candidates.FirstOrDefault(File.Exists);
             if (runtime is not null)
