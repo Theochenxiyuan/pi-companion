@@ -164,6 +164,6 @@ Companion 只为 Pi 的能力提供 UI 外壳，不维护自己的 Provider 或�
 
 - 正式版 MSIX、签名证书、Startup Task、升级迁移与正式卸载仍未实现。
 - Companion 复用 Pi 的 OAuth Provider 和事件协议，不复制认证实现；需要 GUI 尚未支持的额外输入时仍回退到 Pi 原生 `/login` 终端。
-- 单文件 Pi Runtime 暂不能被设置适配器动态导入；Provider/模型目录读取要求 Node 版 `dist/cli.js`。任务执行本身仍可使用受支持的私有 `pi.exe`。
+- 单文件 Pi Runtime 暂不能被设置适配器动态导入；Provider/模型目录读取要求 Node 版 `dist/bundle/cli.js`。任务执行本身仍可使用受支持的私有 `pi.exe`。
 - 日志级别已持久化，但运行中日志过滤仍属于后续增强。
 - 界面缩放只作用于 Agent Chat WebView；原生 Monitor 和 Prompt Composer 继续遵循 Windows DPI，不跟随该百分比。

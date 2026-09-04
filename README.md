@@ -60,7 +60,7 @@ Set-Location pi-companion
 - Node.js 24 和 npm 11；
 - Visual Studio 2022 Build Tools，并安装 x64 C++ 工具链；
 - Microsoft Edge WebView2 Runtime；
-- 开发运行时需要 Pi RPC 0.84.2 Runtime，以及所选模型服务的有效账号或 API Key。
+- 开发运行时需要 Pi RPC 0.85.0 Runtime，以及所选模型服务的有效账号或 API Key。
 
 依赖版本由 `global.json`、npm lockfile 和 NuGet lockfile 固定。
 
@@ -95,14 +95,14 @@ Set-Location pi-companion
 ```powershell
 .\scripts\build.ps1 -Configuration Debug
 .\scripts\run.ps1 -NoBuild `
-  -PiRuntimePath 'C:\path\to\pi-coding-agent\dist\cli.js' `
+  -PiRuntimePath 'C:\path\to\pi-coding-agent\dist\bundle\cli.js' `
   -NodeRuntimePath 'C:\Program Files\nodejs\node.exe'
 ```
 
 也可为当前进程设置：
 
 ```powershell
-$env:PI_COMPANION_PI_PATH = 'C:\path\to\pi-coding-agent\dist\cli.js'
+$env:PI_COMPANION_PI_PATH = 'C:\path\to\pi-coding-agent\dist\bundle\cli.js'
 $env:PI_COMPANION_NODE_PATH = 'C:\Program Files\nodejs\node.exe'
 ```
 

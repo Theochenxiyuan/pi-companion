@@ -67,23 +67,27 @@ public sealed class PiRuntimeResolverTests
     }
 
     [Fact]
-    public void Resolve_PrefersCurrentEarendilPackageScopeOverLegacyScope()
+    public void Resolve_UsesBundledEarendilRuntime()
     {
         var root = CreateTemporaryDirectory();
         try
         {
             var privateRoot = Path.Combine(root, "PiRuntime");
-            var currentRuntime = Path.Combine(privateRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-            var legacyRuntime = Path.Combine(privateRoot, "node_modules", "@mariozechner", "pi-coding-agent", "dist", "cli.js");
-            Directory.CreateDirectory(Path.GetDirectoryName(currentRuntime)!);
-            Directory.CreateDirectory(Path.GetDirectoryName(legacyRuntime)!);
-            File.WriteAllText(currentRuntime, string.Empty);
-            File.WriteAllText(legacyRuntime, string.Empty);
+            var runtime = Path.Combine(
+                privateRoot,
+                "node_modules",
+                "@earendil-works",
+                "pi-coding-agent",
+                "dist",
+                "bundle",
+                "cli.js");
+            Directory.CreateDirectory(Path.GetDirectoryName(runtime)!);
+            File.WriteAllText(runtime, string.Empty);
             File.WriteAllText(Path.Combine(privateRoot, "node.exe"), string.Empty);
 
             var command = new PiRuntimeResolver(baseDirectory: root).Resolve();
 
-            Assert.Equal(currentRuntime, command.RuntimePath);
+            Assert.Equal(runtime, command.RuntimePath);
         }
         finally
         {
@@ -99,7 +103,7 @@ public sealed class PiRuntimeResolverTests
         try
         {
             File.WriteAllText(Path.Combine(root, PiRuntimeResolver.DevelopmentMarkerFileName), string.Empty);
-            var runtime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+            var runtime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
             Directory.CreateDirectory(Path.GetDirectoryName(runtime)!);
             File.WriteAllText(runtime, string.Empty);
 
@@ -130,7 +134,7 @@ public sealed class PiRuntimeResolverTests
             var privateRuntime = Path.Combine(root, "PiRuntime", "pi.exe");
             Directory.CreateDirectory(Path.GetDirectoryName(privateRuntime)!);
             File.WriteAllText(privateRuntime, string.Empty);
-            var localRuntime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+            var localRuntime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
             Directory.CreateDirectory(Path.GetDirectoryName(localRuntime)!);
             File.WriteAllText(localRuntime, string.Empty);
 
@@ -155,7 +159,7 @@ public sealed class PiRuntimeResolverTests
         var npmRoot = CreateTemporaryDirectory();
         try
         {
-            var runtime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+            var runtime = Path.Combine(npmRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
             Directory.CreateDirectory(Path.GetDirectoryName(runtime)!);
             File.WriteAllText(runtime, string.Empty);
 

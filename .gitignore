@@ -37,3 +37,7 @@ artifacts/
 id_rsa
 id_ed25519
 pi-companion-diagnostics-*.zip
+
+# Local publication drafts
+docs/blog-post-and-visual-plan.zh-CN.md
+docs/video-script-and-storyboard.zh-CN.md

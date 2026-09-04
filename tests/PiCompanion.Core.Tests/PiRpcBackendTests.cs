@@ -1475,6 +1475,17 @@ public sealed class PiRpcBackendTests
                 item.Kind == CompanionRunEventKind.UserMessageAdded &&
                 item.Payload["message"] == "只检查配置" &&
                 item.Payload["delivery"] == "steer");
+            var commandTypes = File.ReadLines(Path.Combine(root, "sessions", "fake-command-log.jsonl"))
+                .Select(static line =>
+                {
+                    using var command = JsonDocument.Parse(line);
+                    return command.RootElement.GetProperty("type").GetString();
+                })
+                .ToArray();
+            var clearQueueIndex = Array.IndexOf(commandTypes, "clear_queue");
+            var abortIndex = Array.IndexOf(commandTypes, "abort");
+            Assert.True(clearQueueIndex >= 0);
+            Assert.True(abortIndex > clearQueueIndex);
         }
         finally
         {

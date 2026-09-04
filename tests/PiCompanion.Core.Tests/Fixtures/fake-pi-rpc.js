@@ -78,7 +78,7 @@ input.on('line', (line) => {
         model: currentModel,
         thinkingLevel: currentThinkingLevel,
         isStreaming: streaming,
-        pendingMessageCount: 0,
+        pendingMessageCount: steeringQueue.length + followUpQueue.length,
         sessionFile,
         sessionId: 'fake-session',
       })
@@ -244,6 +244,13 @@ input.on('line', (line) => {
         messages: [{ role: 'assistant', content: [], stopReason: 'aborted' }],
       })
       break
+    case 'clear_queue': {
+      const steering = steeringQueue.splice(0, steeringQueue.length)
+      const followUp = followUpQueue.splice(0, followUpQueue.length)
+      response(command, true, { steering, followUp })
+      send({ type: 'queue_update', steering: steeringQueue, followUp: followUpQueue })
+      break
+    }
     case 'steer':
       steeringQueue.push(command.message)
       response(command)
