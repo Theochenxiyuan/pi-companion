@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   applyDeveloperRoleCapabilities,
@@ -20,16 +20,21 @@ if (typeof piEntry !== 'string' || piEntry.length === 0) {
   throw new Error('Missing Pi entry path.')
 }
 
-const distDirectory = dirname(piEntry)
-const pi = await import(pathToFileURL(join(distDirectory, 'index.js')).href)
+const piEntryDirectory = dirname(piEntry)
+const distDirectory = basename(piEntryDirectory) === 'bundle'
+  ? dirname(piEntryDirectory)
+  : piEntryDirectory
+const { VERSION, getAgentDir } = await import(pathToFileURL(join(distDirectory, 'config.js')).href)
+const { ModelRuntime } = await import(pathToFileURL(join(distDirectory, 'core', 'model-runtime.js')).href)
+const { SettingsManager } = await import(pathToFileURL(join(distDirectory, 'core', 'settings-manager.js')).href)
 const { AuthStorage } = await import(pathToFileURL(join(distDirectory, 'core', 'auth-storage.js')).href)
 const { ModelConfig } = await import(pathToFileURL(join(distDirectory, 'core', 'model-config.js')).href)
 const { FileSettingsStorage } = await import(pathToFileURL(join(distDirectory, 'core', 'settings-manager.js')).href)
 const { findInitialModel, resolveModelScope } = await import(pathToFileURL(join(distDirectory, 'core', 'model-resolver.js')).href)
-const agentDir = optionalString(input.agentDir) ?? pi.getAgentDir()
+const agentDir = optionalString(input.agentDir) ?? getAgentDir()
 const authPath = join(agentDir, 'auth.json')
 const modelsPath = join(agentDir, 'models.json')
-let settingsManager = pi.SettingsManager.create(process.cwd(), agentDir)
+let settingsManager = SettingsManager.create(process.cwd(), agentDir)
 
 let streamedResult = false
 if (input.action === 'login-oauth') {
@@ -92,7 +97,7 @@ if (input.action === 'login-oauth') {
     retryBaseDelayMilliseconds: requireInteger(input.retryBaseDelayMilliseconds, 'retryBaseDelayMilliseconds', 100, 300000),
     retryMaxDelayMilliseconds: requireInteger(input.retryMaxDelayMilliseconds, 'retryMaxDelayMilliseconds', 0, 3600000),
   })
-  settingsManager = pi.SettingsManager.create(process.cwd(), agentDir)
+  settingsManager = SettingsManager.create(process.cwd(), agentDir)
 } else if (input.action !== 'snapshot') {
   throw new Error(`Unsupported action: ${String(input.action)}`)
 }
@@ -125,7 +130,7 @@ function getProviderCapabilities(providerId, builtInProviderIds) {
 async function createSnapshot(refreshModels = false) {
   const runtime = await createRuntime(false)
   if (refreshModels) await refreshModelCatalog(runtime)
-  const baseRuntime = await pi.ModelRuntime.create({
+  const baseRuntime = await ModelRuntime.create({
     authPath,
     modelsPath: null,
     allowModelNetwork: false,
@@ -138,7 +143,7 @@ async function createSnapshot(refreshModels = false) {
     .map(providerId => toCustomProviderInfo(providerId, modelConfig.getProvider(providerId)))
     .filter(Boolean)
     .sort((left, right) => left.name.localeCompare(right.name, 'en'))
-  const globalSettings = pi.SettingsManager.inMemory(settingsManager.getGlobalSettings())
+  const globalSettings = SettingsManager.inMemory(settingsManager.getGlobalSettings())
   // Companion no longer writes this scope; it is returned only for one-time migration.
   const enabledPatterns = globalSettings.getEnabledModels()
   const enabledModels = enabledPatterns?.length
@@ -185,7 +190,7 @@ async function createSnapshot(refreshModels = false) {
 
   return {
     available: true,
-    version: pi.VERSION,
+    version: VERSION,
     defaultModel: initialModel.model ? `${initialModel.model.provider}/${initialModel.model.id}` : null,
     defaultThinkingLevel: globalSettings.getDefaultThinkingLevel() ?? initialModel.thinkingLevel,
     autoCompact: globalSettings.getCompactionEnabled(),
@@ -267,7 +272,7 @@ async function addCustomProvider() {
   if (currentConfig.getError()) throw new Error(currentConfig.getError())
   if (currentConfig.getProvider(provider.id)) throw new Error(`Provider ID “${provider.id}”已经存在。`)
 
-  const baseRuntime = await pi.ModelRuntime.create({
+  const baseRuntime = await ModelRuntime.create({
     authPath,
     modelsPath: null,
     allowModelNetwork: false,
@@ -284,7 +289,7 @@ async function addCustomProvider() {
   await writeFile(temporaryPath, candidate, 'utf8')
 
   try {
-    const validationRuntime = await pi.ModelRuntime.create({
+    const validationRuntime = await ModelRuntime.create({
       authPath,
       modelsPath: temporaryPath,
       modelsStorePath: temporaryStorePath,
@@ -338,7 +343,7 @@ async function updateCustomProvider() {
   const existingConfig = currentConfig.getProvider(provider.id)
   if (!existingConfig) throw new Error(`Provider ID “${provider.id}”不存在。`)
 
-  const baseRuntime = await pi.ModelRuntime.create({
+  const baseRuntime = await ModelRuntime.create({
     authPath,
     modelsPath: null,
     allowModelNetwork: false,
@@ -363,7 +368,7 @@ async function updateCustomProvider() {
   await writeFile(temporaryPath, candidate, 'utf8')
 
   try {
-    const validationRuntime = await pi.ModelRuntime.create({
+    const validationRuntime = await ModelRuntime.create({
       authPath,
       modelsPath: temporaryPath,
       modelsStorePath: temporaryStorePath,
@@ -411,7 +416,7 @@ async function refreshCustomProviderCapabilities() {
   const currentRevision = computeModelsConfigRevision(currentSource)
   const currentConfig = await ModelConfig.load(modelsPath)
   if (currentConfig.getError()) throw new Error(currentConfig.getError())
-  const baseRuntime = await pi.ModelRuntime.create({
+  const baseRuntime = await ModelRuntime.create({
     authPath,
     modelsPath: null,
     allowModelNetwork: false,
@@ -456,7 +461,7 @@ async function refreshCustomProviderCapabilities() {
   const temporaryStorePath = `${temporaryPath}.store`
   await writeFile(temporaryPath, candidate, 'utf8')
   try {
-    const validationRuntime = await pi.ModelRuntime.create({
+    const validationRuntime = await ModelRuntime.create({
       authPath,
       modelsPath: temporaryPath,
       modelsStorePath: temporaryStorePath,
@@ -517,7 +522,7 @@ async function deleteCustomProvider() {
   if (currentConfig.getError()) throw new Error(currentConfig.getError())
   if (!currentConfig.getProvider(providerId)) throw new Error(`Provider ID “${providerId}”不存在。`)
 
-  const baseRuntime = await pi.ModelRuntime.create({
+  const baseRuntime = await ModelRuntime.create({
     authPath,
     modelsPath: null,
     allowModelNetwork: false,
@@ -553,7 +558,7 @@ async function deleteCustomProvider() {
 }
 
 function createRuntime(allowModelNetwork) {
-  return pi.ModelRuntime.create({ authPath, modelsPath, allowModelNetwork })
+  return ModelRuntime.create({ authPath, modelsPath, allowModelNetwork })
 }
 
 async function readModelsSource() {

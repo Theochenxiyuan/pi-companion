@@ -2550,7 +2550,7 @@ function createPreviewSettingsSnapshot(): SettingsSnapshot {
     },
     pi: {
       available: true,
-      version: '0.85.0',
+      version: '0.85.1',
       runtimePath: 'C:\\PiRuntime\\dist\\bundle\\cli.js',
       defaultModel: 'openai-codex/gpt-5.6-sol',
       defaultThinkingLevel: 'xhigh',
