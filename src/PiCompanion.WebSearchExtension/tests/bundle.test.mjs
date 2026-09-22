@@ -13,8 +13,8 @@ test('the private web search extension bundle is self-contained', () => {
   assert.equal(existsSync(legalPath), true)
   assert.match(bundle, /Web Search/u)
   assert.match(bundle, /web_search/u)
-  assert.doesNotMatch(bundle, /from\s+["'](?:pi-web-search|typebox|@earendil-works\/pi-ai|@earendil-works\/pi-coding-agent)/u)
-  assert.match(readFileSync(legalPath, 'utf8'), /pi-web-search 1\.3\.1/u)
+  assert.doesNotMatch(bundle, /from\s+["'](?:pi-web-search|typebox|@earendil-works\/pi-ai|@earendil-works\/pi-coding-agent|@earendil-works\/pi-tui)/u)
+  assert.match(readFileSync(legalPath, 'utf8'), /pi-web-search 1\.6\.0/u)
 })
 
 test('only approved official providers advertise bundled native search', async () => {
@@ -40,6 +40,36 @@ test('only approved official providers advertise bundled native search', async (
     api: 'openai-codex-responses',
     id: 'gpt-5.6',
   }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'azure-openai-responses',
+    api: 'azure-openai-responses',
+    id: 'gpt-5.4',
+  }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'xai',
+    api: 'openai-responses',
+    id: 'grok-4',
+  }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'github-copilot',
+    api: 'openai-responses',
+    id: 'gpt-5.6-sol',
+  }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'opencode',
+    api: 'openai-responses',
+    id: 'gpt-5.6-luna',
+  }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'opencode-go',
+    api: 'openai-responses',
+    id: 'grok-4.6',
+  }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'opencode-go',
+    api: 'openai-completions',
+    id: 'some-chat-model',
+  }), 'none')
   assert.equal(extension.getPiCompanionWebSearchSupport({
     provider: 'xiaomi',
     api: 'openai-completions',
@@ -158,6 +188,9 @@ test('Pi provider header deletion markers are applied before native search reque
     on() {},
     getActiveTools() {
       return ['web_search']
+    },
+    getThinkingLevel() {
+      return 'medium'
     },
     setActiveTools() {},
   }

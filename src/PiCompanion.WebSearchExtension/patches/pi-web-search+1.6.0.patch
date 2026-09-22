@@ -1,0 +1,126 @@
+diff --git a/node_modules/pi-web-search/src/providers/anthropic.ts b/node_modules/pi-web-search/src/providers/anthropic.ts
+index 3a06163..35bf029 100644
+--- a/node_modules/pi-web-search/src/providers/anthropic.ts
++++ b/node_modules/pi-web-search/src/providers/anthropic.ts
+@@ -1,6 +1,6 @@
+ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/pi-coding-agent";
+ import type { Api, Model } from "@earendil-works/pi-ai";
+-import { getAuth, getProviderSessionHeaders } from "./auth.ts";
++import { applyProviderHeaders, getAuth, getProviderSessionHeaders } from "./auth.ts";
+ import { readSseEvents } from "./sse.ts";
+ import {
+     applyTextCitations,
+@@ -38,10 +38,8 @@ export async function callAnthropicStream(
+         "Content-Type": "application/json",
+         "Accept": "text/event-stream",
+         "anthropic-version": "2023-06-01",
+-        ...(getProviderSessionHeaders(model, ctx) || {}),
+-        ...(model.headers || {}),
+-        ...(auth.headers || {}),
+     };
++    applyProviderHeaders(headers, getProviderSessionHeaders(model, ctx), model.headers, auth.headers);
+ 
+     if (auth.apiKey) {
+         if (isOAuth) {
+diff --git a/node_modules/pi-web-search/src/providers/auth.ts b/node_modules/pi-web-search/src/providers/auth.ts
+index 704b088..f78aa21 100644
+--- a/node_modules/pi-web-search/src/providers/auth.ts
++++ b/node_modules/pi-web-search/src/providers/auth.ts
+@@ -1,9 +1,9 @@
+ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+-import type { Api, Model } from "@earendil-works/pi-ai";
++import type { Api, Model, ProviderHeaders } from "@earendil-works/pi-ai";
+ import { getEnvApiKey } from "@earendil-works/pi-ai/compat";
+ 
+ export type ResolvedAuth =
+-    | { ok: true; apiKey?: string; headers?: Record<string, string>; baseUrl?: string; }
++    | { ok: true; apiKey?: string; headers?: ProviderHeaders; baseUrl?: string; }
+     | { ok: false; error: string; };
+ 
+ function getEnvAuth(model: Model<Api>): Extract<ResolvedAuth, { ok: true }> | undefined {
+@@ -27,7 +27,7 @@ export async function getAuth(ctx: ExtensionContext, model: Model<Api>): Promise
+     return envAuth ? { ...resolved, apiKey: envAuth.apiKey } : resolved;
+ }
+ 
+-function hasAuthHeader(headers?: Record<string, string>): boolean {
++function hasAuthHeader(headers?: ProviderHeaders): boolean {
+     if (!headers) return false;
+     return Object.entries(headers).some(([name, value]) => {
+         if (!value) return false;
+@@ -36,6 +36,27 @@ function hasAuthHeader(headers?: Record<string, string>): boolean {
+     });
+ }
+ 
++export function applyProviderHeaders(
++    target: Headers | Record<string, string>,
++    ...sources: Array<ProviderHeaders | undefined>
++): void {
++    for (const source of sources) {
++        if (!source) continue;
++        for (const [name, value] of Object.entries(source)) {
++            if (target instanceof Headers) {
++                if (value === null) target.delete(name);
++                else target.set(name, value);
++                continue;
++            }
++
++            const existingName = Object.keys(target)
++                .find((candidate) => candidate.toLowerCase() === name.toLowerCase());
++            if (existingName) delete target[existingName];
++            if (value !== null) target[name] = value;
++        }
++    }
++}
++
+ const OPENCODE_HOST = "opencode.ai";
+ 
+ function isOpenCodeModel(model: Model<Api>): boolean {
+diff --git a/node_modules/pi-web-search/src/providers/google.ts b/node_modules/pi-web-search/src/providers/google.ts
+index 3a20cdb..50ab5f0 100644
+--- a/node_modules/pi-web-search/src/providers/google.ts
++++ b/node_modules/pi-web-search/src/providers/google.ts
+@@ -2,7 +2,7 @@ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/
+ import type { Api, Model } from "@earendil-works/pi-ai";
+ import { TextEncoder, TextDecoder } from "util";
+ import { getConfig } from "./config.ts";
+-import { getAuth, getProviderSessionHeaders } from "./auth.ts";
++import { applyProviderHeaders, getAuth, getProviderSessionHeaders } from "./auth.ts";
+ import { readSseEvents } from "./sse.ts";
+ import { deriveSources, pushUniqueSearchResult, sanitizeSearchResults, titleFromUrl } from "./results.ts";
+ import type { SearchResultDetail, Source, StreamResult } from "./types.ts";
+@@ -106,10 +106,7 @@ export async function callGoogleStream(
+     const req = config.buildRequest(model, body);
+ 
+     // Handle auth
+-    Object.assign(req.headers, getProviderSessionHeaders(model, ctx) || {});
+-    if (auth.headers) {
+-        Object.assign(req.headers, auth.headers);
+-    }
++    applyProviderHeaders(req.headers, getProviderSessionHeaders(model, ctx), auth.headers);
+     if (auth.apiKey) {
+         req.headers["x-goog-api-key"] = auth.apiKey;
+     }
+diff --git a/node_modules/pi-web-search/src/providers/openai.ts b/node_modules/pi-web-search/src/providers/openai.ts
+index 6ac7e50..5a181b8 100644
+--- a/node_modules/pi-web-search/src/providers/openai.ts
++++ b/node_modules/pi-web-search/src/providers/openai.ts
+@@ -2,7 +2,7 @@ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/
+ import { clampThinkingLevel, type Api, type Model, type ModelThinkingLevel } from "@earendil-works/pi-ai";
+ import { TextDecoder } from "util";
+ import { getProviderKind } from "./config.ts";
+-import { getAuth, getProviderSessionHeaders, type ResolvedAuth } from "./auth.ts";
++import { applyProviderHeaders, getAuth, getProviderSessionHeaders, type ResolvedAuth } from "./auth.ts";
+ import { readSseEvents } from "./sse.ts";
+ import {
+     applyIndexCitations,
+@@ -113,9 +113,7 @@ export async function callOpenAIStream(
+     }
+ 
+     const headers = new Headers();
+-    for (const [name, value] of Object.entries(getProviderSessionHeaders(model, ctx) || {})) headers.set(name, value);
+-    for (const [name, value] of Object.entries(model.headers || {})) headers.set(name, value);
+-    for (const [name, value] of Object.entries(auth.headers || {})) headers.set(name, value);
++    applyProviderHeaders(headers, getProviderSessionHeaders(model, ctx), model.headers, auth.headers);
+     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+     if (!headers.has("Accept")) headers.set("Accept", "text/event-stream");
+     if (auth.apiKey && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${auth.apiKey}`);

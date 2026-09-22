@@ -115,6 +115,7 @@ public sealed class PiConfigurationServiceTests : IDisposable
         DefaultThinkingLevel: "xhigh",
         AutoCompact: true,
         AutoRetry: true,
+        CacheWarming: "off",
         CompactionReserveTokens: 16384,
         CompactionKeepRecentTokens: 20000,
         RetryMaxRetries: 3,

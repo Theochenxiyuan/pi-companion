@@ -13,7 +13,7 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 64;
+    public const int ProtocolVersion = 65;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
@@ -317,6 +317,7 @@ internal static class BridgeContracts
                     DefaultThinkingLevel = piConfiguration.DefaultThinkingLevel,
                     AutoCompact = piConfiguration.AutoCompact,
                     AutoRetry = piConfiguration.AutoRetry,
+                    CacheWarming = piConfiguration.CacheWarming,
                     CompactionReserveTokens = piConfiguration.CompactionReserveTokens,
                     CompactionKeepRecentTokens = piConfiguration.CompactionKeepRecentTokens,
                     RetryMaxRetries = piConfiguration.RetryMaxRetries,

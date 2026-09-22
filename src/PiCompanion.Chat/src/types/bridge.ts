@@ -1,4 +1,4 @@
-export const bridgeProtocolVersion = 64
+export const bridgeProtocolVersion = 65
 
 export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 
@@ -46,6 +46,7 @@ export interface AgentSettings {
   defaultThinkingLevel: PiThinkingLevel
   autoCompact: boolean
   autoRetry: boolean
+  cacheWarming: 'off' | 'streaming' | 'idle'
   compactionReserveTokens: number
   compactionKeepRecentTokens: number
   retryMaxRetries: number
@@ -135,6 +136,7 @@ export interface PiConfigurationSnapshot {
   defaultThinkingLevel: PiThinkingLevel
   autoCompact: boolean
   autoRetry: boolean
+  cacheWarming: 'off' | 'streaming' | 'idle'
   compactionReserveTokens: number
   compactionKeepRecentTokens: number
   retryMaxRetries: number

@@ -1,9 +1,22 @@
-// pi-web-search imports these three runtime exports from the broad
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+// pi-web-search imports these runtime exports from the broad
 // pi-coding-agent entry point. Keeping the compatible implementation here
 // prevents the entire interactive coding agent from being duplicated inside
 // Pi Companion's private search bundle.
 export const DEFAULT_MAX_LINES = 2000
 export const DEFAULT_MAX_BYTES = 50 * 1024
+
+export function getAgentDir() {
+  const configured = process.env.PI_CODING_AGENT_DIR?.trim()
+  if (!configured) return join(homedir(), '.pi', 'agent')
+  if (configured === '~') return homedir()
+  if (configured.startsWith('~/') || configured.startsWith('~\\')) {
+    return join(homedir(), configured.slice(2))
+  }
+  return configured
+}
 
 export function truncateHead(
   content: string,

@@ -1726,6 +1726,7 @@ public partial class MainWindow : Window
             !string.Equals(requested.Agent.DefaultThinkingLevel, previous.Agent.DefaultThinkingLevel, StringComparison.Ordinal) ||
             requested.Agent.AutoCompact != previous.Agent.AutoCompact ||
             requested.Agent.AutoRetry != previous.Agent.AutoRetry ||
+            requested.Agent.CacheWarming != previous.Agent.CacheWarming ||
             requested.Agent.CompactionReserveTokens != previous.Agent.CompactionReserveTokens ||
             requested.Agent.CompactionKeepRecentTokens != previous.Agent.CompactionKeepRecentTokens ||
             requested.Agent.RetryMaxRetries != previous.Agent.RetryMaxRetries ||
@@ -1740,6 +1741,7 @@ public partial class MainWindow : Window
                 requested.Agent.DefaultThinkingLevel,
                 requested.Agent.AutoCompact,
                 requested.Agent.AutoRetry,
+                requested.Agent.CacheWarming,
                 requested.Agent.CompactionReserveTokens,
                 requested.Agent.CompactionKeepRecentTokens,
                 requested.Agent.RetryMaxRetries,
@@ -1810,6 +1812,7 @@ public partial class MainWindow : Window
             requested.DefaultThinkingLevel,
             requested.AutoCompact,
             requested.AutoRetry,
+            requested.CacheWarming,
             requested.CompactionReserveTokens,
             requested.CompactionKeepRecentTokens,
             requested.RetryMaxRetries,

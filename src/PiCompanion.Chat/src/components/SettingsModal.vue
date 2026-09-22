@@ -270,6 +270,11 @@ const permissionModeOptions = computed<UiSelectOption[]>(() => [
   { value: 'read-only', label: t('只读') },
   { value: 'standard', label: t('标准访问'), tooltip: t('可以直接修改工作区内的普通文件；执行命令、敏感操作或访问其他位置时会先征求你的同意。') },
 ])
+const cacheWarmingOptions = computed<UiSelectOption[]>(() => [
+  { value: 'off', label: t('关闭') },
+  { value: 'streaming', label: t('仅任务运行中') },
+  { value: 'idle', label: t('任务空闲时也保活') },
+])
 function updateLocalQueueDelay(value: string) {
   draft.value.tasks.autoStartLocalQueueDelaySeconds = Number(value) as 0 | 15 | 30 | 60
 }
@@ -1164,6 +1169,7 @@ function authLabel(provider: PiProviderInfo) {
               </div>
               <div class="settings-row toggle-row"><span><strong>{{ t('自动压缩上下文') }}</strong><small>{{ t('对话内容接近上限时自动整理较早内容，减少任务因内容过长而中断。') }}</small></span><UiSwitch v-model="draft.agent.autoCompact" :aria-label="t('自动压缩上下文')" /></div>
               <div class="settings-row toggle-row"><span><strong>{{ t('自动重试') }}</strong><small>{{ t('遇到临时网络或服务问题时自动再试，减少手动重发。') }}</small></span><UiSwitch v-model="draft.agent.autoRetry" :aria-label="t('自动重试')" /></div>
+              <div class="settings-row"><span><strong>{{ t('提示缓存保活') }}</strong><small>{{ t('在长时间工具调用期间刷新 Provider 提示缓存；空闲保活可能产生额外费用。') }}</small></span><UiSelect v-model="draft.agent.cacheWarming" :ariaLabelText="t('提示缓存保活')" :options="cacheWarmingOptions" /></div>
             </section>
             <section class="settings-section">
               <h2>{{ t('上下文压缩策略') }}</h2>

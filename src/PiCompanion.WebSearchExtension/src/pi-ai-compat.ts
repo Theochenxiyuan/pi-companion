@@ -11,6 +11,8 @@ export function getEnvApiKey(
       ? ['OPENAI_API_KEY']
       : provider === 'google'
         ? ['GEMINI_API_KEY']
+        : provider === 'xai'
+          ? ['XAI_API_KEY']
         : []
 
   for (const name of names) {

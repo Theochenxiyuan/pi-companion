@@ -26,9 +26,14 @@ function getPiCompanionWebSearchIntegration(
     return 'provider-request'
   }
   if (model.provider === 'openai' && model.api === 'openai-responses') return 'companion-tool'
+  if (model.provider === 'azure-openai-responses' && model.api === 'azure-openai-responses') return 'companion-tool'
   if (model.provider === 'google' && model.api === 'google-generative-ai') return 'companion-tool'
   if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'companion-tool'
   if (model.provider === 'openai-codex' && model.api === 'openai-codex-responses') return 'companion-tool'
+  if (model.provider === 'xai' && model.api === 'openai-responses') return 'companion-tool'
+  if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'companion-tool'
+  if ((model.provider === 'opencode' || model.provider === 'opencode-go') &&
+      model.api === 'openai-responses') return 'companion-tool'
   return 'none'
 }
 

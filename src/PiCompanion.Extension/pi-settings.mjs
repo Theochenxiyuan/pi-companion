@@ -85,6 +85,7 @@ if (input.action === 'login-oauth') {
   settingsManager.setDefaultThinkingLevel(requireThinkingLevel(input.defaultThinkingLevel))
   settingsManager.setCompactionEnabled(Boolean(input.autoCompact))
   settingsManager.setRetryEnabled(Boolean(input.autoRetry))
+  settingsManager.setCacheWarmingMode(requireCacheWarmingMode(input.cacheWarming))
   settingsManager.setSteeringMode('one-at-a-time')
   settingsManager.setFollowUpMode('one-at-a-time')
   await settingsManager.flush()
@@ -114,15 +115,30 @@ function getWebSearchSupport(model, builtInProviderIds) {
       model.api === 'openai-completions' &&
       ['mimo-v2.5', 'mimo-v2.5-pro'].includes(model.id)) return 'native'
   if (model.provider === 'openai' && model.api === 'openai-responses') return 'native'
+  if (model.provider === 'azure-openai-responses' && model.api === 'azure-openai-responses') return 'native'
   if (model.provider === 'google' && model.api === 'google-generative-ai') return 'native'
   if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'native'
   if (model.provider === 'openai-codex' && model.api === 'openai-codex-responses') return 'native'
+  if (model.provider === 'xai' && model.api === 'openai-responses') return 'native'
+  if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'native'
+  if (['opencode', 'opencode-go'].includes(model.provider) && model.api === 'openai-responses') return 'native'
   return 'none'
 }
 
 function getProviderCapabilities(providerId, builtInProviderIds) {
   if (!builtInProviderIds.has(providerId)) return []
-  return ['openai', 'openai-codex', 'google', 'anthropic', 'xiaomi'].includes(providerId)
+  return [
+    'openai',
+    'openai-codex',
+    'azure-openai-responses',
+    'google',
+    'anthropic',
+    'xai',
+    'github-copilot',
+    'opencode',
+    'opencode-go',
+    'xiaomi',
+  ].includes(providerId)
     ? ['web-search']
     : []
 }
@@ -195,6 +211,7 @@ async function createSnapshot(refreshModels = false) {
     defaultThinkingLevel: globalSettings.getDefaultThinkingLevel() ?? initialModel.thinkingLevel,
     autoCompact: globalSettings.getCompactionEnabled(),
     autoRetry: globalSettings.getRetryEnabled(),
+    cacheWarming: globalSettings.getCacheWarmingMode(),
     compactionReserveTokens: globalSettings.getCompactionReserveTokens(),
     compactionKeepRecentTokens: globalSettings.getCompactionKeepRecentTokens(),
     retryMaxRetries: globalSettings.getRetrySettings().maxRetries,
@@ -638,6 +655,14 @@ function requireThinkingLevel(value) {
     throw new Error(`Invalid Pi thinking level: ${level}`)
   }
   return level
+}
+
+function requireCacheWarmingMode(value) {
+  const mode = requireString(value, 'cacheWarming').trim().toLowerCase()
+  if (!['off', 'streaming', 'idle'].includes(mode)) {
+    throw new Error(`Invalid Pi cache warming mode: ${mode}`)
+  }
+  return mode
 }
 
 function requireInteger(value, name, minimum, maximum) {

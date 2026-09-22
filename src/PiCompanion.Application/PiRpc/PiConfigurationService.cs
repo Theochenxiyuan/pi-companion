@@ -61,6 +61,7 @@ public sealed record PiConfigurationSnapshot(
     string DefaultThinkingLevel,
     bool AutoCompact,
     bool AutoRetry,
+    string CacheWarming,
     int CompactionReserveTokens,
     int CompactionKeepRecentTokens,
     int RetryMaxRetries,
@@ -77,7 +78,7 @@ public sealed record PiConfigurationSnapshot(
     string? Error)
 {
     public static PiConfigurationSnapshot Unavailable(string error) =>
-        new(false, null, null, null, "high", true, true, 16384, 20000, 3, 2000, 60000,
+        new(false, null, null, null, "high", true, true, "off", 16384, 20000, 3, 2000, 60000,
             "one-at-a-time", "one-at-a-time", [], [], null, [], null, error);
 }
 
@@ -276,6 +277,7 @@ public sealed class PiConfigurationService
         string defaultThinkingLevel,
         bool autoCompact,
         bool autoRetry,
+        string cacheWarming,
         int compactionReserveTokens,
         int compactionKeepRecentTokens,
         int retryMaxRetries,
@@ -291,6 +293,7 @@ public sealed class PiConfigurationService
             defaultThinkingLevel,
             autoCompact,
             autoRetry,
+            cacheWarming,
             compactionReserveTokens,
             compactionKeepRecentTokens,
             retryMaxRetries,
@@ -579,6 +582,7 @@ public sealed class PiConfigurationService
             RetryMaxDelayMilliseconds = legacySnapshot ? 60000 : snapshot.RetryMaxDelayMilliseconds,
             SteeringMode = string.IsNullOrWhiteSpace(snapshot.SteeringMode) ? "one-at-a-time" : snapshot.SteeringMode,
             FollowUpMode = string.IsNullOrWhiteSpace(snapshot.FollowUpMode) ? "one-at-a-time" : snapshot.FollowUpMode,
+            CacheWarming = snapshot.CacheWarming is "streaming" or "idle" ? snapshot.CacheWarming : "off",
             CustomProviders = snapshot.CustomProviders ?? [],
         };
     }

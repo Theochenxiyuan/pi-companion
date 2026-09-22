@@ -31,7 +31,15 @@ public static class PiWebSearchCapabilities
 
         return provider switch
         {
-            "openai" or "google" or "anthropic" or "openai-codex" => PiWebSearchIntegration.CompanionTool,
+            "openai" or
+            "openai-codex" or
+            "azure-openai-responses" or
+            "google" or
+            "anthropic" or
+            "xai" or
+            "github-copilot" or
+            "opencode" or
+            "opencode-go" => PiWebSearchIntegration.CompanionTool,
             _ => PiWebSearchIntegration.None,
         };
     }

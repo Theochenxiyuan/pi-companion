@@ -25,7 +25,7 @@ public sealed class AppSettingsServiceTests
                     AutoStartLocalQueueEnabled: true, AutoStartLocalQueueDelaySeconds: 99,
                     RecentTaskSubtitle: "invalid"),
                 new AgentSettings("  openai-codex/gpt-5.6-sol  ", "max", false, false,
-                    512, 999999, 99, 1, 9999999, "all", "invalid"),
+                    "invalid", 512, 999999, 99, 1, 9999999, "all", "invalid"),
                 new NotificationSettings(false, true, false, false, false),
                 new DataRetentionSettings(7, 30, 123),
                 new ModelVisibilitySettings([
@@ -56,6 +56,7 @@ public sealed class AppSettingsServiceTests
             Assert.Equal(15, saved.Tasks.AutoStartLocalQueueDelaySeconds);
             Assert.Equal("openai-codex/gpt-5.6-sol", saved.Agent.DefaultModel);
             Assert.Equal("max", saved.Agent.DefaultThinkingLevel);
+            Assert.Equal("off", saved.Agent.CacheWarming);
             Assert.Equal(1024, saved.Agent.CompactionReserveTokens);
             Assert.Equal(262144, saved.Agent.CompactionKeepRecentTokens);
             Assert.Equal(20, saved.Agent.RetryMaxRetries);
