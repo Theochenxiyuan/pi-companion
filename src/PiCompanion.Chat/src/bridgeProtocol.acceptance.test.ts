@@ -14,7 +14,7 @@ describe('desktop bridge protocol contract', () => {
     expect(desktopVersion).toBe(bridgeProtocolVersion)
   })
 
-  it('persists conversation detail and exposes mutually exclusive native shortcuts', () => {
+  it('routes shell actions through the unified header and persists conversation detail', () => {
     const appSettings = readFileSync(resolve(
       process.cwd(),
       '../PiCompanion.Application/Settings/AppSettings.cs',
@@ -27,31 +27,41 @@ describe('desktop bridge protocol contract', () => {
       process.cwd(),
       '../PiCompanion.Desktop/MainWindow.xaml.cs',
     ), 'utf8')
-    const desktopLocalizer = readFileSync(resolve(
-      process.cwd(),
-      '../PiCompanion.Desktop/Localization/DesktopLocalizer.cs',
-    ), 'utf8')
 
     expect(appSettings).toContain('string? ConversationDetailLevel = "normal"')
     expect(appSettings).toContain('["summary", "normal", "verbose"]')
-    expect(mainWindowXaml).toContain('Tag="summary" IsCheckable="True" Click="OnConversationDetailClick"')
-    expect(mainWindowXaml).toContain('Tag="normal" IsCheckable="True" Click="OnConversationDetailClick"')
-    expect(mainWindowXaml).toContain('Tag="verbose" IsCheckable="True" Click="OnConversationDetailClick"')
-    expect(mainWindowXaml).toContain('<MenuItem Header="对话显示">')
-    expect(mainWindowXaml).toContain('Data="M 4 0 L 0 4 L 4 8"')
-    expect(mainWindowXaml).toContain('Placement="Left"')
-    expect(mainWindowXaml).toMatch(/<Path x:Name="SubmenuArrowLeft"[\s\S]*?Grid.Column="0"/u)
-    expect(mainWindowXaml).toMatch(/<Path x:Name="SubmenuArrowRight"[\s\S]*?Grid.Column="2"/u)
-    expect(mainWindowXaml).toMatch(/<Path x:Name="SelectionCheck"[\s\S]*?Grid.Column="0"/u)
-    expect(mainWindowXaml).toContain('<TextBlock Grid.Column="1"')
-    expect(mainWindowXaml.match(/<Separator Margin="4,3" \/>/gu)).toHaveLength(1)
-    expect(mainWindowXaml).toContain('Foreground="{TemplateBinding Foreground}"')
-    expect(desktopLocalizer).toContain('["对话显示"] = "Conversation display"')
-    expect(desktopLocalizer).toContain('["摘要"] = "Summary"')
+
+    // The Vue header owns these actions; the native 52px row and its menu are gone.
+    expect(mainWindowXaml).not.toContain('Height="52"')
+    expect(mainWindowXaml).not.toContain('<Window.Resources>')
+    expect(mainWindowXaml).not.toContain('ChatMoreMenu')
+    expect(mainWindowXaml).not.toContain('MoreButton')
+    expect(mainWindowXaml).not.toContain('OnMoreClick')
+    expect(mainWindowXaml).not.toContain('OnConversationDetailClick')
+    expect(mainWindowXaml).not.toContain('OnToggleMonitorClick')
+    expect(mainWindowXaml).not.toContain('OnExitClick')
+    expect(mainWindowXaml).toContain('<wv2:WebView2 x:Name="ChatWebView"')
+    expect(mainWindowXaml).toContain('x:Name="LoadingPanel"')
+
+    // Native operations moved to the WebView bridge switch.
+    expect(mainWindow).toContain('case "ToggleMonitor":')
+    expect(mainWindow).toContain('_toggleMonitor();')
+    expect(mainWindow).toContain('case "SetConversationDetailLevel":')
+    expect(mainWindow).toContain('var detailLevel = ReadString(payload, "detailLevel");')
+    expect(mainWindow).toContain('detailLevel is not ("summary" or "normal" or "verbose")')
     expect(mainWindow).toContain('General = current.General with { ConversationDetailLevel = detailLevel }')
+    expect(mainWindow).toContain('_applySettings(saved);')
     expect(mainWindow).toContain('PostSettingsSnapshot();')
-    expect(mainWindow).toContain('item.IsChecked = string.Equals(selected, detailLevel, StringComparison.Ordinal);')
-    expect(mainWindow).toContain('item.Header = label;')
+    expect(mainWindow).toContain('case "ExitApplication":')
+    expect(mainWindow).toContain('_exit();')
+
+    expect(mainWindow).not.toContain('OnMoreClick')
+    expect(mainWindow).not.toContain('PlaceMoreMenu')
+    expect(mainWindow).not.toContain('OnConversationDetailClick')
+    expect(mainWindow).not.toContain('RefreshConversationDetailMenu')
+    expect(mainWindow).not.toContain('OnToggleMonitorClick')
+    expect(mainWindow).not.toContain('OnExitClick')
+    expect(mainWindow).not.toContain('MoreButton')
     expect(mainWindow).not.toContain('OnChatMoreMenuOpened')
     expect(mainWindow).not.toContain('OnConversationDetailSubmenuOpened')
   })

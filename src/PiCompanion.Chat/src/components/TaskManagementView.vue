@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { UiButton, UiInput, UiSelect } from '@/components/ui'
+import AppBrand from '@/components/AppBrand.vue'
+import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import WorkspaceIcon from '@/components/WorkspaceIcon.vue'
 import { useMinuteClock } from '@/composables/useMinuteClock'
 import type {
@@ -20,9 +22,11 @@ const props = withDefaults(defineProps<{
   tasks: TaskHistoryEntry[]
   workspaces?: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
+  detailLevel?: 'summary' | 'normal' | 'verbose'
   loading?: boolean
 }>(), {
   workspaces: () => [],
+  detailLevel: 'normal',
   loading: false,
 })
 
@@ -31,6 +35,9 @@ const status = defineModel<string>('status', { required: true })
 
 const emit = defineEmits<{
   toggleSidebar: []
+  toggleMonitor: []
+  setDetail: [level: 'summary' | 'normal' | 'verbose']
+  exit: []
   selectTask: [taskId: string]
   openContextMenu: [event: MouseEvent, task: TaskHistoryEntry, recycled: boolean]
   createWorkspace: []
@@ -340,6 +347,7 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
+        <AppBrand />
         <div class="location management-location">
           <strong>{{ t('全部任务') }}</strong>
           <span>{{ t('按工作区排列 · {workspaceCount} 个工作区 · {taskCount} 项任务', {
@@ -348,6 +356,12 @@ function closeWorkspaceMenusOnEscape(event: KeyboardEvent) {
           }) }}</span>
         </div>
       </div>
+      <AppMoreMenu
+        :detail-level="detailLevel"
+        @toggle-monitor="$emit('toggleMonitor')"
+        @set-detail="$emit('setDetail', $event)"
+        @exit="$emit('exit')"
+      />
     </header>
 
     <section class="management-content" :aria-busy="loading">

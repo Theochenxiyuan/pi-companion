@@ -3,6 +3,7 @@ import UiDialog from './UiDialog.vue'
 import UiInput from './UiInput.vue'
 import UiMenu from './UiMenu.vue'
 import UiMenuItem from './UiMenuItem.vue'
+import UiMenuRadioItem from './UiMenuRadioItem.vue'
 import UiNativeSelect from './UiNativeSelect.vue'
 import UiSelect from './UiSelect.vue'
 import UiSwitch from './UiSwitch.vue'
@@ -14,6 +15,7 @@ export {
   UiInput,
   UiMenu,
   UiMenuItem,
+  UiMenuRadioItem,
   UiNativeSelect,
   UiSelect,
   UiSwitch,

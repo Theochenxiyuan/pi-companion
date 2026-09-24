@@ -4,7 +4,14 @@ import webSearchExtension from 'pi-web-search'
 
 const WEB_SEARCH_TOOL = 'web_search'
 const URL_CONTEXT_TOOL = 'url_context'
-const MIMO_WEB_SEARCH_MODELS = new Set(['mimo-v2.5', 'mimo-v2.5-pro'])
+const MIMO_WEB_SEARCH_MODELS = new Set([
+  'mimo-v2.5',
+  'mimo-v2.5-pro',
+  'mimo-v2.5-pro-ultraspeed',
+  'mimo-v2.6-flash',
+  'mimo-v2.6-pro',
+  'mimo-v2.6-pro-ultraspeed',
+])
 const MIMO_WEB_SEARCH_TOOL = {
   type: WEB_SEARCH_TOOL,
   max_keyword: 3,

@@ -923,7 +923,7 @@ public sealed class PiRpcBackendTests
                 }
             };
 
-            var request = CreateRequest(root, "mimo-search") with { Model = "xiaomi/mimo-v2.5-pro" };
+            var request = CreateRequest(root, "mimo-search") with { Model = "xiaomi/mimo-v2.6-pro" };
             await backend.StartRunAsync(request, TestContext.Current.CancellationToken);
             await terminal.Task.WaitAsync(TimeSpan.FromSeconds(8), TestContext.Current.CancellationToken);
 

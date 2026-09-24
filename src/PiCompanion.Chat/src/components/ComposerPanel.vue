@@ -27,6 +27,7 @@ interface ComposerSuggestion {
 const props = defineProps<{
   taskActive: boolean
   hasCurrentTask: boolean
+  taskId?: string | null
   modeSelected: boolean
   generalChat?: boolean
   attachments: ComposerAttachment[]
@@ -77,6 +78,7 @@ const thinkingLevelModel = computed({
 })
 const input = ref<InstanceType<typeof UiTextarea> | null>(null)
 const isExpanded = ref(false)
+const queueExpanded = ref(false)
 const suggestionsDismissedFor = ref<string | null>(null)
 const activeSuggestionIndex = ref(0)
 const skillRequestPending = ref(false)
@@ -325,6 +327,10 @@ watch(prompt, value => {
 
 watch(() => props.attachments, releaseSubmitLock)
 watch(() => props.taskActive, releaseSubmitLock)
+watch(() => props.taskId, () => { queueExpanded.value = false })
+watch(() => props.localQueuedMessages.length, length => {
+  if (!length) queueExpanded.value = false
+})
 
 watch(() => props.skillsLoading, loading => {
   if (!loading) skillRequestPending.value = false
@@ -336,77 +342,84 @@ defineExpose({ focus: () => input.value?.focus() })
 <template>
   <footer class="composer-area" :class="{ 'composer-expanded': isExpanded }">
     <section v-if="localQueuedMessages.length" class="local-queue-panel" :aria-label="t('本地待发送区')">
-      <header>
-        <strong>{{ t('本地待发送区') }}</strong>
-        <span>{{ localQueuedMessages.length }}</span>
-      </header>
-      <div v-if="autoStartItem && localQueueAutoStartAt" class="local-queue-countdown">
-        <div>
-          <strong>{{ t('{seconds} 秒后自动开始', { seconds: autoStartRemainingSeconds }) }}</strong>
-          <span>{{ autoStartItem.message }}</span>
-        </div>
-        <UiButton type="button" @click="$emit('cancelLocalQueueAutoStart')">{{ t('取消本次自动开始') }}</UiButton>
-      </div>
-      <ol>
-        <li
-          v-for="(item, index) in localQueuedMessages"
-          :key="item.id"
-          class="local-queue-item"
-          :class="{ dragging: draggedMessageId === item.id, scheduled: item.id === localQueueAutoStartMessageId }"
-          @dragover.prevent
-          @drop="dropAt(index, $event)"
+      <header class="local-queue-header">
+        <UiButton
+          class="local-queue-toggle"
+          type="button"
+          :aria-expanded="queueExpanded"
+          :aria-controls="queueExpanded ? 'local-queue-list' : undefined"
+          :aria-label="t(queueExpanded ? '收起待发送区' : '展开待发送区')"
+          @click="queueExpanded = !queueExpanded"
         >
-          <UiButton
-            class="local-queue-drag-handle"
-            type="button"
-            draggable="true"
-            :aria-label="t('拖动调整顺序')"
-            :title="t('拖动调整顺序')"
-            @dragstart="beginDrag(item.id, $event)"
-            @dragend="draggedMessageId = null"
-          >⠿</UiButton>
-          <div class="local-queue-copy">
-            <p>{{ item.message }}</p>
-            <span v-if="attachmentCount(item)" class="local-queue-attachment-count">📎 {{ t('{count} 个附件', { count: attachmentCount(item) }) }}</span>
-          </div>
-          <div class="local-queue-actions">
-            <template v-if="taskActive">
+          <span class="local-queue-heading"><strong>{{ t('本地待发送区') }}</strong><span class="local-queue-count">{{ localQueuedMessages.length }}</span></span>
+          <span class="local-queue-preview" :title="autoStartItem?.message ?? localQueuedMessages[0]?.message">{{ autoStartItem?.message ?? localQueuedMessages[0]?.message }}</span>
+          <span v-if="autoStartItem && localQueueAutoStartAt" class="local-queue-starting">{{ t('{seconds} 秒后自动开始', { seconds: autoStartRemainingSeconds }) }}</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 6 5 5 5-5" /></svg>
+        </UiButton>
+        <UiButton v-if="autoStartItem && localQueueAutoStartAt" class="local-queue-cancel-auto-start" type="button" @click="$emit('cancelLocalQueueAutoStart')">{{ t('取消本次自动开始') }}</UiButton>
+      </header>
+      <div v-if="queueExpanded" id="local-queue-list" class="local-queue-details">
+        <ol>
+          <li
+            v-for="(item, index) in localQueuedMessages"
+            :key="item.id"
+            class="local-queue-item"
+            :class="{ dragging: draggedMessageId === item.id, scheduled: item.id === localQueueAutoStartMessageId }"
+            @dragover.prevent
+            @drop="dropAt(index, $event)"
+          >
+            <UiButton
+              class="local-queue-drag-handle"
+              type="button"
+              draggable="true"
+              :aria-label="t('拖动调整顺序')"
+              :title="t('拖动调整顺序')"
+              @dragstart="beginDrag(item.id, $event)"
+              @dragend="draggedMessageId = null"
+            >⠿</UiButton>
+            <div class="local-queue-copy">
+              <p>{{ item.message }}</p>
+              <span v-if="attachmentCount(item)" class="local-queue-attachment-count">📎 {{ t('{count} 个附件', { count: attachmentCount(item) }) }}</span>
+            </div>
+            <div class="local-queue-actions">
+              <template v-if="taskActive">
+                <UiButton
+                  type="button"
+                  class="primary"
+                  :disabled="attachmentCount(item) > 0"
+                  :title="attachmentCount(item) ? t('附件只能随新一轮发送') : undefined"
+                  @click="$emit('dispatchLocalMessage', item.id, 'steer')"
+                >{{ t('立即调整') }}</UiButton>
+                <UiButton
+                  type="button"
+                  :disabled="attachmentCount(item) > 0"
+                  :title="attachmentCount(item) ? t('附件只能随新一轮发送') : undefined"
+                  @click="$emit('dispatchLocalMessage', item.id, 'follow-up')"
+                >{{ t('定为后续') }}</UiButton>
+              </template>
+              <UiButton v-else type="button" class="primary" @click="$emit('dispatchLocalMessage', item.id, 'new-run')">{{ t('发送新一轮') }}</UiButton>
               <UiButton
                 type="button"
-                class="primary"
-                :disabled="attachmentCount(item) > 0"
-                :title="attachmentCount(item) ? t('附件只能随新一轮发送') : undefined"
-                @click="$emit('dispatchLocalMessage', item.id, 'steer')"
-              >{{ t('立即调整') }}</UiButton>
+                class="local-queue-icon-action"
+                :aria-label="t('编辑')"
+                :title="t('编辑')"
+                @click="$emit('editLocalMessage', item.id)"
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 13.8-.7 3 3-.7L15.8 6.6a1.5 1.5 0 0 0 0-2.1l-.3-.3a1.5 1.5 0 0 0-2.1 0L4 13.8Z" /><path d="m12.2 5.4 2.4 2.4" /></svg>
+              </UiButton>
               <UiButton
                 type="button"
-                :disabled="attachmentCount(item) > 0"
-                :title="attachmentCount(item) ? t('附件只能随新一轮发送') : undefined"
-                @click="$emit('dispatchLocalMessage', item.id, 'follow-up')"
-              >{{ t('定为后续') }}</UiButton>
-            </template>
-            <UiButton v-else type="button" class="primary" @click="$emit('dispatchLocalMessage', item.id, 'new-run')">{{ t('发送新一轮') }}</UiButton>
-            <UiButton
-              type="button"
-              class="local-queue-icon-action"
-              :aria-label="t('编辑')"
-              :title="t('编辑')"
-              @click="$emit('editLocalMessage', item.id)"
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 13.8-.7 3 3-.7L15.8 6.6a1.5 1.5 0 0 0 0-2.1l-.3-.3a1.5 1.5 0 0 0-2.1 0L4 13.8Z" /><path d="m12.2 5.4 2.4 2.4" /></svg>
-            </UiButton>
-            <UiButton
-              type="button"
-              class="local-queue-icon-action danger"
-              :aria-label="t('取消')"
-              :title="t('取消')"
-              @click="$emit('removeLocalMessage', item.id)"
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5h11M8 5.5V4h4v1.5M6.2 5.5l.6 10h6.4l.6-10M8.5 8.5v4.5M11.5 8.5v4.5" /></svg>
-            </UiButton>
-          </div>
-        </li>
-      </ol>
+                class="local-queue-icon-action danger"
+                :aria-label="t('取消')"
+                :title="t('取消')"
+                @click="$emit('removeLocalMessage', item.id)"
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5h11M8 5.5V4h4v1.5M6.2 5.5l.6 10h6.4l.6-10M8.5 8.5v4.5M11.5 8.5v4.5" /></svg>
+              </UiButton>
+            </div>
+          </li>
+        </ol>
+      </div>
     </section>
     <div class="composer">
       <div v-if="slashSuggestions.length || commandArgumentHint || (prompt.startsWith('/skill:') && skillsLoading)" class="composer-suggestions" role="listbox" :aria-label="t('输入建议')">

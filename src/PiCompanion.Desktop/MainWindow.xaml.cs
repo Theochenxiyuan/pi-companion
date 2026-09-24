@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -879,6 +878,32 @@ public partial class MainWindow : Window
                             CoreWebView2BrowsingDataKinds.DiskCache);
                     }
                     PostSettingsAction("WebView 与附件缓存已清理。", true);
+                    break;
+                case "ToggleMonitor":
+                    _toggleMonitor();
+                    break;
+                case "SetConversationDetailLevel":
+                {
+                    var detailLevel = ReadString(payload, "detailLevel");
+                    if (detailLevel is not ("summary" or "normal" or "verbose"))
+                    {
+                        throw new InvalidOperationException("对话详情级别无效。");
+                    }
+
+                    var current = _settings.Current;
+                    var saved = _settings.Save(current with
+                    {
+                        General = current.General with { ConversationDetailLevel = detailLevel },
+                    });
+                    _applySettings(saved);
+                    if (_bridgeReady)
+                    {
+                        PostSettingsSnapshot();
+                    }
+                    break;
+                }
+                case "ExitApplication":
+                    _exit();
                     break;
             }
         }
@@ -3084,12 +3109,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        if (key == Key.Escape && MoreButton.ContextMenu?.IsOpen == true)
-        {
-            MoreButton.ContextMenu.IsOpen = false;
-            return true;
-        }
-
         return false;
     }
 
@@ -3109,96 +3128,6 @@ public partial class MainWindow : Window
         _isInitialized = false;
         _ = InitializeWebViewAsync();
     }
-
-    private void OnMoreClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement button || button.ContextMenu is null)
-        {
-            return;
-        }
-
-        button.ContextMenu.PlacementTarget = button;
-        DesktopLocalizer.Apply(button.ContextMenu);
-        RefreshConversationDetailMenu(button.ContextMenu);
-        button.ContextMenu.Placement = PlacementMode.Custom;
-        button.ContextMenu.CustomPopupPlacementCallback = PlaceMoreMenu;
-        button.ContextMenu.IsOpen = true;
-    }
-
-    private static CustomPopupPlacement[] PlaceMoreMenu(
-        System.Windows.Size popupSize,
-        System.Windows.Size targetSize,
-        System.Windows.Point offset) =>
-    [
-        new(
-            new System.Windows.Point(targetSize.Width - popupSize.Width, targetSize.Height + 4),
-            PopupPrimaryAxis.Horizontal),
-    ];
-
-    private void OnToggleMonitorClick(object sender, RoutedEventArgs e) => _toggleMonitor();
-
-    private void OnConversationDetailClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.MenuItem { Tag: string detailLevel } ||
-            detailLevel is not ("summary" or "normal" or "verbose"))
-        {
-            return;
-        }
-
-        var current = _settings.Current;
-        ((System.Windows.Controls.MenuItem)sender).IsChecked = true;
-        if (string.Equals(current.General.ConversationDetailLevel, detailLevel, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var saved = _settings.Save(current with
-        {
-            General = current.General with { ConversationDetailLevel = detailLevel },
-        });
-        _applySettings(saved);
-        if (_bridgeReady)
-        {
-            PostSettingsSnapshot();
-        }
-    }
-
-    private void RefreshConversationDetailMenu(System.Windows.Controls.ContextMenu menu)
-    {
-        var selected = _settings.Current.General.ConversationDetailLevel ?? "normal";
-        foreach (var item in EnumerateMenuItems(menu.Items))
-        {
-            if (item.Tag is not string detailLevel ||
-                detailLevel is not ("summary" or "normal" or "verbose"))
-            {
-                continue;
-            }
-
-            var label = detailLevel switch
-            {
-                "summary" => DesktopLocalizer.Text("摘要", "Summary"),
-                "verbose" => DesktopLocalizer.Text("详细", "Detailed"),
-                _ => DesktopLocalizer.Text("标准", "Standard"),
-            };
-            item.IsChecked = string.Equals(selected, detailLevel, StringComparison.Ordinal);
-            item.Header = label;
-        }
-    }
-
-    private static IEnumerable<System.Windows.Controls.MenuItem> EnumerateMenuItems(
-        System.Windows.Controls.ItemCollection items)
-    {
-        foreach (var item in items.OfType<System.Windows.Controls.MenuItem>())
-        {
-            yield return item;
-            foreach (var descendant in EnumerateMenuItems(item.Items))
-            {
-                yield return descendant;
-            }
-        }
-    }
-
-    private void OnExitClick(object sender, RoutedEventArgs e) => _exit();
 
     private async void OnRetryClick(object sender, RoutedEventArgs e)
     {

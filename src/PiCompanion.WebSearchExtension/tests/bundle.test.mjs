@@ -70,16 +70,20 @@ test('only approved official providers advertise bundled native search', async (
     api: 'openai-completions',
     id: 'some-chat-model',
   }), 'none')
-  assert.equal(extension.getPiCompanionWebSearchSupport({
-    provider: 'xiaomi',
-    api: 'openai-completions',
-    id: 'mimo-v2.5',
-  }), 'native')
-  assert.equal(extension.getPiCompanionWebSearchSupport({
-    provider: 'xiaomi',
-    api: 'openai-completions',
-    id: 'mimo-v2.5-pro',
-  }), 'native')
+  for (const id of [
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
+    'mimo-v2.5-pro-ultraspeed',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
+    'mimo-v2.6-pro-ultraspeed',
+  ]) {
+    assert.equal(extension.getPiCompanionWebSearchSupport({
+      provider: 'xiaomi',
+      api: 'openai-completions',
+      id,
+    }), 'native', id)
+  }
   assert.equal(extension.getPiCompanionWebSearchSupport({
     provider: 'company-proxy',
     api: 'openai-responses',
@@ -88,7 +92,12 @@ test('only approved official providers advertise bundled native search', async (
   assert.equal(extension.getPiCompanionWebSearchSupport({
     provider: 'xiaomi',
     api: 'openai-completions',
-    id: 'mimo-v2.5-pro-ultraspeed',
+    id: 'mimo-v2.6-unknown',
+  }), 'none')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'xiaomi',
+    api: 'openai-responses',
+    id: 'mimo-v2.6-pro',
   }), 'none')
   assert.equal(extension.getPiCompanionWebSearchSupport({
     provider: 'xiaomi-token-plan-cn',
@@ -117,36 +126,41 @@ test('MiMo search is injected into provider requests without exposing the compan
   }
   extension.default(pi)
 
-  const model = {
-    provider: 'xiaomi',
-    api: 'openai-completions',
-    id: 'mimo-v2.5-pro',
-  }
-  const originalPayload = {
-    model: model.id,
-    messages: [{ role: 'user', content: '今天有什么新闻？' }],
-    tools: [{ type: 'function', function: { name: 'read' } }],
-  }
   const requestHandler = handlers.get('before_provider_request').at(-1)
-  const injected = await requestHandler(
-    { type: 'before_provider_request', payload: originalPayload },
-    { model },
-  )
-
-  assert.notEqual(injected, originalPayload)
-  assert.equal(originalPayload.tools.length, 1)
-  assert.deepEqual(injected.tools, [
-    originalPayload.tools[0],
-    { type: 'web_search', max_keyword: 3, force_search: false },
-  ])
-  assert.equal(await requestHandler(
-    { type: 'before_provider_request', payload: injected },
-    { model },
-  ), undefined)
-
   const sessionHandler = handlers.get('session_start').at(-1)
-  await sessionHandler({ type: 'session_start' }, { model })
-  assert.deepEqual(activeTools, ['read'])
+  for (const id of [
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
+    'mimo-v2.5-pro-ultraspeed',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
+    'mimo-v2.6-pro-ultraspeed',
+  ]) {
+    const model = { provider: 'xiaomi', api: 'openai-completions', id }
+    const originalPayload = {
+      model: id,
+      messages: [{ role: 'user', content: '今天有什么新闻？' }],
+      tools: [{ type: 'function', function: { name: 'read' } }],
+    }
+    const injected = await requestHandler(
+      { type: 'before_provider_request', payload: originalPayload },
+      { model },
+    )
+
+    assert.notEqual(injected, originalPayload, id)
+    assert.equal(originalPayload.tools.length, 1, id)
+    assert.deepEqual(injected.tools, [
+      originalPayload.tools[0],
+      { type: 'web_search', max_keyword: 3, force_search: false },
+    ], id)
+    assert.equal(await requestHandler(
+      { type: 'before_provider_request', payload: injected },
+      { model },
+    ), undefined, id)
+
+    await sessionHandler({ type: 'session_start' }, { model })
+    assert.deepEqual(activeTools, ['read'], id)
+  }
 })
 
 test('MiMo search injection rejects unsupported Xiaomi models', async () => {
@@ -166,12 +180,12 @@ test('MiMo search injection rejects unsupported Xiaomi models', async () => {
 
   const requestHandler = handlers.get('before_provider_request').at(-1)
   const result = await requestHandler(
-    { type: 'before_provider_request', payload: { model: 'mimo-v2.5-pro-ultraspeed' } },
+    { type: 'before_provider_request', payload: { model: 'mimo-v2.6-unknown' } },
     {
       model: {
         provider: 'xiaomi',
         api: 'openai-completions',
-        id: 'mimo-v2.5-pro-ultraspeed',
+        id: 'mimo-v2.6-unknown',
       },
     },
   )

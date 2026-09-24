@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { UiButton, UiDialog, UiInput, UiMenu, UiMenuItem, UiSelect } from '@/components/ui'
+import AppBrand from '@/components/AppBrand.vue'
+import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type {
   DiscoveredSkill,
   SkillContentVariant,
@@ -24,6 +26,7 @@ const props = withDefaults(defineProps<{
   loading: boolean
   error: string | null
   sidebarCollapsed: boolean
+  detailLevel?: 'summary' | 'normal' | 'verbose'
   contextWorkspace?: WorkspaceHistoryEntry | null
   globalOnly?: boolean
   removingInstallationId?: string | null
@@ -38,6 +41,7 @@ const props = withDefaults(defineProps<{
   trustResult?: SkillWorkspaceTrustCompleted | null
 }>(), {
   contextWorkspace: null,
+  detailLevel: 'normal',
   globalOnly: false,
   removingInstallationId: null,
   removalResult: null,
@@ -53,6 +57,9 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   toggleSidebar: []
+  toggleMonitor: []
+  setDetail: [level: 'summary' | 'normal' | 'verbose']
+  exit: []
   refresh: []
   clearContext: []
   removeInstallation: [payload: {
@@ -487,6 +494,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
+        <AppBrand />
         <div class="location management-location">
           <strong>{{ title }}</strong>
           <small>{{ contextDescription }}</small>
@@ -515,6 +523,12 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 7a6 6 0 1 0 .3 5.5" /><path d="M16 3v4h-4" /></svg>
           {{ loading ? t('正在刷新…') : t('刷新') }}
         </UiButton>
+        <AppMoreMenu
+          :detail-level="detailLevel"
+          @toggle-monitor="$emit('toggleMonitor')"
+          @set-detail="$emit('setDetail', $event)"
+          @exit="$emit('exit')"
+        />
       </div>
     </header>
 

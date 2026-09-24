@@ -113,7 +113,14 @@ function getWebSearchSupport(model, builtInProviderIds) {
   if (!builtInProviderIds.has(model.provider)) return 'none'
   if (model.provider === 'xiaomi' &&
       model.api === 'openai-completions' &&
-      ['mimo-v2.5', 'mimo-v2.5-pro'].includes(model.id)) return 'native'
+      [
+        'mimo-v2.5',
+        'mimo-v2.5-pro',
+        'mimo-v2.5-pro-ultraspeed',
+        'mimo-v2.6-flash',
+        'mimo-v2.6-pro',
+        'mimo-v2.6-pro-ultraspeed',
+      ].includes(model.id)) return 'native'
   if (model.provider === 'openai' && model.api === 'openai-responses') return 'native'
   if (model.provider === 'azure-openai-responses' && model.api === 'azure-openai-responses') return 'native'
   if (model.provider === 'google' && model.api === 'google-generative-ai') return 'native'

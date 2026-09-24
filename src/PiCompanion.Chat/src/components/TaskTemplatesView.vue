@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { UiButton, UiInput } from '@/components/ui'
+import AppBrand from '@/components/AppBrand.vue'
+import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { taskTemplateTargetLabel } from '@/utils/taskTemplates'
 import { useI18n } from '@/i18n'
@@ -11,10 +13,14 @@ const props = defineProps<{
   scheduledTasks?: ScheduledTask[]
   workspaces: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
+  detailLevel?: 'summary' | 'normal' | 'verbose'
 }>()
 
 defineEmits<{
   toggleSidebar: []
+  toggleMonitor: []
+  setDetail: [level: 'summary' | 'normal' | 'verbose']
+  exit: []
   apply: [template: TaskTemplate]
   create: []
   edit: [template: TaskTemplate]
@@ -64,15 +70,24 @@ function linkedScheduleCount(templateId: string) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
+        <AppBrand />
         <div class="location management-location">
           <strong>{{ t('任务模板') }}</strong>
           <span>{{ t('管理可复用的任务草稿，使用模板会新建任务。') }}</span>
         </div>
       </div>
-      <UiButton class="task-template-create" variant="secondary" size="md" type="button" @click="$emit('create')">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
-        {{ t('新建模板') }}
-      </UiButton>
+      <div class="topbar-actions">
+        <UiButton class="task-template-create" variant="secondary" size="md" type="button" @click="$emit('create')">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+          {{ t('新建模板') }}
+        </UiButton>
+        <AppMoreMenu
+          :detail-level="detailLevel ?? 'normal'"
+          @toggle-monitor="$emit('toggleMonitor')"
+          @set-detail="$emit('setDetail', $event)"
+          @exit="$emit('exit')"
+        />
+      </div>
     </header>
 
     <section class="management-content task-template-management-content">

@@ -258,6 +258,39 @@ describe('ComposerPanel options', () => {
     expect(wrapper.get('button[aria-label="展开输入框"]').attributes('aria-pressed')).toBe('false')
   })
 
+  it('keeps the pending queue compact while exposing the countdown and cancellation', async () => {
+    const messages = [{ id: 'message-1', message: '确认失败测试', createdAt: '2026-07-23T10:00:00Z' }, {
+      id: 'message-2', message: '补充迁移说明', createdAt: '2026-07-23T10:01:00Z',
+    }]
+    const wrapper = shallowMount(ComposerPanel, {
+      props: createProps({
+        localQueuedMessages: messages,
+        localQueueAutoStartMessageId: 'message-1',
+        localQueueAutoStartAt: new Date(Date.now() + 30_000).toISOString(),
+      }),
+    })
+
+    expect(wrapper.get('.local-queue-count').text()).toBe('2')
+    expect(wrapper.get('.local-queue-preview').text()).toBe('确认失败测试')
+    expect(wrapper.get('.local-queue-starting').text()).toContain('秒后自动开始')
+    expect(wrapper.find('.local-queue-item').exists()).toBe(false)
+    expect(wrapper.get('.local-queue-toggle').attributes('aria-expanded')).toBe('false')
+    await wrapper.get('.local-queue-cancel-auto-start').trigger('click')
+    expect(wrapper.emitted('cancelLocalQueueAutoStart')).toHaveLength(1)
+
+    await wrapper.get('.local-queue-toggle').trigger('click')
+    expect(wrapper.get('.local-queue-toggle').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.findAll('.local-queue-item')).toHaveLength(2)
+    await wrapper.setProps({ taskId: 'next-task' })
+    expect(wrapper.get('.local-queue-toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.local-queue-item').exists()).toBe(false)
+    await wrapper.get('.local-queue-toggle').trigger('click')
+    await wrapper.get('.local-queue-toggle').trigger('click')
+    expect(wrapper.find('.local-queue-item').exists()).toBe(false)
+    expect(styles).toContain('.local-queue-details { min-height: 0; max-height: min(160px, 22vh);')
+    expect(styles).toContain('max-height: calc(100vh - 136px)')
+  })
+
   it('offers steer, follow-up, and icon actions for each local item', async () => {
     const wrapper = shallowMount(ComposerPanel, {
       props: createProps({
@@ -270,6 +303,7 @@ describe('ComposerPanel options', () => {
         }],
       }),
     })
+    await wrapper.get('.local-queue-toggle').trigger('click')
     const actions = wrapper.findAll('.local-queue-actions button')
 
     expect(actions.map(button => button.text())).toEqual(['立即调整', '定为后续', '', ''])
@@ -285,7 +319,7 @@ describe('ComposerPanel options', () => {
     expect(wrapper.emitted('removeLocalMessage')).toEqual([['message-1']])
   })
 
-  it('turns a retained item into a new run after the task ends', () => {
+  it('turns a retained item into a new run after the task ends', async () => {
     const wrapper = shallowMount(ComposerPanel, {
       props: createProps({
         hasCurrentTask: true,
@@ -296,6 +330,7 @@ describe('ComposerPanel options', () => {
         }],
       }),
     })
+    await wrapper.get('.local-queue-toggle').trigger('click')
 
     expect(wrapper.findAll('.local-queue-actions button').map(button => button.text()))
       .toEqual(['发送新一轮', '', ''])
@@ -319,6 +354,7 @@ describe('ComposerPanel options', () => {
         }],
       }),
     })
+    await wrapper.get('.local-queue-toggle').trigger('click')
     const firstItem = wrapper.findAll('.local-queue-item')[0]
     const actions = firstItem.findAll('.local-queue-actions button')
 

@@ -55,6 +55,8 @@ import type {
   WorkspaceTrustDecisionCompleted,
 } from '@/types/bridge'
 import CommitDiffDialog from '@/components/CommitDiffDialog.vue'
+import AppBrand from '@/components/AppBrand.vue'
+import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import ComposerPanel from '@/components/ComposerPanel.vue'
 import ConversationRun from '@/components/ConversationRun.vue'
 import FileDiffDialog from '@/components/FileDiffDialog.vue'
@@ -115,7 +117,11 @@ const pendingTaskTemplateApplication = ref<{
 } | null>(null)
 const editingWorkspaceId = ref<string | null>(null)
 const hidingWorkspaceId = ref<string | null>(null)
-const inspectorCollapsed = ref(window.localStorage.getItem('pi-companion:inspector-collapsed') === 'true')
+const inspectorManuallyCollapsed = ref(window.localStorage.getItem('pi-companion:inspector-collapsed') === 'true')
+const inspectorAutoOpened = ref(false)
+const viewportWidth = ref(window.innerWidth)
+const inspectorCollapsed = computed(() =>
+  inspectorManuallyCollapsed.value || (inspectorAutoCollapsed.value && !inspectorAutoOpened.value))
 const inspectorTab = ref<'git' | 'files' | 'context'>('files')
 const workspaceDirectoryUpdate = ref<WorkspaceDirectoryListing | null>(null)
 const workspaceSearchUpdate = ref<WorkspaceFileSearchResult | null>(null)
@@ -453,6 +459,10 @@ const currentDirectory = computed(() => {
 const workspaceDirectory = computed(() => store.currentTask
   ? (store.currentTask.scopeKind === 'Workspace' ? store.currentTask.workingDirectory : null)
   : store.draft?.workingDirectory || null)
+// Keep enough room for the conversation, including when either sidebar has been resized.
+const inspectorAutoCollapsed = computed(() =>
+  !workspaceDirectory.value ||
+  viewportWidth.value - (sidebarCollapsed.value ? 0 : sidebarWidth.value) - inspectorWidth.value < 600)
 const conversationSkillsWorkspace = computed(() => {
   const directory = workspaceDirectory.value
   if (!directory) return null
@@ -597,9 +607,16 @@ watch(
   { flush: 'sync' },
 )
 
-watch(inspectorCollapsed, value => {
+watch(inspectorManuallyCollapsed, value => {
   window.localStorage.setItem('pi-companion:inspector-collapsed', String(value))
+})
+
+watch(inspectorCollapsed, value => {
   if (!value && inspectorTab.value === 'context') scheduleSessionStatisticsRefresh(0)
+})
+
+watch([workspaceDirectory, isGeneralChat, () => store.currentTask?.id], () => {
+  inspectorAutoOpened.value = false
 })
 
 watch(workspaceDirectory, () => {
@@ -753,7 +770,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('click', closeTaskContextMenu)
   window.addEventListener('blur', closeTaskContextMenu)
-  window.addEventListener('resize', closeTaskContextMenu)
+  window.addEventListener('resize', handleViewportResize)
 })
 
 onBeforeUnmount(() => {
@@ -773,8 +790,28 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('click', closeTaskContextMenu)
   window.removeEventListener('blur', closeTaskContextMenu)
-  window.removeEventListener('resize', closeTaskContextMenu)
+  window.removeEventListener('resize', handleViewportResize)
 })
+
+function handleViewportResize() {
+  viewportWidth.value = window.innerWidth
+  closeTaskContextMenu()
+}
+
+function openInspector() {
+  inspectorManuallyCollapsed.value = false
+  inspectorAutoOpened.value = inspectorAutoCollapsed.value
+}
+
+function toggleInspector() {
+  if (inspectorCollapsed.value) {
+    openInspector()
+  } else if (inspectorAutoCollapsed.value) {
+    inspectorAutoOpened.value = false
+  } else {
+    inspectorManuallyCollapsed.value = true
+  }
+}
 
 function handleSystemThemeChange(event: MediaQueryListEvent) {
   systemPrefersLight.value = event.matches
@@ -1260,7 +1297,7 @@ function executeComposerCommand(name: ComposerCommandName, args: string) {
         composerCommandError(t('当前没有可查看的 Session。'))
         return
       }
-      inspectorCollapsed.value = false
+      openInspector()
       inspectorTab.value = 'context'
       refreshSessionStatistics(false)
       clearComposerDraft()
@@ -2324,7 +2361,7 @@ function selectInspectorTab(tab: 'git' | 'files' | 'context') {
 }
 
 function openGitInspector() {
-  inspectorCollapsed.value = false
+  openInspector()
   inspectorTab.value = 'git'
   refreshWorkspaceGit()
 }
@@ -2466,6 +2503,13 @@ function previewWorkspaceEntries(relativePath: string) {
 
 function saveCompanionSettings(settings: SettingsSnapshot['values']) {
   postBridgeMessage('SaveCompanionSettings', { settings })
+}
+
+function setConversationDetailLevel(level: SettingsSnapshot['values']['general']['conversationDetailLevel']) {
+  if (!postBridgeMessage('SetConversationDetailLevel', { detailLevel: level })) {
+    // Keep the standalone preview useful when the desktop bridge is unavailable.
+    settingsSnapshot.value.values.general.conversationDetailLevel = level
+  }
 }
 
 function previewAppearance(appearance: {
@@ -2635,6 +2679,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
               <path d="M9 4v16" />
             </svg>
           </UiButton>
+          <AppBrand />
           <div class="location">
             <strong>{{ store.currentTask?.title ?? t('新任务') }}</strong>
             <WorkspaceLocationMenu
@@ -2681,13 +2726,19 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
             type="button"
             :aria-label="t(inspectorCollapsed ? '展开右侧栏' : '收起右侧栏')"
             :title="t(inspectorCollapsed ? '展开右侧栏' : '收起右侧栏')"
-            @click="inspectorCollapsed = !inspectorCollapsed"
+            @click="toggleInspector"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3.5" y="4" width="17" height="16" rx="2" />
               <path d="M15 4v16" />
             </svg>
           </UiButton>
+          <AppMoreMenu
+            :detail-level="viewMode"
+            @toggle-monitor="postBridgeMessage('ToggleMonitor')"
+            @set-detail="setConversationDetailLevel"
+            @exit="postBridgeMessage('ExitApplication')"
+          />
         </div>
       </header>
 
@@ -2766,6 +2817,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
         v-model:selected-permission-mode="selectedPermissionMode"
         :task-active="store.isActive"
         :has-current-task="Boolean(store.currentTask)"
+        :task-id="store.currentTask?.id ?? null"
         :mode-selected="isModeSelected"
         :general-chat="isGeneralChat"
         :attachments="store.draft?.attachments ?? []"
@@ -2802,7 +2854,11 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :workspaces="store.workspaces"
       :loading="historyLoading"
       :sidebar-collapsed="sidebarCollapsed"
+      :detail-level="viewMode"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @toggle-monitor="postBridgeMessage('ToggleMonitor')"
+      @set-detail="setConversationDetailLevel"
+      @exit="postBridgeMessage('ExitApplication')"
       @select-task="selectTask"
       @open-context-menu="openTaskContextMenu"
       @create-workspace="postBridgeMessage('CreateWorkspace')"
@@ -2819,6 +2875,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :loading="skillsLoading"
       :error="skillsError"
       :sidebar-collapsed="sidebarCollapsed"
+      :detail-level="viewMode"
       :workspaces="store.workspaces"
       :removing-installation-id="skillRemovalPendingId"
       :removal-result="skillRemovalResult"
@@ -2830,6 +2887,9 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :import-error="skillImportError"
       :import-result="skillImportResult"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @toggle-monitor="postBridgeMessage('ToggleMonitor')"
+      @set-detail="setConversationDetailLevel"
+      @exit="postBridgeMessage('ExitApplication')"
       @refresh="refreshSkills"
       @remove-installation="removeSkillInstallation"
       @trust-workspace="requestSkillWorkspaceTrust"
@@ -2846,7 +2906,11 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :scheduled-tasks="store.scheduledTasks"
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
+      :detail-level="viewMode"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @toggle-monitor="postBridgeMessage('ToggleMonitor')"
+      @set-detail="setConversationDetailLevel"
+      @exit="postBridgeMessage('ExitApplication')"
       @apply="startNewTaskFromTemplate"
       @create="createTaskTemplate"
       @edit="editTaskTemplate"
@@ -2860,8 +2924,12 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :templates="allTaskTemplates"
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
+      :detail-level="viewMode"
       :pending-action="scheduledTaskPending"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
+      @toggle-monitor="postBridgeMessage('ToggleMonitor')"
+      @set-detail="setConversationDetailLevel"
+      @exit="postBridgeMessage('ExitApplication')"
       @create="createScheduledTask"
       @edit="editScheduledTask"
       @toggle="toggleScheduledTask"

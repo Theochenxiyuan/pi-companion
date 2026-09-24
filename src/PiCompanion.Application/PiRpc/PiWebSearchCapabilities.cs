@@ -24,7 +24,13 @@ public static class PiWebSearchCapabilities
 
         var provider = modelReference[..separator];
         var model = modelReference[(separator + 1)..];
-        if (provider == "xiaomi" && model is "mimo-v2.5" or "mimo-v2.5-pro")
+        if (provider == "xiaomi" && model is
+            "mimo-v2.5" or
+            "mimo-v2.5-pro" or
+            "mimo-v2.5-pro-ultraspeed" or
+            "mimo-v2.6-flash" or
+            "mimo-v2.6-pro" or
+            "mimo-v2.6-pro-ultraspeed")
         {
             return PiWebSearchIntegration.ProviderRequest;
         }

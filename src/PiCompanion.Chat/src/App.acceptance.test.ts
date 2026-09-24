@@ -19,6 +19,7 @@ describe('Agent Chat stage 5 acceptance', () => {
 
   beforeEach(() => {
     window.history.replaceState({}, '', '/')
+    vi.stubGlobal('innerWidth', 1240)
     window.localStorage.removeItem('pi-companion:inspector-collapsed')
     window.localStorage.removeItem('pi-companion.inspector-width')
     clearStoredTaskPromptDrafts()
@@ -29,8 +30,66 @@ describe('Agent Chat stage 5 acceptance', () => {
     mountedWrappers.length = 0
     document.body.innerHTML = ''
     delete window.chrome
+    vi.unstubAllGlobals()
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('uses one branded header on every page and keeps native menu actions available', async () => {
+    const postMessage = vi.fn()
+    let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
+    window.chrome = {
+      webview: {
+        postMessage,
+        addEventListener(_type, listener) { bridgeListener = listener },
+        removeEventListener() {},
+      },
+    }
+    const pinia = createPinia()
+    const wrapper = mount(App, { attachTo: document.body, global: { plugins: [pinia] } })
+    mountedWrappers.push(wrapper)
+
+    expect(wrapper.get('.main .topbar .app-brand').attributes('aria-label')).toBe('Pi Companion')
+    expect(wrapper.get('.main .topbar .location strong').text()).toBe('新任务')
+    expect(wrapper.findAll('.topbar .app-more-trigger')).toHaveLength(1)
+    await wrapper.get('.app-more-trigger').trigger('click')
+    await nextTick()
+    expect(wrapper.get('.app-more-popover').text()).toContain('显示 / 隐藏任务监视器')
+    expect(wrapper.get('.app-more-popover').text()).toContain('对话显示')
+    expect(wrapper.get('.app-more-popover').findAll('[role="menuitemradio"]')).toHaveLength(3)
+    expect(wrapper.get('.app-more-popover').find('[role="menuitemradio"][data-state="checked"]').text()).toContain('标准')
+    await wrapper.get('.app-more-popover .ui-menu-item').trigger('click')
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'ToggleMonitor' }))
+
+    await wrapper.get('.app-more-trigger').trigger('click')
+    await nextTick()
+    const verbose = wrapper.get('.app-more-popover').findAll('[role="menuitemradio"]')[2]
+    await verbose.trigger('click')
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'SetConversationDetailLevel', payload: { detailLevel: 'verbose' },
+    }))
+
+    const currentSettings = (wrapper.vm as unknown as { settingsSnapshot: SettingsSnapshot }).settingsSnapshot
+    bridgeListener?.({
+      data: {
+        protocolVersion: bridgeProtocolVersion,
+        type: 'SettingsUpdated',
+        payload: { ...currentSettings, values: { ...currentSettings.values, general: { ...currentSettings.values.general, conversationDetailLevel: 'verbose' } } },
+      },
+    } as WebViewMessageEvent)
+    await nextTick()
+    await wrapper.get('.app-more-trigger').trigger('click')
+    await nextTick()
+    expect(wrapper.get('.app-more-popover').find('[role="menuitemradio"][data-state="checked"]').text()).toContain('详细')
+    await wrapper.get('.app-more-popover .ui-menu-item--danger').trigger('click')
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'ExitApplication' }))
+
+    for (const title of ['全部任务', '技能', '任务模板', '定时任务']) {
+      const nav = wrapper.findAll('.sidebar > nav .nav-row').find(button => button.text() === title)!
+      await nav.trigger('click')
+      expect(wrapper.get('.management-topbar .app-brand').attributes('aria-label')).toBe('Pi Companion')
+      expect(wrapper.get('.management-topbar .app-more-trigger').attributes('aria-label')).toBe('更多')
+    }
   })
 
   it('loads grouped skill cards, the template manager, and scheduled tasks', async () => {
@@ -1264,6 +1323,7 @@ describe('Agent Chat stage 5 acceptance', () => {
       type: 'QueueLocalMessage',
       payload: { message: 'Check the failing tests first' },
     }))
+    await wrapper.get('.local-queue-toggle').trigger('click')
     const firstPendingItem = wrapper.findAll('.local-queue-item')[0]
     await firstPendingItem.get('button[aria-label="编辑"]').trigger('click')
     expect(wrapper.get('.local-message-editor-dialog').text()).not.toContain('模型')
@@ -1872,6 +1932,50 @@ describe('Agent Chat stage 5 acceptance', () => {
       type: 'RestoreFile',
       payload: { changeId: 'change-1' },
     }))
+  })
+
+  it('automatically frees chat space in narrow windows and on the empty home screen', async () => {
+    window.chrome = {
+      webview: {
+        postMessage: vi.fn(),
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    }
+    const pinia = createPinia()
+    const wrapper = mount(App, { attachTo: document.body, global: { plugins: [pinia] } })
+    mountedWrappers.push(wrapper)
+
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(false)
+    expect(wrapper.get('.workspace').classes()).toContain('inspector-collapsed')
+
+    const store = useTaskStore(pinia)
+    store.currentTask = createTranscriptPreview()
+    await nextTick()
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(true)
+
+    vi.stubGlobal('innerWidth', 940)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(false)
+    expect(window.localStorage.getItem('pi-companion:inspector-collapsed')).toBeNull()
+
+    await wrapper.get('button[aria-label="展开右侧栏"]').trigger('click')
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(true)
+    await wrapper.get('button[aria-label="收起右侧栏"]').trigger('click')
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(false)
+
+    vi.stubGlobal('innerWidth', 1240)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(true)
+
+    await wrapper.get('button[aria-label="收起右侧栏"]').trigger('click')
+    expect(window.localStorage.getItem('pi-companion:inspector-collapsed')).toBe('true')
+    vi.stubGlobal('innerWidth', 940)
+    window.dispatchEvent(new Event('resize'))
+    await wrapper.get('button[aria-label="展开右侧栏"]').trigger('click')
+    expect(wrapper.find('.workspace-inspector').exists()).toBe(true)
   })
 
   it('opens the collapsed Git sidebar from the compact composer warning', async () => {

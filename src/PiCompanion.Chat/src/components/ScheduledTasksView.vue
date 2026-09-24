@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { UiButton, UiSwitch } from '@/components/ui'
+import AppBrand from '@/components/AppBrand.vue'
+import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { useI18n } from '@/i18n'
 
@@ -10,11 +12,15 @@ const props = defineProps<{
   templates: TaskTemplate[]
   workspaces: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
+  detailLevel?: 'summary' | 'normal' | 'verbose'
   pendingAction?: { taskId: string; action: 'save' | 'run' | 'delete' } | null
 }>()
 
 defineEmits<{
   toggleSidebar: []
+  toggleMonitor: []
+  setDetail: [level: 'summary' | 'normal' | 'verbose']
+  exit: []
   create: []
   edit: [scheduledTask: ScheduledTask]
   toggle: [scheduledTask: ScheduledTask, enabled: boolean]
@@ -88,15 +94,24 @@ function occurrenceLabel(scheduledTask: ScheduledTask) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
+        <AppBrand />
         <div class="location management-location">
           <strong>{{ t('定时任务') }}</strong>
           <span>{{ t('按计划在后台创建独立任务') }}</span>
         </div>
       </div>
-      <UiButton class="scheduled-task-create" variant="secondary" size="md" type="button" @click="$emit('create')">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
-        <span>{{ t('新建定时任务') }}</span>
-      </UiButton>
+      <div class="topbar-actions">
+        <UiButton class="scheduled-task-create" variant="secondary" size="md" type="button" @click="$emit('create')">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+          <span>{{ t('新建定时任务') }}</span>
+        </UiButton>
+        <AppMoreMenu
+          :detail-level="detailLevel ?? 'normal'"
+          @toggle-monitor="$emit('toggleMonitor')"
+          @set-detail="$emit('setDetail', $event)"
+          @exit="$emit('exit')"
+        />
+      </div>
     </header>
 
     <section class="management-content scheduled-task-content">
