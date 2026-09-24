@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { UiButton, UiSwitch } from '@/components/ui'
-import AppBrand from '@/components/AppBrand.vue'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { useI18n } from '@/i18n'
@@ -94,7 +93,6 @@ function occurrenceLabel(scheduledTask: ScheduledTask) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
-        <AppBrand />
         <div class="location management-location">
           <strong>{{ t('定时任务') }}</strong>
           <span>{{ t('按计划在后台创建独立任务') }}</span>

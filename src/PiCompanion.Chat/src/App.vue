@@ -55,7 +55,6 @@ import type {
   WorkspaceTrustDecisionCompleted,
 } from '@/types/bridge'
 import CommitDiffDialog from '@/components/CommitDiffDialog.vue'
-import AppBrand from '@/components/AppBrand.vue'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import ComposerPanel from '@/components/ComposerPanel.vue'
 import ConversationRun from '@/components/ConversationRun.vue'
@@ -2679,9 +2678,8 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
               <path d="M9 4v16" />
             </svg>
           </UiButton>
-          <AppBrand />
           <div class="location">
-            <strong>{{ store.currentTask?.title ?? t('新任务') }}</strong>
+            <strong :title="store.currentTask?.title ?? t('新任务')">{{ store.currentTask?.title ?? t('新任务') }}</strong>
             <WorkspaceLocationMenu
               v-if="store.currentTask?.scopeKind === 'Workspace'"
               :path="store.currentTask.workingDirectory"

@@ -35,7 +35,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses one branded header on every page and keeps native menu actions available', async () => {
+  it('keeps one task-focused header on every page with desktop menu actions', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
     window.chrome = {
@@ -49,8 +49,10 @@ describe('Agent Chat stage 5 acceptance', () => {
     const wrapper = mount(App, { attachTo: document.body, global: { plugins: [pinia] } })
     mountedWrappers.push(wrapper)
 
-    expect(wrapper.get('.main .topbar .app-brand').attributes('aria-label')).toBe('Pi Companion')
+    expect(wrapper.find('.app-brand').exists()).toBe(false)
     expect(wrapper.get('.main .topbar .location strong').text()).toBe('新任务')
+    expect(wrapper.get('.main .topbar .location strong').attributes('title')).toBe('新任务')
+    expect(wrapper.find('.main .topbar .topbar-actions .app-more-menu').exists()).toBe(true)
     expect(wrapper.findAll('.topbar .app-more-trigger')).toHaveLength(1)
     await wrapper.get('.app-more-trigger').trigger('click')
     await nextTick()
@@ -87,7 +89,8 @@ describe('Agent Chat stage 5 acceptance', () => {
     for (const title of ['全部任务', '技能', '任务模板', '定时任务']) {
       const nav = wrapper.findAll('.sidebar > nav .nav-row').find(button => button.text() === title)!
       await nav.trigger('click')
-      expect(wrapper.get('.management-topbar .app-brand').attributes('aria-label')).toBe('Pi Companion')
+      expect(wrapper.find('.app-brand').exists()).toBe(false)
+      expect(wrapper.get('.management-topbar .location strong').text()).toBe(title)
       expect(wrapper.get('.management-topbar .app-more-trigger').attributes('aria-label')).toBe('更多')
     }
   })

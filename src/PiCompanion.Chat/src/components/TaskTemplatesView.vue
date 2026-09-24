@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { UiButton, UiInput } from '@/components/ui'
-import AppBrand from '@/components/AppBrand.vue'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { taskTemplateTargetLabel } from '@/utils/taskTemplates'
@@ -70,7 +69,6 @@ function linkedScheduleCount(templateId: string) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
-        <AppBrand />
         <div class="location management-location">
           <strong>{{ t('任务模板') }}</strong>
           <span>{{ t('管理可复用的任务草稿，使用模板会新建任务。') }}</span>

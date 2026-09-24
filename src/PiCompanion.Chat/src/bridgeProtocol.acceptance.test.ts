@@ -31,7 +31,8 @@ describe('desktop bridge protocol contract', () => {
     expect(appSettings).toContain('string? ConversationDetailLevel = "normal"')
     expect(appSettings).toContain('["summary", "normal", "verbose"]')
 
-    // The Vue header owns these actions; the native 52px row and its menu are gone.
+    // Windows owns the app identity; Vue owns task context and the menu without a second native row.
+    expect(mainWindowXaml).toContain('Title="Pi Companion — 智能体对话"')
     expect(mainWindowXaml).not.toContain('Height="52"')
     expect(mainWindowXaml).not.toContain('<Window.Resources>')
     expect(mainWindowXaml).not.toContain('ChatMoreMenu')

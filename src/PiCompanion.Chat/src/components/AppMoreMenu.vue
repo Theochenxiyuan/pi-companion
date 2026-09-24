@@ -33,7 +33,7 @@ function setDetail(level: unknown) {
         :title="t('更多')"
         :aria-expanded="menuOpen"
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>
       </UiButton>
     </template>
     <UiMenuItem @select="emit('toggleMonitor')">{{ t('显示 / 隐藏任务监视器') }}</UiMenuItem>

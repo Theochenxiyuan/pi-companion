@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { UiButton, UiDialog, UiInput, UiMenu, UiMenuItem, UiSelect } from '@/components/ui'
-import AppBrand from '@/components/AppBrand.vue'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
 import type {
   DiscoveredSkill,
@@ -494,7 +493,6 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M9 4v16" /></svg>
         </UiButton>
-        <AppBrand />
         <div class="location management-location">
           <strong>{{ title }}</strong>
           <small>{{ contextDescription }}</small>
