@@ -473,17 +473,20 @@ public partial class MainWindow : Window
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string? messageType = null;
+        string? mcpRequestId = null;
         try
         {
             using var document = JsonDocument.Parse(e.WebMessageAsJson);
             var root = document.RootElement;
             messageType = root.GetProperty("type").GetString();
             var payload = root.TryGetProperty("payload", out var payloadElement) ? payloadElement : default;
+            if (messageType == "McpRequest") mcpRequestId = ReadOptionalString(payload, "requestId");
 
             switch (messageType)
             {
                 case "BridgeReady":
                     CancelPendingSkillImports();
+                    foreach (var pendingLogin in _mcpLogins.Values) pendingLogin.Cancel();
                     _bridgeReady = true;
                     TryRevealChat();
                     if (_piConfiguration.CachedSnapshot is { } cachedPiConfiguration)
@@ -733,6 +736,15 @@ public partial class MainWindow : Window
                 case "SaveSettings":
                     await SaveSettingsAsync(payload);
                     break;
+                case "McpRequest":
+                    await HandleMcpRequestAsync(payload);
+                    break;
+                case "CancelMcpLogin":
+                    CancelMcpLogin(payload);
+                    break;
+                case "SubmitMcpRedirect":
+                    await _mcp.SubmitRedirectAsync(ReadString(payload, "requestId"), ReadString(payload, "redirectUrl"));
+                    break;
                 case "SaveCompanionSettings":
                     SaveCompanionSettings(payload);
                     break;
@@ -914,7 +926,11 @@ public partial class MainWindow : Window
                 PostMessage("DraftLoaded", _draft);
             }
 
-            if (IsSettingsRequest(messageType))
+            if (messageType == "McpRequest")
+            {
+                PostMessage("McpResult", new { requestId = mcpRequestId, succeeded = false, message = exception.Message });
+            }
+            else if (IsSettingsRequest(messageType))
             {
                 PostSettingsAction(exception.Message, false, SettingsOperation(messageType));
             }
@@ -3187,6 +3203,7 @@ public partial class MainWindow : Window
         _bridgeReadyTimer.Stop();
         _bridgeReadyTimer.Tick -= OnBridgeReadyTimeout;
         CancelPendingSkillImports();
+        foreach (var pendingLogin in _mcpLogins.Values) pendingLogin.Cancel();
         DiscardDraft();
         StopLoadingAnimation();
         ChatWebView.Dispose();

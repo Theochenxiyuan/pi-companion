@@ -1,4 +1,49 @@
-export const bridgeProtocolVersion = 65
+export const bridgeProtocolVersion = 67
+
+export type McpScope = 'global' | 'project'
+export interface McpConfig {
+  command?: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+  oauth?: { clientId?: string; clientSecret?: string; callbackPort?: number; callbackUrl?: string; scope?: string; clientName?: string; clientRegistration?: 'dcr' | 'cimd'; authServerMetadataUrl?: string }
+  auth?: { provider: string }
+  description?: string
+  enabled?: boolean
+  timeout?: number
+  exposure?: 'codemode' | 'deferred' | 'direct' | 'hidden'
+  toolExposure?: Record<string, string>
+  type?: string
+}
+export interface McpServer {
+  name: string
+  scope: McpScope
+  config: McpConfig
+  state: 'unchecked' | 'connected' | 'disabled' | 'untrusted' | 'overridden' | 'needs-auth' | 'failed'
+  tools: Array<{ name: string; description: string }>
+  error: string | null
+  isOverride?: boolean
+  inherited?: boolean
+  overrideConfig?: McpConfig | null
+}
+export interface McpSnapshot {
+  servers: McpServer[]
+  globalRevision: string
+  projectRevision: string | null
+  projectTrusted: boolean
+}
+export interface McpResult {
+  requestId: string
+  workspaceId: string | null
+  action: string
+  succeeded: boolean
+  canceled?: boolean
+  snapshot?: McpSnapshot
+  message: string
+}
+export interface McpLoginProgress { requestId: string; phase: 'waiting' }
 
 export type AiSummaryStatus = 'NotRequested' | 'Generating' | 'Available' | 'Failed' | 'Canceled'
 

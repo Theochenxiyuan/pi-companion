@@ -22,6 +22,12 @@ const displayTitle = computed(() => {
   if (toolName === 'ask_user') return t('向用户提问')
   if (toolName === 'list_available_skills') return t('列出可用技能')
   if (toolName === 'create_task_template') return t('创建任务模板')
+  if (toolName === 'codemode') return t('批量操作')
+  if (toolName === 'tool_search') return t('查找工具')
+  if (toolName.startsWith('mcp__')) {
+    const [, server, ...tool] = props.block.title.trim().split('__')
+    return `${server} · ${tool.join('__')}`
+  }
   return props.block.title
 })
 

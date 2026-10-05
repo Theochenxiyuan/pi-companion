@@ -21,6 +21,7 @@ if (!$NoBuild) {
 $requiredFiles = @(
     (Join-Path $desktopOutput 'PiCompanion.Desktop.exe'),
     (Join-Path $desktopOutput 'PiExtension\pi-companion.mjs'),
+    (Join-Path $desktopOutput 'PiExtension\pi-mcp.mjs'),
     (Join-Path $desktopOutput 'PiExtension\pi-web-search.mjs'),
     (Join-Path $desktopOutput 'PiExtension\pi-web-search.mjs.LEGAL.txt'),
     (Join-Path $desktopOutput 'THIRD-PARTY-NOTICES.md'),

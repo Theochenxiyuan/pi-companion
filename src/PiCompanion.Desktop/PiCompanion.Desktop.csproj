@@ -24,6 +24,9 @@
     <Content Include="..\PiCompanion.Extension\pi-settings.mjs"
              Link="PiExtension\pi-settings.mjs"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\PiCompanion.Extension\pi-mcp.mjs"
+             Link="PiExtension\pi-mcp.mjs"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\PiCompanion.Extension\pi-models-config.mjs"
              Link="PiExtension\pi-models-config.mjs"
              CopyToOutputDirectory="PreserveNewest" />
@@ -41,6 +44,7 @@
     <Error Condition="!Exists('ChatAssets\index.html')" Text="Agent Chat assets are missing. Run npm ci and npm run build in src/PiCompanion.Chat first." />
     <Error Condition="!Exists('..\PiCompanion.Extension\pi-companion.mjs')" Text="Pi Companion Extension is missing." />
     <Error Condition="!Exists('..\PiCompanion.Extension\pi-settings.mjs')" Text="Pi settings adapter is missing." />
+    <Error Condition="!Exists('..\PiCompanion.Extension\pi-mcp.mjs')" Text="Pi MCP adapter is missing." />
     <Error Condition="!Exists('..\PiCompanion.Extension\pi-models-config.mjs')" Text="Pi models config adapter is missing." />
     <Error Condition="!Exists('..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs')" Text="Bundled Web Search Extension is missing. Run npm ci and npm run build in src/PiCompanion.WebSearchExtension first." />
     <Error Condition="!Exists('..\PiCompanion.WebSearchExtension\dist\pi-web-search.mjs.LEGAL.txt')" Text="Bundled Web Search Extension legal notices are missing." />

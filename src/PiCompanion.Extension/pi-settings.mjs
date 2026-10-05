@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promis
 import { randomUUID } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { findPackageJSON } from 'node:module'
 import {
   applyDeveloperRoleCapabilities,
   computeModelsConfigRevision,
@@ -25,6 +26,8 @@ const distDirectory = basename(piEntryDirectory) === 'bundle'
   ? dirname(piEntryDirectory)
   : piEntryDirectory
 const { VERSION, getAgentDir } = await import(pathToFileURL(join(distDirectory, 'config.js')).href)
+const piAiPackage = findPackageJSON('@earendil-works/pi-ai', pathToFileURL(piEntry))
+const { getSupportedThinkingLevels } = await import(pathToFileURL(join(dirname(piAiPackage), 'dist', 'index.js')).href)
 const { ModelRuntime } = await import(pathToFileURL(join(distDirectory, 'core', 'model-runtime.js')).href)
 const { SettingsManager } = await import(pathToFileURL(join(distDirectory, 'core', 'settings-manager.js')).href)
 const { AuthStorage } = await import(pathToFileURL(join(distDirectory, 'core', 'auth-storage.js')).href)
@@ -39,15 +42,21 @@ let settingsManager = SettingsManager.create(process.cwd(), agentDir)
 let streamedResult = false
 if (input.action === 'login-oauth') {
   const providerId = requireString(input.providerId, 'providerId')
-  const runtime = await createRuntime(true)
+  const runtime = await createRuntime(false)
   const provider = runtime.getProvider(providerId)
   if (!provider?.auth?.oauth) throw new Error(`Provider does not support OAuth authentication: ${providerId}`)
+  const deviceId = providerId === 'openai' ? settingsManager.getOrCreateDeviceId() : undefined
+  if (deviceId) {
+    await settingsManager.flush()
+    const errors = settingsManager.drainErrors()
+    if (errors.length > 0) throw errors[0].error ?? new Error('Pi settings write failed.')
+  }
   await runtime.login(providerId, 'oauth', {
     notify(event) {
       process.stdout.write(`${JSON.stringify({ kind: 'event', event })}\n`)
     },
     prompt: prompt => handleGuiOAuthPrompt(providerId, prompt),
-  })
+  }, { getDeviceId: () => deviceId })
   process.stdout.write(`${JSON.stringify({ kind: 'result', snapshot: await createSnapshot() })}\n`)
   streamedResult = true
 } else if (input.action === 'save-api-key') {
@@ -122,7 +131,7 @@ function getWebSearchSupport(model, builtInProviderIds) {
         'mimo-v2.6-pro-ultraspeed',
       ].includes(model.id)) return 'native'
   if (model.provider === 'openai' && model.api === 'openai-responses') return 'native'
-  if (model.provider === 'azure-openai-responses' && model.api === 'azure-openai-responses') return 'native'
+  if (model.provider === 'azure' && model.api === 'azure-openai-responses') return 'native'
   if (model.provider === 'google' && model.api === 'google-generative-ai') return 'native'
   if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'native'
   if (model.provider === 'openai-codex' && model.api === 'openai-codex-responses') return 'native'
@@ -137,7 +146,7 @@ function getProviderCapabilities(providerId, builtInProviderIds) {
   return [
     'openai',
     'openai-codex',
-    'azure-openai-responses',
+    'azure',
     'google',
     'anthropic',
     'xai',
@@ -205,7 +214,7 @@ async function createSnapshot(refreshModels = false) {
       reasoning: model.reasoning,
       contextWindow: model.contextWindow,
       input: model.input,
-      thinkingLevels: getThinkingLevels(model),
+      thinkingLevels: getSupportedThinkingLevels(model),
       api: model.api,
       webSearchSupport: getWebSearchSupport(model, builtInProviderIds),
     }))
@@ -631,15 +640,6 @@ async function handleGuiOAuthPrompt(providerId, prompt) {
     })
   }
   throw new Error(`OAuth login requires interactive input that is not supported in the GUI yet: ${prompt.message}`)
-}
-
-function getThinkingLevels(model) {
-  if (!model.reasoning) return ['off']
-  const levels = ['off', 'minimal', 'low', 'medium', 'high']
-  for (const level of ['xhigh', 'max']) {
-    if (model.thinkingLevelMap?.[level] != null) levels.push(level)
-  }
-  return levels.filter(level => model.thinkingLevelMap?.[level] !== null)
 }
 
 function requireString(value, name) {

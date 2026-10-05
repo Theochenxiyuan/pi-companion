@@ -10,6 +10,7 @@ const startCountFile = path.join(sessionDirectory, 'fake-start-count.txt')
 const startCount = fs.existsSync(startCountFile) ? Number.parseInt(fs.readFileSync(startCountFile, 'utf8'), 10) || 0 : 0
 fs.writeFileSync(startCountFile, String(startCount + 1), 'utf8')
 fs.writeFileSync(path.join(sessionDirectory, 'fake-args.json'), JSON.stringify(args), 'utf8')
+fs.writeFileSync(path.join(sessionDirectory, 'fake-tools.txt'), process.env.PI_COMPANION_ACTIVE_TOOLS ?? '', 'utf8')
 const sessionFile = path.join(sessionDirectory, 'fake-session.jsonl')
 fs.writeFileSync(sessionFile, '{"type":"session","id":"fake-session"}\n', 'utf8')
 let streaming = false
@@ -95,7 +96,11 @@ input.on('line', (line) => {
       )
       abortMode = command.message.includes('wait-for-abort')
       ignoreAbortResponse = command.message.includes('ignore-abort-response')
-      response(command)
+      if (command.message.includes('handled-input')) {
+        response(command, true, { disposition: 'handled' })
+        break
+      }
+      response(command, true, { disposition: 'started' })
       streaming = true
       send({ type: 'agent_start' })
       if (command.message.includes('permission-flow')) {
@@ -202,7 +207,13 @@ input.on('line', (line) => {
         send({ type: 'message_end', message })
         streaming = false
         send({ type: 'agent_end', messages: [message] })
-        if (!command.message.includes('legacy-no-settled')) {
+        if (command.message.includes('delayed-settlement')) {
+          setTimeout(() => {
+            streaming = true
+            send({ type: 'agent_start' })
+            settle('最终回答')
+          }, 800)
+        } else {
           send({ type: 'agent_settled' })
         }
         if (command.message.includes('seed-reconcile')) injectRecoveredEntryAfterRead = true
@@ -243,6 +254,7 @@ input.on('line', (line) => {
         type: 'agent_end',
         messages: [{ role: 'assistant', content: [], stopReason: 'aborted' }],
       })
+      send({ type: 'agent_settled' })
       break
     case 'clear_queue': {
       const steering = steeringQueue.splice(0, steeringQueue.length)
@@ -252,13 +264,21 @@ input.on('line', (line) => {
       break
     }
     case 'steer':
+      if (command.message.includes('handled-input')) {
+        response(command, true, { disposition: 'handled' })
+        break
+      }
       steeringQueue.push(command.message)
-      response(command)
+      response(command, true, { disposition: 'queued' })
       send({ type: 'queue_update', steering: steeringQueue, followUp: followUpQueue })
       break
     case 'follow_up':
+      if (command.message.includes('handled-input')) {
+        response(command, true, { disposition: 'handled' })
+        break
+      }
       followUpQueue.push(command.message)
-      response(command)
+      response(command, true, { disposition: 'queued' })
       send({ type: 'queue_update', steering: steeringQueue, followUp: followUpQueue })
       break
     case 'abort_retry':

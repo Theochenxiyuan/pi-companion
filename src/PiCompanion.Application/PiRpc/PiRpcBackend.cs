@@ -586,7 +586,12 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 "prompt-submitting",
                 "Pi Session 准备完成",
                 "正在提交任务");
-            await SendCommandAsync(context, promptCommand, cancellationToken).ConfigureAwait(false);
+            var response = await SendCommandAsync(context, promptCommand, cancellationToken).ConfigureAwait(false);
+            if (GetNestedString(response, "data", "disposition") == "handled" &&
+                !context.AgentStarted && context.TrySetTerminal())
+            {
+                await CompleteTerminalRunAsync(context, [], "input-handled").ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -752,7 +757,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 context,
                 new Dictionary<string, object?> { ["type"] = "clear_queue" },
                 cancellationToken).ConfigureAwait(false);
-            context.PendingMessages = 0;
         }
         catch (Exception) when (context.AbortRequested)
         {
@@ -1907,12 +1911,16 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 "当前模型支持自带网络搜索，但应用随附的 Web Search Extension 缺失。",
                 _webSearchExtensionPath);
         }
-        startInfo.ArgumentList.Add("--tools");
         var tools = request.ScopeKind == TaskScopeKind.GeneralChat
             ? "read,grep,find,ls,edit,write,ask_user,list_available_skills,publish_artifact,create_task_template"
             : "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template";
-        startInfo.ArgumentList.Add(enableWebSearchTool ? $"{tools},web_search" : tools);
+        startInfo.Environment["PI_COMPANION_ACTIVE_TOOLS"] = enableWebSearchTool ? $"{tools},web_search" : tools;
         startInfo.ArgumentList.Add("--no-extensions");
+        foreach (var builtin in new[] { "builtin:mcp", "builtin:tool-search", "builtin:codemode" })
+        {
+            startInfo.ArgumentList.Add("--extension");
+            startInfo.ArgumentList.Add(builtin);
+        }
         startInfo.ArgumentList.Add("--extension");
         startInfo.ArgumentList.Add(_extensionPath!);
         if (loadWebSearchExtension)
@@ -1959,7 +1967,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         var context = RequireCurrent(runId);
-        await SendCommandAsync(
+        var response = await SendCommandAsync(
             context,
             new Dictionary<string, object?>
             {
@@ -1967,17 +1975,20 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 ["message"] = message,
             },
             cancellationToken).ConfigureAwait(false);
+        var disposition = GetNestedString(response, "data", "disposition")
+            ?? throw new InvalidOperationException("Pi 未返回输入处理状态。");
         var delivery = command == "steer" ? "steer" : "follow_up";
         Emit(
             context,
             CompanionRunEventKind.UserMessageAdded,
             context.CurrentStatus,
             message,
-            delivery == "steer" ? "已调整 Agent 方向" : "已添加后续任务",
+            disposition == "handled" ? "输入已处理" : delivery == "steer" ? "已调整 Agent 方向" : "已添加后续任务",
             new Dictionary<string, string>
             {
                 ["message"] = message,
                 ["delivery"] = delivery,
+                ["disposition"] = disposition,
             });
     }
 
@@ -2203,10 +2214,8 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             case "agent_end":
                 context.HasAgentError |= HasAgentError(root);
                 context.AgentErrorMessage = GetAgentErrorMessage(root) ?? context.AgentErrorMessage;
-                _ = FinalizeAfterAgentEndAsync(context, context.Generation);
                 break;
             case "agent_settled":
-                context.MarkSettledEventReceived();
                 _ = FinalizeAfterAgentSettledAsync(context, context.Generation);
                 break;
             case "message_start":
@@ -2262,13 +2271,12 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 var followUpMessages = ReadStringArray(root, "followUp");
                 var steering = steeringMessages.Count;
                 var followUp = followUpMessages.Count;
-                context.PendingMessages = steering + followUp;
                 Emit(
                     context,
                     CompanionRunEventKind.QueueChanged,
                     context.CurrentStatus,
                     $"方向调整 {steering} 条，后续任务 {followUp} 条",
-                    context.PendingMessages == 0 ? "消息队列为空" : "消息已排队",
+                    steering + followUp == 0 ? "消息队列为空" : "消息已排队",
                     new Dictionary<string, string>
                     {
                         ["steeringCount"] = steering.ToString(),
@@ -2631,49 +2639,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             prompt,
             isApproval ? "等待授权" : "等待回答",
             payload);
-    }
-
-    private async Task FinalizeAfterAgentEndAsync(RunContext context, long generation)
-    {
-        try
-        {
-            await Task.Delay(500, context.Lifetime.Token).ConfigureAwait(false);
-            if (!context.IsGeneration(generation) || context.IsTerminal || context.SettledEventReceived)
-            {
-                return;
-            }
-
-            var state = await SendCommandAsync(
-                context,
-                new Dictionary<string, object?> { ["type"] = "get_state" },
-                context.Lifetime.Token).ConfigureAwait(false);
-            if (!state.TryGetProperty("data", out var data))
-            {
-                return;
-            }
-
-            var isStreaming = data.TryGetProperty("isStreaming", out var streaming) && streaming.GetBoolean();
-            var pending = data.TryGetProperty("pendingMessageCount", out var pendingElement)
-                ? pendingElement.GetInt32()
-                : context.PendingMessages;
-            if (!context.IsGeneration(generation) || isStreaming || pending > 0 || context.SettledEventReceived || !context.TrySetTerminal())
-            {
-                return;
-            }
-
-            var terminalPayload = ReadSessionPayload(data);
-            await CompleteTerminalRunAsync(context, terminalPayload, "agent-end-state-fallback").ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (context.ExpectedStop)
-        {
-        }
-        catch (Exception exception)
-        {
-            if (!context.IsTerminal)
-            {
-                FailRun(context, $"确认 Pi Run 完成状态失败：{exception.Message}", "settle-check-error");
-            }
-        }
     }
 
     private async Task FinalizeAfterAgentSettledAsync(RunContext context, long generation)
@@ -3427,6 +3392,10 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         {
             payload["toolCallId"] = toolCallId;
         }
+        if (GetOptionalString(root, "parentToolCallId") is { Length: > 0 } parentToolCallId)
+        {
+            payload["parentToolCallId"] = parentToolCallId;
+        }
 
         if (root.TryGetProperty("args", out var args))
         {
@@ -3631,7 +3600,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     private sealed class RunContext
     {
         private int _terminal;
-        private int _settledEventReceived;
         private int _autoRetryActive;
         private int _retryAbortRequested;
         private int _status = (int)RunStatus.Draft;
@@ -3673,7 +3641,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         public HashSet<string> ResolvingInteractionIds { get; } = new(StringComparer.Ordinal);
         public long RequestId;
         public long Sequence;
-        public int PendingMessages;
         public bool AgentStarted { get; set; }
         public bool HasAgentError { get; set; }
         public string? AgentErrorMessage { get; set; }
@@ -3681,7 +3648,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         public bool ExpectedStop { get; set; }
         public bool SuppressEvents { get; set; }
         public bool IsTerminal => Volatile.Read(ref _terminal) != 0;
-        public bool SettledEventReceived => Volatile.Read(ref _settledEventReceived) != 0;
         public bool AutoRetryActive => Volatile.Read(ref _autoRetryActive) != 0;
         public long Generation => Volatile.Read(ref _generation);
         public Dictionary<string, string> SessionPayload { get; set; } = [];
@@ -3693,8 +3659,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         }
 
         public bool TrySetTerminal() => Interlocked.Exchange(ref _terminal, 1) == 0;
-
-        public void MarkSettledEventReceived() => Volatile.Write(ref _settledEventReceived, 1);
 
         public void MarkAutoRetryStarted()
         {
@@ -3731,7 +3695,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             }
 
             Sequence = request.InitialSequence;
-            PendingMessages = 0;
             AgentStarted = false;
             HasAgentError = false;
             AgentErrorMessage = null;
@@ -3739,7 +3702,6 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             ExpectedStop = false;
             SuppressEvents = false;
             Volatile.Write(ref _terminal, 0);
-            Volatile.Write(ref _settledEventReceived, 0);
             Volatile.Write(ref _autoRetryActive, 0);
             Volatile.Write(ref _retryAbortRequested, 0);
             Volatile.Write(ref _status, (int)RunStatus.Draft);

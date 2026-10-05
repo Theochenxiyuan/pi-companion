@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { UiButton, UiDialog, UiInput, UiSelect, UiSwitch } from '@/components/ui'
+import McpSettings from './McpSettings.vue'
 import type { UiSelectOption } from '@/components/ui/UiSelect.vue'
 import { coerceThinkingLevel } from '@/utils/thinkingLevels'
 import { useI18n } from '@/i18n'
@@ -13,9 +14,12 @@ import type {
   SettingsActionCompleted,
   SettingsSnapshot,
   TaskHistoryEntry,
+  WorkspaceHistoryEntry,
+  McpResult,
+  McpLoginProgress,
 } from '@/types/bridge'
 
-type SettingsTab = 'general' | 'notifications' | 'monitor' | 'tasks' | 'workspace' | 'skills' | 'agent' | 'providers' | 'data' | 'recycle-bin'
+type SettingsTab = 'general' | 'notifications' | 'monitor' | 'tasks' | 'workspace' | 'skills' | 'agent' | 'providers' | 'mcp' | 'data' | 'recycle-bin'
 type CustomProviderDraft = PiCustomProviderInfo & { apiKey: string }
 type CustomProviderModel = PiCustomProviderInfo['models'][number]
 type ThinkingMapMode = 'default' | 'custom' | 'unsupported'
@@ -25,10 +29,15 @@ const props = withDefaults(defineProps<{
   action?: SettingsActionCompleted | null
   oauthLoginProgress?: PiOAuthLoginProgress | null
   recycleBinTasks?: TaskHistoryEntry[]
+  workspaces?: WorkspaceHistoryEntry[]
+  activeWorkspaceId?: string
+  mcpResult?: McpResult | null
+  mcpLoginProgress?: McpLoginProgress | null
 }>(), {
   action: null,
   oauthLoginProgress: null,
   recycleBinTasks: () => [],
+  workspaces: () => [],
 })
 
 const emit = defineEmits<{
@@ -44,6 +53,10 @@ const emit = defineEmits<{
   deletePiCustomProvider: [providerId: string, modelsConfigRevision: string | null]
   openPiLogin: [providerId: string]
   cancelPiLogin: [providerId: string]
+  mcpRequest: [payload: Record<string, unknown>]
+  cancelMcpLogin: [requestId: string]
+  submitMcpRedirect: [requestId: string, redirectUrl: string]
+  trustMcpWorkspace: [workspaceId: string]
   openDataDirectory: []
   openLogDirectory: []
   exportDiagnostics: []
@@ -90,6 +103,7 @@ const tabGroups = computed<Array<{
     tabs: [
       { id: 'agent', label: 'Agent', hint: t('模型 推理 压缩 重试 权限 Runtime') },
       { id: 'providers', label: 'Provider', hint: t('账号 API Key OAuth 登录 Pi') },
+      { id: 'mcp', label: 'MCP', hint: t('服务 连接 登录 工具') },
     ],
   },
 ])
@@ -1192,6 +1206,15 @@ function authLabel(provider: PiProviderInfo) {
             </section>
           </template>
 
+          <McpSettings
+            v-else-if="activeTab === 'mcp'"
+            :workspaces="workspaces" :active-workspace-id="activeWorkspaceId"
+            :result="mcpResult" :login-progress="mcpLoginProgress"
+            @request="emit('mcpRequest', $event)"
+            @cancel-login="emit('cancelMcpLogin', $event)"
+            @submit-redirect="(requestId, redirectUrl) => emit('submitMcpRedirect', requestId, redirectUrl)"
+            @trust-workspace="emit('trustMcpWorkspace', $event)"
+          />
           <template v-else-if="activeTab === 'providers'">
             <section class="provider-layout">
               <div class="provider-list">

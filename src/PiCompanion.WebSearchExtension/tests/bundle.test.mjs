@@ -41,10 +41,13 @@ test('only approved official providers advertise bundled native search', async (
     id: 'gpt-5.6',
   }), 'native')
   assert.equal(extension.getPiCompanionWebSearchSupport({
-    provider: 'azure-openai-responses',
+    provider: 'azure',
     api: 'azure-openai-responses',
     id: 'gpt-5.4',
   }), 'native')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'azure', api: 'openai-completions', id: 'deepseek-v4-pro',
+  }), 'none')
   assert.equal(extension.getPiCompanionWebSearchSupport({
     provider: 'xai',
     api: 'openai-responses',

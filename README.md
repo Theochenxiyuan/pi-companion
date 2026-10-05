@@ -38,6 +38,7 @@ Set-Location pi-companion
 - 创建、固定和复用任务模板；Agent 可读取当前上下文可见的模板，并在用户单次确认后创建带来源记录的模板；套用模板只填写任务草稿，由用户确认后发送。
 - 创建单次或周期定时任务；自定义任务可从模板快速填入，也可关联固定目标模板并在每次触发时使用其最新版本；Agent 可在逐次确认后为当前工作区或 Direct Chat 创建计划。
 - 管理模型 Provider、默认模型、推理等级、上下文压缩和重试策略。
+- 在设置的 MCP 页面管理个人或工作区服务，支持本地命令、远程地址、配置导入、浏览器登录和工具调用。
 - 支持只读、标准访问和按任务开启的完全访问权限。
 - 支持简体中文和英语界面。
 
@@ -45,7 +46,7 @@ Set-Location pi-companion
 
 ## 项目状态
 
-当前代码覆盖桌面外壳、Agent Chat、任务持久化、多任务调度、定时任务、工作区与 Git 浏览、Provider 配置、技能管理、任务模板、Explorer Command 和应用私有 Web Search Extension。
+当前代码覆盖桌面外壳、Agent Chat、任务持久化、多任务调度、定时任务、工作区与 Git 浏览、Provider 配置、MCP 服务管理、技能管理、任务模板、Explorer Command 和应用私有 Web Search Extension。
 
 尚未提供：
 
@@ -60,7 +61,7 @@ Set-Location pi-companion
 - Node.js 24 和 npm 11；
 - Visual Studio 2022 Build Tools，并安装 x64 C++ 工具链；
 - Microsoft Edge WebView2 Runtime；
-- 开发运行时需要 Pi RPC 0.87.0 Runtime，以及所选模型服务的有效账号或 API Key。
+- 开发运行时需要 Pi RPC 1.0.3 Runtime，以及所选模型服务的有效账号或 API Key。
 
 依赖版本由 `global.json`、npm lockfile 和 NuGet lockfile 固定。
 

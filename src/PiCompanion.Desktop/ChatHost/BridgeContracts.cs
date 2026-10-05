@@ -13,7 +13,7 @@ namespace PiCompanion.Desktop.ChatHost;
 
 internal static class BridgeContracts
 {
-    public const int ProtocolVersion = 65;
+    public const int ProtocolVersion = 67;
 
     public static InitializeSnapshotDto CreateSnapshot(
         TaskProjection? projection,
@@ -59,7 +59,7 @@ internal static class BridgeContracts
             "independent-workspaces", "workspace-new-task",
             "skill-native-discovery", "skill-content-fingerprints", "skill-pi-removal",
             "skill-local-direct-import", "skill-workspace-trust", "workspace-trust-preflight",
-            "task-templates", "agent-task-template-create", "scheduled-tasks", "scheduled-task-template-link",
+            "task-templates", "agent-task-template-create", "scheduled-tasks", "scheduled-task-template-link", "mcp",
         });
 
     public static TaskTemplateDto CreateTaskTemplate(TaskTemplate template) => new(

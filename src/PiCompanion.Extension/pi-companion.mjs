@@ -17,6 +17,7 @@ const writeTools = new Set(["edit", "write"]);
 const readOnlyTools = new Set([
 	"read", "grep", "find", "ls", "ask_user", "list_available_skills", "web_search",
 	"list_task_templates", "get_task_template", "list_scheduled_tasks",
+	"codemode", "tool_search", "list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource",
 ]);
 const companionMutationTools = new Set(["create_task_template", "create_scheduled_task"]);
 const permissionModes = new Set(["read-only", "standard", "full-access"]);
@@ -174,6 +175,10 @@ function describePermission(toolName, input, target, workingDirectory, token) {
 	}
 	if (writeTools.has(toolName)) {
 		return `${permissionMarker}\n${toolName === "write" ? "覆盖或敏感写入" : "敏感文件修改"}\n\n目标：${target}`;
+	}
+	if (toolName.startsWith("mcp__")) {
+		const [, server, ...tool] = toolName.split("__");
+		return `${permissionMarker}\n${uiText("服务操作请求", "Service operation request")}\n\n${server} · ${tool.join("__")}\n\n${JSON.stringify(input, null, 2)}`;
 	}
 	return `${permissionMarker}\n自定义工具请求\n\n工具：${toolName}`;
 }
@@ -336,6 +341,7 @@ export function classifyToolCall(
 	const toolName = String(event.toolName ?? "");
 	const input = event.input && typeof event.input === "object" ? event.input : {};
 	if (toolName === "ask_user") return { action: "allow", permissionClass: "ask_user", target: undefined };
+	if (["codemode", "tool_search"].includes(toolName)) return { action: "allow", permissionClass: "tool-orchestration", target: undefined };
 	if (toolName === "list_available_skills") {
 		return { action: "allow", permissionClass: "skills:list-effective", target: undefined };
 	}
@@ -538,6 +544,11 @@ export default function piCompanionExtension(pi) {
 	const backupDirectory = process.env.PI_COMPANION_BACKUP_DIRECTORY || "";
 	const grantDirectory = process.env.PI_COMPANION_GRANT_DIRECTORY || "";
 	const artifactDirectory = process.env.PI_COMPANION_ARTIFACT_DIRECTORY || "";
+	let permissionQueue = Promise.resolve();
+	pi.on("session_start", () => {
+		const tools = process.env.PI_COMPANION_ACTIVE_TOOLS;
+		if (tools) pi.setActiveTools(tools.split(",").filter(Boolean));
+	});
 
 	pi.registerTool({
 		name: "list_available_skills",
@@ -948,11 +959,14 @@ export default function piCompanionExtension(pi) {
 		const standardOutsideRequest = standardAccess &&
 			pathTools.has(event.toolName) &&
 			decision.permissionClass.includes(":outside-workspace:");
-		if (runtimeContext.scopeKind === "GeneralChat" && event.toolName === "bash") {
+		if (runtimeContext.scopeKind === "GeneralChat" && ["bash", "powershell"].includes(event.toolName)) {
 			return { block: true, reason: "General Chat 的隔离空间不允许执行 Shell 命令。" };
 		}
+		const mcpReadOnly = event.toolName.startsWith("mcp__") &&
+			pi.getAllTools().find(tool => tool.name === event.toolName)?.annotations?.readOnlyHint === true;
 		if (runtimeContext.permissionMode === "read-only" &&
 			!readOnlyTools.has(event.toolName) &&
+			!mcpReadOnly &&
 			!companionMutationTools.has(event.toolName)) {
 			return { block: true, reason: "Pi Companion 当前使用只读权限模式。" };
 		}
@@ -997,7 +1011,14 @@ export default function piCompanionExtension(pi) {
 					};
 				}
 			}
-			const selected = await ctx.ui.select(
+			let releasePermission;
+			const previousPermission = permissionQueue;
+			permissionQueue = new Promise(resolve => { releasePermission = resolve; });
+			await previousPermission;
+			let selected;
+			try {
+			if (ctx.signal?.aborted) return { block: true, reason: uiText("操作已取消。", "Operation canceled.") };
+			selected = await ctx.ui.select(
 				describePermission(
 					event.toolName,
 					permissionInput,
@@ -1008,6 +1029,7 @@ export default function piCompanionExtension(pi) {
 					? [permissionChoices.allowOnce, permissionChoices.deny]
 					: [permissionChoices.allowOnce, permissionChoices.allowTask, permissionChoices.deny],
 			);
+			} finally { releasePermission(); }
 			if (selected === permissionChoices.allowTask) {
 				taskGrants.add(decision.permissionClass);
 				saveTaskGrants(grantDirectory, runtimeContext.taskId, taskGrants);

@@ -720,11 +720,10 @@ public sealed class PiRpcBackendTests
             Assert.Contains("--extension", arguments);
             Assert.DoesNotContain("--no-skills", arguments);
             Assert.DoesNotContain("--skill", arguments);
-            var toolsIndex = Array.IndexOf(arguments, "--tools");
-            Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
+            Assert.DoesNotContain("--tools", arguments);
             Assert.Equal(
                 "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template",
-                arguments[toolsIndex + 1]);
+                File.ReadAllText(Path.Combine(root, "sessions", "fake-tools.txt")));
         }
         finally
         {
@@ -891,12 +890,14 @@ public sealed class PiRpcBackendTests
 
             var arguments = JsonSerializer.Deserialize<string[]>(
                 File.ReadAllText(Path.Combine(root, "sessions", "fake-args.json"))) ?? [];
-            var toolsIndex = Array.IndexOf(arguments, "--tools");
-            Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
+            Assert.DoesNotContain("--tools", arguments);
             Assert.Equal(
                 "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template,web_search",
-                arguments[toolsIndex + 1]);
-            Assert.Equal(2, arguments.Count(item => item == "--extension"));
+                File.ReadAllText(Path.Combine(root, "sessions", "fake-tools.txt")));
+            Assert.Equal(5, arguments.Count(item => item == "--extension"));
+            Assert.Contains("builtin:mcp", arguments);
+            Assert.Contains("builtin:tool-search", arguments);
+            Assert.Contains("builtin:codemode", arguments);
             Assert.Contains(webSearchExtension, arguments);
         }
         finally
@@ -929,12 +930,14 @@ public sealed class PiRpcBackendTests
 
             var arguments = JsonSerializer.Deserialize<string[]>(
                 File.ReadAllText(Path.Combine(root, "sessions", "fake-args.json"))) ?? [];
-            var toolsIndex = Array.IndexOf(arguments, "--tools");
-            Assert.True(toolsIndex >= 0 && toolsIndex + 1 < arguments.Length);
+            Assert.DoesNotContain("--tools", arguments);
             Assert.Equal(
                 "read,grep,find,ls,edit,write,bash,ask_user,list_available_skills,create_task_template",
-                arguments[toolsIndex + 1]);
-            Assert.Equal(2, arguments.Count(item => item == "--extension"));
+                File.ReadAllText(Path.Combine(root, "sessions", "fake-tools.txt")));
+            Assert.Equal(5, arguments.Count(item => item == "--extension"));
+            Assert.Contains("builtin:mcp", arguments);
+            Assert.Contains("builtin:tool-search", arguments);
+            Assert.Contains("builtin:codemode", arguments);
             Assert.Contains(webSearchExtension, arguments);
         }
         finally
@@ -1200,27 +1203,89 @@ public sealed class PiRpcBackendTests
     }
 
     [Fact]
-    public async Task StartRunAsync_FallsBackToStateCheckWhenSettledEventIsMissing()
+    public async Task StartRunAsync_WaitsForSettledBoundaryAfterAgentEnd()
     {
         var root = CreateTemporaryDirectory();
         try
         {
             var cancellationToken = TestContext.Current.CancellationToken;
             using var backend = CreateBackend(root);
+            var events = new ConcurrentQueue<CompanionRunEvent>();
             var terminal = new TaskCompletionSource<CompanionRunEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
             backend.EventReceived += runEvent =>
             {
+                events.Enqueue(runEvent);
                 if (runEvent.Kind is CompanionRunEventKind.RunSettled or CompanionRunEventKind.RunFailed)
                 {
                     terminal.TrySetResult(runEvent);
                 }
             };
 
-            await backend.StartRunAsync(CreateRequest(root, "legacy-no-settled"), cancellationToken);
+            await backend.StartRunAsync(CreateRequest(root, "delayed-settlement"), cancellationToken);
             var finalEvent = await terminal.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
 
             Assert.Equal(CompanionRunEventKind.RunSettled, finalEvent.Kind);
-            Assert.Equal("agent-end-state-fallback", finalEvent.Payload["settlementSource"]);
+            Assert.Equal("agent-settled", finalEvent.Payload["settlementSource"]);
+            Assert.Contains(events, item =>
+                item.Kind == CompanionRunEventKind.AssistantMessageCompleted &&
+                item.Payload["finalText"] == "最终回答");
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task StartRunAsync_SettlesHandledInputWithoutWaitingForAgentEvents()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var cancellationToken = TestContext.Current.CancellationToken;
+            using var backend = CreateBackend(root);
+            var events = new ConcurrentQueue<CompanionRunEvent>();
+            backend.EventReceived += events.Enqueue;
+
+            await backend.StartRunAsync(CreateRequest(root, "handled-input"), cancellationToken);
+
+            var terminal = Assert.Single(events, item => item.Kind == CompanionRunEventKind.RunSettled);
+            Assert.Equal(RunStatus.Completed, terminal.Status);
+            Assert.Equal("input-handled", terminal.Payload["settlementSource"]);
+            Assert.DoesNotContain(events, item =>
+                item.Kind == CompanionRunEventKind.RunStarted && item.Status == RunStatus.Running);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("steer")]
+    [InlineData("follow_up")]
+    public async Task QueuedInput_ReportsWhenAnExtensionHandlesTheMessage(string command)
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var cancellationToken = TestContext.Current.CancellationToken;
+            using var backend = CreateBackend(root);
+            var events = new ConcurrentQueue<CompanionRunEvent>();
+            backend.EventReceived += events.Enqueue;
+            var request = CreateRequest(root, "retry-wait");
+            await backend.StartRunAsync(request, cancellationToken);
+
+            if (command == "steer")
+                await backend.SteerAsync(request.RunId, "handled-input", cancellationToken);
+            else
+                await backend.FollowUpAsync(request.RunId, "handled-input", cancellationToken);
+
+            var added = Assert.Single(events, item => item.Kind == CompanionRunEventKind.UserMessageAdded);
+            Assert.Equal("handled", added.Payload["disposition"]);
+            Assert.Equal(command, added.Payload["delivery"]);
+            Assert.Equal("输入已处理", added.Payload["activityStatus"]);
+            await backend.AbortAsync(request.RunId, cancellationToken);
         }
         finally
         {

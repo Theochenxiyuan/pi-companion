@@ -141,7 +141,7 @@ describe('stage 7 settings modal', () => {
     expect(wrapper.get('[role="dialog"]').attributes('aria-modal')).toBe('true')
     expect(wrapper.findAll('.settings-group-title').map(title => title.text())).toEqual(['应用', '工作流', '数据', 'PI'])
     expect(wrapper.findAll('.settings-nav button').map(button => button.text())).toEqual([
-      '常规', '通知', '任务监视器', '任务', '工作区', '存储与诊断', '回收站', 'Agent', 'Provider',
+      '常规', '通知', '任务监视器', '任务', '工作区', '存储与诊断', '回收站', 'Agent', 'Provider', 'MCP',
     ])
     const monitorTab = wrapper.findAll('.settings-nav button').find(button => button.text() === '任务监视器')!
     expect(monitorTab.find('svg path').attributes('d')).toBe('M3 12h4l2.2-5 4.2 10 2.2-5H21')

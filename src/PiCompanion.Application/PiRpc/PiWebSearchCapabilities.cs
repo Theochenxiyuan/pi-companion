@@ -39,7 +39,7 @@ public static class PiWebSearchCapabilities
         {
             "openai" or
             "openai-codex" or
-            "azure-openai-responses" or
+            "azure" or
             "google" or
             "anthropic" or
             "xai" or

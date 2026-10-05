@@ -19,6 +19,8 @@ import type {
   PiCustomProviderInfo,
   PiThinkingLevel,
   PiOAuthLoginProgress,
+  McpResult,
+  McpLoginProgress,
   PermissionMode,
   SettingsActionCompleted,
   SettingsSnapshot,
@@ -189,6 +191,19 @@ if (startupTheme === 'dark' || startupTheme === 'light' || startupTheme === 'sys
 }
 const settingsAction = ref<SettingsActionCompleted | null>(null)
 const piOAuthLoginProgress = ref<PiOAuthLoginProgress | null>(null)
+const mcpResult = ref<McpResult | null>(null)
+const mcpLoginProgress = ref<McpLoginProgress | null>(null)
+
+function requestMcp(payload: Record<string, unknown>) {
+  if (postBridgeMessage('McpRequest', payload)) return
+  mcpResult.value = {
+    requestId: String(payload.requestId), workspaceId: payload.workspaceId as string | null,
+    action: String(payload.action), succeeded: payload.action === 'list',
+    snapshot: payload.action === 'list'
+      ? { servers: [], globalRevision: '', projectRevision: null, projectTrusted: false } : undefined,
+    message: t('无法连接，请稍后重试。'),
+  }
+}
 const systemThemeMedia = typeof window.matchMedia === 'function'
   ? window.matchMedia(systemThemeQuery)
   : null
@@ -1551,6 +1566,12 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
       selectedLocalMessageAttachments.value = selection.attachments
     }
     return
+  } else if (message.type === 'McpResult') {
+    mcpResult.value = message.payload as McpResult
+    return
+  } else if (message.type === 'McpLoginProgress') {
+    mcpLoginProgress.value = message.payload as McpLoginProgress
+    return
   } else if (message.type === 'PiOAuthLoginProgress') {
     const progress = message.payload as PiOAuthLoginProgress
     piOAuthLoginProgress.value = progress.phase === 'idle' ? null : progress
@@ -2593,7 +2614,7 @@ function createPreviewSettingsSnapshot(): SettingsSnapshot {
     },
     pi: {
       available: true,
-      version: '0.87.0',
+      version: '0.99.1',
       runtimePath: 'C:\\PiRuntime\\dist\\bundle\\cli.js',
       defaultModel: 'openai-codex/gpt-5.6-sol',
       defaultThinkingLevel: 'xhigh',
@@ -3245,6 +3266,14 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :action="settingsAction"
       :oauth-login-progress="piOAuthLoginProgress"
       :recycle-bin-tasks="store.recycleBinTasks"
+      :workspaces="store.workspaces"
+      :active-workspace-id="conversationSkillsWorkspace?.id"
+      :mcp-result="mcpResult"
+      :mcp-login-progress="mcpLoginProgress"
+      @mcp-request="requestMcp"
+      @cancel-mcp-login="requestId => postBridgeMessage('CancelMcpLogin', { requestId })"
+      @submit-mcp-redirect="(requestId, redirectUrl) => postBridgeMessage('SubmitMcpRedirect', { requestId, redirectUrl })"
+      @trust-mcp-workspace="requestSkillWorkspaceTrust"
       @close="settingsOpen = false"
       @save-companion="saveCompanionSettings"
       @preview-appearance="previewAppearance"
