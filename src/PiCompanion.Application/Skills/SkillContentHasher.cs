@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,8 +15,41 @@ public static class SkillContentHasher
 {
     private const int MaximumFileCount = 4_096;
     private const long MaximumTotalSize = 128L * 1024 * 1024;
+    private static readonly StringComparer PathComparer =
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private static readonly ConcurrentDictionary<string, CachedFingerprint> Cache = new(PathComparer);
 
+    /// <summary>
+    /// Hashes every file. Use for integrity checks before importing or removing content.
+    /// </summary>
     public static SkillContentFingerprint Inspect(string contentPath, bool isSingleFile)
+    {
+        var (_, files) = CollectFiles(contentPath, isSingleFile);
+        return ComputeFingerprint(files);
+    }
+
+    /// <summary>
+    /// Reuses the previous fingerprint while the file list, sizes and write times are unchanged.
+    /// </summary>
+    public static SkillContentFingerprint InspectCached(string contentPath, bool isSingleFile)
+    {
+        var (fullPath, files) = CollectFiles(contentPath, isSingleFile);
+        var cacheKey = $"{(isSingleFile ? 'f' : 'd')}|{fullPath}";
+        var signature = ComputeMetadataSignature(files);
+        if (Cache.TryGetValue(cacheKey, out var cached) &&
+            string.Equals(cached.Signature, signature, StringComparison.Ordinal))
+        {
+            return cached.Fingerprint;
+        }
+
+        var fingerprint = ComputeFingerprint(files);
+        Cache[cacheKey] = new CachedFingerprint(signature, fingerprint);
+        return fingerprint;
+    }
+
+    private static (string FullPath, IReadOnlyList<ContentFile> Files) CollectFiles(
+        string contentPath,
+        bool isSingleFile)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contentPath);
         var fullPath = Path.GetFullPath(contentPath);
@@ -28,6 +62,18 @@ public static class SkillContentHasher
                 $"技能包含超过 {MaximumFileCount} 个文件，未生成内容指纹。");
         }
 
+        var totalSize = files.Sum(static file => file.Length);
+        if (totalSize > MaximumTotalSize)
+        {
+            throw new InvalidDataException(
+                $"技能内容超过 {MaximumTotalSize / 1024 / 1024} MB，未生成内容指纹。");
+        }
+
+        return (fullPath, files);
+    }
+
+    private static SkillContentFingerprint ComputeFingerprint(IReadOnlyList<ContentFile> files)
+    {
         using var aggregate = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         long totalSize = 0;
         var lastModifiedAt = DateTimeOffset.MinValue;
@@ -65,6 +111,19 @@ public static class SkillContentHasher
             lastModifiedAt);
     }
 
+    private static string ComputeMetadataSignature(IReadOnlyList<ContentFile> files)
+    {
+        using var aggregate = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (var file in files.OrderBy(static item => item.RelativePath, StringComparer.Ordinal))
+        {
+            Append(aggregate, file.RelativePath);
+            Append(aggregate, file.Length.ToString(CultureInfo.InvariantCulture));
+            Append(aggregate, file.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return Convert.ToHexString(aggregate.GetHashAndReset());
+    }
+
     private static IReadOnlyList<ContentFile> InspectSingleFile(string fullPath)
     {
         if (!File.Exists(fullPath))
@@ -74,7 +133,7 @@ public static class SkillContentHasher
 
         var info = new FileInfo(fullPath);
         EnsureOrdinaryFile(info);
-        return [new ContentFile(fullPath, "SKILL.md")];
+        return [new ContentFile(fullPath, "SKILL.md", info.Length, info.LastWriteTimeUtc)];
     }
 
     private static IReadOnlyList<ContentFile> InspectDirectory(string fullPath)
@@ -119,8 +178,16 @@ public static class SkillContentHasher
                 {
                     files.Add(new ContentFile(
                         file.FullName,
-                        Path.GetRelativePath(fullPath, file.FullName).Replace('\\', '/')));
+                        Path.GetRelativePath(fullPath, file.FullName).Replace('\\', '/'),
+                        file.Length,
+                        file.LastWriteTimeUtc));
                 }
+            }
+
+            if (files.Count > MaximumFileCount)
+            {
+                throw new InvalidDataException(
+                    $"技能包含超过 {MaximumFileCount} 个文件，未生成内容指纹。");
             }
         }
 
@@ -149,5 +216,11 @@ public static class SkillContentHasher
         hash.AppendData([0]);
     }
 
-    private sealed record ContentFile(string FullPath, string RelativePath);
+    private sealed record ContentFile(
+        string FullPath,
+        string RelativePath,
+        long Length,
+        DateTime LastWriteTimeUtc);
+
+    private sealed record CachedFingerprint(string Signature, SkillContentFingerprint Fingerprint);
 }

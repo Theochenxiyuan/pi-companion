@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -209,6 +210,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        await LeaveCallerContextAsync();
         if (!Directory.Exists(request.WorkingDirectory))
         {
             throw new DirectoryNotFoundException($"工作目录不存在：{request.WorkingDirectory}");
@@ -365,6 +367,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        await LeaveCallerContextAsync();
         if (!Directory.Exists(request.WorkingDirectory))
         {
             throw new DirectoryNotFoundException($"工作目录不存在：{request.WorkingDirectory}");
@@ -925,6 +928,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             throw new InvalidOperationException("该历史任务没有可恢复的 Pi Session。");
         }
 
+        await LeaveCallerContextAsync();
         var sessionPath = Path.GetFullPath(sourceSessionPath);
         if (!File.Exists(sessionPath))
         {
@@ -1644,6 +1648,10 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         {
         }
     }
+
+    // Runtime startup reads skills, trust state and files synchronously; keep that off the UI thread.
+    private static ConfiguredTaskAwaitable LeaveCallerContextAsync() =>
+        Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
 
     private static async Task StopStaleWarmContextsAsync(IReadOnlyList<RunContext> contexts)
     {

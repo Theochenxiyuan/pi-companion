@@ -671,7 +671,7 @@ public sealed class SkillDiscoveryService
         SkillContentFingerprint? fingerprint = null;
         try
         {
-            fingerprint = SkillContentHasher.Inspect(inspectionPath, isSingleFile);
+            fingerprint = SkillContentHasher.InspectCached(inspectionPath, isSingleFile);
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidDataException)

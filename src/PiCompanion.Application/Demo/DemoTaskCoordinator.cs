@@ -1268,12 +1268,13 @@ public sealed class TaskCoordinator : IDisposable
     {
         try
         {
-            if (scheduled.Projection.ScopeKind == TaskScopeKind.Workspace)
+            if (scheduled.Projection.ScopeKind == TaskScopeKind.Workspace &&
+                _evidenceService is { } evidenceService)
             {
-                _evidenceService?.BeginRun(
+                await Task.Run(() => evidenceService.BeginRun(
                     scheduled.Projection.TaskId,
                     scheduled.Projection.RunId,
-                    scheduled.Projection.WorkingDirectory);
+                    scheduled.Projection.WorkingDirectory)).ConfigureAwait(false);
             }
 
             await _backend.StartRunAsync(

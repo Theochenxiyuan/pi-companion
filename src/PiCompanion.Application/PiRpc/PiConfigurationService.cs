@@ -471,6 +471,7 @@ public sealed class PiConfigurationService
 
     private async Task<PiConfigurationSnapshot> RefreshSnapshotCoreAsync(bool refreshModels)
     {
+        await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         try
         {
             var snapshot = await InvokeAsync(
