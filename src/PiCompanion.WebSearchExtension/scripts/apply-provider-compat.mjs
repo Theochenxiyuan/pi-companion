@@ -5,11 +5,11 @@ import { readFile, writeFile } from 'node:fs/promises'
 const extensionRoot = new URL('../', import.meta.url)
 const packageRoot = new URL('node_modules/pi-web-search/', extensionRoot)
 const manifest = JSON.parse(await readFile(new URL('package.json', packageRoot), 'utf8'))
-if (manifest.version !== '1.6.0') {
-  throw new Error(`Provider compatibility patch requires pi-web-search 1.6.0, received ${manifest.version}.`)
+if (manifest.version !== '1.7.0') {
+  throw new Error(`Provider compatibility patch requires pi-web-search 1.7.0, received ${manifest.version}.`)
 }
 
-const patch = await readFile(new URL('patches/pi-web-search+1.6.0.patch', extensionRoot), 'utf8')
+const patch = await readFile(new URL('patches/pi-web-search+1.7.0.patch', extensionRoot), 'utf8')
 const files = new Map()
 let hunks
 let hunk

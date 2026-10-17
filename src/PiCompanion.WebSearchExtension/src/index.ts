@@ -41,6 +41,7 @@ function getPiCompanionWebSearchIntegration(
   if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'companion-tool'
   if ((model.provider === 'opencode' || model.provider === 'opencode-go') &&
       model.api === 'openai-responses') return 'companion-tool'
+  if (model.provider === 'deepseek' && model.api === 'openai-completions') return 'companion-tool'
   return 'none'
 }
 

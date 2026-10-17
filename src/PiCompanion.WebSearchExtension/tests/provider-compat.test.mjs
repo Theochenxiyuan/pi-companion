@@ -13,8 +13,8 @@ async function fixture(t) {
   await mkdir(join(root, 'scripts'))
   await mkdir(join(root, 'patches'))
   await copyFile(resolve('scripts/apply-provider-compat.mjs'), join(root, 'scripts/apply-provider-compat.mjs'))
-  await copyFile(resolve('patches/pi-web-search+1.6.0.patch'), join(root, 'patches/pi-web-search+1.6.0.patch'))
-  await writeFile(join(root, 'node_modules/pi-web-search/package.json'), JSON.stringify({ version: '1.6.0' }))
+  await copyFile(resolve('patches/pi-web-search+1.7.0.patch'), join(root, 'patches/pi-web-search+1.7.0.patch'))
+  await writeFile(join(root, 'node_modules/pi-web-search/package.json'), JSON.stringify({ version: '1.7.0' }))
   for (const name of ['anthropic', 'auth', 'google', 'openai']) {
     await copyFile(resolve(`node_modules/pi-web-search/src/providers/${name}.ts`), join(providers, `${name}.ts`))
   }
@@ -55,8 +55,8 @@ test('provider source drift aborts before writing any files', async (t) => {
 
 test('provider package upgrades require reviewing the pinned compatibility patch', async (t) => {
   const { root, run } = await fixture(t)
-  await writeFile(join(root, 'node_modules/pi-web-search/package.json'), JSON.stringify({ version: '1.7.0' }))
+  await writeFile(join(root, 'node_modules/pi-web-search/package.json'), JSON.stringify({ version: '1.8.0' }))
   const result = run()
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /requires pi-web-search 1\.6\.0, received 1\.7\.0/u)
+  assert.match(result.stderr, /requires pi-web-search 1\.7\.0, received 1\.8\.0/u)
 })

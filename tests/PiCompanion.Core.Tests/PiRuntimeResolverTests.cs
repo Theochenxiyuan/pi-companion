@@ -2,8 +2,20 @@ using PiCompanion.Application.PiRpc;
 
 namespace PiCompanion.Core.Tests;
 
-public sealed class PiRuntimeResolverTests
+public sealed class PiRuntimeResolverTests : IDisposable
 {
+    public PiRuntimeResolverTests()
+    {
+        // Isolate developer-machine overrides so resolution uses only the
+        // constructor arguments supplied by each test.
+        Environment.SetEnvironmentVariable(PiRuntimeResolver.RuntimePathEnvironmentVariable, null);
+        Environment.SetEnvironmentVariable(PiRuntimeResolver.NodePathEnvironmentVariable, null);
+    }
+
+    public void Dispose()
+    {
+    }
+
     [Fact]
     public void Resolve_UsesExplicitJavaScriptRuntimeAndConfiguredNode()
     {

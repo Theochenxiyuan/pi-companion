@@ -45,7 +45,8 @@ public static class PiWebSearchCapabilities
             "xai" or
             "github-copilot" or
             "opencode" or
-            "opencode-go" => PiWebSearchIntegration.CompanionTool,
+            "opencode-go" or
+            "deepseek" => PiWebSearchIntegration.CompanionTool,
             _ => PiWebSearchIntegration.None,
         };
     }

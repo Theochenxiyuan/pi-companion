@@ -138,6 +138,7 @@ function getWebSearchSupport(model, builtInProviderIds) {
   if (model.provider === 'xai' && model.api === 'openai-responses') return 'native'
   if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'native'
   if (['opencode', 'opencode-go'].includes(model.provider) && model.api === 'openai-responses') return 'native'
+  if (model.provider === 'deepseek' && model.api === 'openai-completions') return 'native'
   return 'none'
 }
 
@@ -154,6 +155,7 @@ function getProviderCapabilities(providerId, builtInProviderIds) {
     'opencode',
     'opencode-go',
     'xiaomi',
+    'deepseek',
   ].includes(providerId)
     ? ['web-search']
     : []

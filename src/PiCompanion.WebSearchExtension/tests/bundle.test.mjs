@@ -14,7 +14,7 @@ test('the private web search extension bundle is self-contained', () => {
   assert.match(bundle, /Web Search/u)
   assert.match(bundle, /web_search/u)
   assert.doesNotMatch(bundle, /from\s+["'](?:pi-web-search|typebox|@earendil-works\/pi-ai|@earendil-works\/pi-coding-agent|@earendil-works\/pi-tui)/u)
-  assert.match(readFileSync(legalPath, 'utf8'), /pi-web-search 1\.6\.0/u)
+  assert.match(readFileSync(legalPath, 'utf8'), /pi-web-search 1\.7\.0/u)
 })
 
 test('only approved official providers advertise bundled native search', async () => {

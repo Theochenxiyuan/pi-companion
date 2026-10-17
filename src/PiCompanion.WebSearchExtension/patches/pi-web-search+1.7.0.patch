@@ -1,5 +1,5 @@
 diff --git a/node_modules/pi-web-search/src/providers/anthropic.ts b/node_modules/pi-web-search/src/providers/anthropic.ts
-index 3a06163..35bf029 100644
+index 0000000..0000000 100644
 --- a/node_modules/pi-web-search/src/providers/anthropic.ts
 +++ b/node_modules/pi-web-search/src/providers/anthropic.ts
 @@ -1,6 +1,6 @@
@@ -7,10 +7,10 @@ index 3a06163..35bf029 100644
  import type { Api, Model } from "@earendil-works/pi-ai";
 -import { getAuth, getProviderSessionHeaders } from "./auth.ts";
 +import { applyProviderHeaders, getAuth, getProviderSessionHeaders } from "./auth.ts";
+ import { getProviderKind } from "./config.ts";
  import { readSseEvents } from "./sse.ts";
  import {
-     applyTextCitations,
-@@ -38,10 +38,8 @@ export async function callAnthropicStream(
+@@ -90,10 +90,8 @@ export async function callAnthropicStream(
          "Content-Type": "application/json",
          "Accept": "text/event-stream",
          "anthropic-version": "2023-06-01",
@@ -23,7 +23,7 @@ index 3a06163..35bf029 100644
      if (auth.apiKey) {
          if (isOAuth) {
 diff --git a/node_modules/pi-web-search/src/providers/auth.ts b/node_modules/pi-web-search/src/providers/auth.ts
-index 704b088..f78aa21 100644
+index 0000000..0000000 100644
 --- a/node_modules/pi-web-search/src/providers/auth.ts
 +++ b/node_modules/pi-web-search/src/providers/auth.ts
 @@ -1,9 +1,9 @@
@@ -76,7 +76,7 @@ index 704b088..f78aa21 100644
  
  function isOpenCodeModel(model: Model<Api>): boolean {
 diff --git a/node_modules/pi-web-search/src/providers/google.ts b/node_modules/pi-web-search/src/providers/google.ts
-index 3a20cdb..50ab5f0 100644
+index 0000000..0000000 100644
 --- a/node_modules/pi-web-search/src/providers/google.ts
 +++ b/node_modules/pi-web-search/src/providers/google.ts
 @@ -2,7 +2,7 @@ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/
@@ -89,7 +89,7 @@ index 3a20cdb..50ab5f0 100644
  import { deriveSources, pushUniqueSearchResult, sanitizeSearchResults, titleFromUrl } from "./results.ts";
  import type { SearchResultDetail, Source, StreamResult } from "./types.ts";
 @@ -106,10 +106,7 @@ export async function callGoogleStream(
-     const req = config.buildRequest(model, body);
+     const req = config.buildRequest(model, body, auth);
  
      // Handle auth
 -    Object.assign(req.headers, getProviderSessionHeaders(model, ctx) || {});
@@ -97,17 +97,17 @@ index 3a20cdb..50ab5f0 100644
 -        Object.assign(req.headers, auth.headers);
 -    }
 +    applyProviderHeaders(req.headers, getProviderSessionHeaders(model, ctx), auth.headers);
-     if (auth.apiKey) {
+     if (auth.apiKey && model.provider !== "antigravity" && model.api !== "antigravity") {
          req.headers["x-goog-api-key"] = auth.apiKey;
      }
 diff --git a/node_modules/pi-web-search/src/providers/openai.ts b/node_modules/pi-web-search/src/providers/openai.ts
-index 6ac7e50..5a181b8 100644
+index 0000000..0000000 100644
 --- a/node_modules/pi-web-search/src/providers/openai.ts
 +++ b/node_modules/pi-web-search/src/providers/openai.ts
 @@ -2,7 +2,7 @@ import type { ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/
  import { clampThinkingLevel, type Api, type Model, type ModelThinkingLevel } from "@earendil-works/pi-ai";
  import { TextDecoder } from "util";
- import { getProviderKind } from "./config.ts";
+ import { getProviderKind, getSearchDialect } from "./config.ts";
 -import { getAuth, getProviderSessionHeaders, type ResolvedAuth } from "./auth.ts";
 +import { applyProviderHeaders, getAuth, getProviderSessionHeaders, type ResolvedAuth } from "./auth.ts";
  import { readSseEvents } from "./sse.ts";
