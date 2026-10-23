@@ -43,7 +43,7 @@ test('settings use the installed Pi model and settings contracts', { timeout: 60
       },
     } }))
     const snapshot = await runSettings(agentDir, { action: 'snapshot' })
-    assert.equal(snapshot.version, '1.3.0')
+    assert.equal(snapshot.version, '1.4.0')
     assert.equal(snapshot.error, null)
     const openai = snapshot.providers.find(provider => provider.id === 'openai')
     assert.equal(openai.supportsApiKey, true)

@@ -7,7 +7,7 @@
 | Extension | 版本 | 来源 | 许可证 | 归属 | 用途 |
 |---|---:|---|---|---|---|
 | Pi Companion Extension | 随应用版本 | 本仓库 `src/PiCompanion.Extension` | 第一方 | Pi Companion | 工作区权限、附件、恢复、交互和文件发布 |
-| Pi 内置 MCP、Tool Search、Code Mode | 1.3.0 | `@earendil-works/pi-coding-agent` | MIT | Pi 贡献者 | MCP 连接、工具发现与批量调用 |
+| Pi 内置 MCP、Tool Search、Code Mode | 1.4.0 | `@earendil-works/pi-coding-agent` | MIT | Pi 贡献者 | MCP 连接、工具发现与批量调用 |
 | Pi Companion Web Search Extension | 随应用版本 | 本仓库 `src/PiCompanion.WebSearchExtension` | 第一方与第三方组合 | Pi Companion、`pi-web-search` 贡献者 | 为受支持模型接入 Provider 原生网络搜索；内含 `pi-web-search` 1.7.0（MIT） |
 
 ## MCP 集成边界
