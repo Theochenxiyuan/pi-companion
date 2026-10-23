@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $packages = Get-AppxPackage |
-    Where-Object { $_.Name -eq 'PiCompanion.Development' }
+    Where-Object { $_.Name -in @('PiCompanion.Development', 'PiCompanion') }
 foreach ($package in $packages) {
     if ($PSCmdlet.ShouldProcess($package.PackageFullName, 'Remove Pi Companion development package')) {
         Remove-AppxPackage -Package $package.PackageFullName

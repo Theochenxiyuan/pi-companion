@@ -62,7 +62,7 @@
                       Lines="Development builds use the locally installed Pi runtime."
                       Overwrite="true" />
   </Target>
-  <Target Name="RemoveDevelopmentRuntimeMarker" AfterTargets="Build" Condition="'$(PiCompanionFormalRelease)' == 'true'">
-    <Delete Files="$(TargetDir)PiCompanion.Development" />
+  <Target Name="RemoveDevelopmentRuntimeMarker" AfterTargets="Build;Publish" Condition="'$(PiCompanionFormalRelease)' == 'true'">
+    <Delete Files="$(TargetDir)PiCompanion.Development;$(PublishDir)PiCompanion.Development" />
   </Target>
 </Project>

@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.5.0-preview)'
+        required: true
+        default: '0.5.0-preview'
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    name: Package and publish release
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build, test, and package release
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ inputs.version }}'
+          } else {
+            '${{ github.ref_name }}'.TrimStart('v', 'V')
+          }
+          .\scripts\package-release.ps1 -Version $version -Configuration Release
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: PiCompanion-Release-Assets
+          path: artifacts/release/*
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $preRelease = if ($tag -match '-') { '--prerelease' } else { '' }
+          $assets = Get-ChildItem -LiteralPath 'artifacts\release' -File | ForEach-Object { $_.FullName }
+          if ($preRelease) {
+            gh release create $tag @assets --title "Pi Companion $tag" --generate-notes --prerelease
+          } else {
+            gh release create $tag @assets --title "Pi Companion $tag" --generate-notes
+          }

@@ -47,8 +47,15 @@ public partial class App : System.Windows.Application
         _instanceMutex = new Mutex(true, InstanceMutexName, out var ownsMutex);
         if (!ownsMutex)
         {
-            if (initialActivation is not null &&
-                !ActivationPipeClient.TrySend(initialActivation, TimeSpan.FromSeconds(2)))
+            var activationToForward = initialActivation;
+            if (activationToForward is null &&
+                !e.Args.Contains("--background", StringComparer.OrdinalIgnoreCase))
+            {
+                activationToForward = ExplorerActivationFactory.CreateWindowActivation();
+            }
+
+            if (activationToForward is not null &&
+                !ActivationPipeClient.TrySend(activationToForward, TimeSpan.FromSeconds(2)))
             {
                 WriteLocalLog("activation-forwarding-error.log", "现有实例未在超时内接受 Explorer 激活请求。");
             }

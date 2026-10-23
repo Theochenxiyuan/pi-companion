@@ -1,178 +1,142 @@
 # Pi Companion
 
-Pi Companion 是一个面向 Windows 11 的本地 AI Agent 桌面应用。它把任务对话、工作区文件、Git 状态和运行监视器放在同一个界面中，并提供 Windows 资源管理器右键菜单入口。
+[![CI](https://github.com/Theochenxiyuan/pi-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Theochenxiyuan/pi-companion/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Theochenxiyuan/pi-companion?include_prereleases&label=Release)](https://github.com/Theochenxiyuan/pi-companion/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> [!WARNING]
-> 项目仍处于早期开发阶段，目前没有经过代码签名的公开安装包。请仅在理解本地 Agent 权限边界的环境中构建和运行。
+**Pi Companion** 是一款专为 Windows 11 打造的本地 AI Agent 桌面应用。它将 Windows 资源管理器右键菜单、多工作区任务对话、文件与 Git 变更检视、后台任务监视器整合在同一套原生交互体验中。
 
-## 源码内测快速开始
+---
 
-这个流程适合愿意从源码测试、能看懂终端报错的朋友。首次安装会使用 WinGet 和 npm 补齐受支持的开发依赖，可能弹出安装界面或 UAC；脚本不会开启 Windows 开发人员模式，也不会创建或读取模型凭据。
+## 核心特性
+
+- **资源管理器即入口**：在 Windows 11 资源管理器任意文件夹或文件上右键即可呼出快捷提问框，自动携带所选上下文发起任务。
+- **多工作区与并发执行**：支持在多个本地项目与通用对话之间自由切换，不同目录的任务可在后台并行推进。
+- **透明可控的执行过程**：实时展示推理思考、工具调用、终端输出与文件变更，内置桌面悬浮监视器（Monitor）与系统通知提醒。
+- **工作区文件与 Git 集成**：在对话侧栏直接浏览目录树、对比差异、暂存文件并创建本地 Git 提交。
+- **可复用的任务模板与定时任务**：支持保存常用 Prompt 模板，或创建单次/周期定时计划自动执行例行任务。
+- **生态扩展能力**：
+  - **模型与 Provider 管理**：支持官方 Provider OAuth 登录、API Key 配置及 OpenAI 兼容自定义 Provider，支持主流模型原生联网搜索。
+  - **MCP 服务管理**：可视化配置个人级或项目级 MCP Server（本地命令、远程服务、OAuth 认证与按需/批量工具暴露）。
+  - **技能（Skills）管理**：发现并管理全局与工作区技能包，支持 `/` 与 `$` 快捷唤起。
+- **清晰的权限与恢复边界**：提供**只读**、**标准访问**与单任务显式开启的**完全访问**三档权限；内置修改前文件备份与一键恢复能力。
+
+---
+
+## 下载与安装
+
+系统要求：**Windows 11 x64（Build 22000 及以上）**，并已安装 Microsoft Edge WebView2 Runtime（Windows 11 默认自带）。Release 安装包已内置 .NET 运行时与私有的 Node.js + Pi 1.4.0 Runtime，无需额外部署开发环境。
+
+前往 [**GitHub Releases**](https://github.com/Theochenxiyuan/pi-companion/releases) 下载最新版本：
+
+### 方式一：MSIX 安装包（推荐，包含右键菜单与开始菜单入口）
+
+下载以下三个文件到同一目录：
+- `PiCompanion-v0.5.0-preview-win-x64.msix`
+- `PiCompanion-v0.5.0-preview-win-x64.cer`
+- `Install-PiCompanion.ps1`
+
+在下载目录打开 PowerShell 运行安装脚本（首次安装会请求管理员权限以信任预览版自签名证书）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Install-PiCompanion.ps1 -Launch
+```
+
+安装完成后即可从 Windows 开始菜单启动 **Pi Companion**，或在文件资源管理器右键菜单中使用 **Ask Pi Companion**。
+
+### 方式二：便携版 ZIP（免安装）
+
+下载并解压 `PiCompanion-v0.5.0-preview-win-x64-portable.zip`，直接运行目录中的 `PiCompanion.Desktop.exe` 即可使用完整桌面与 Agent 功能（不包含资源管理器右键菜单扩展）。
+
+---
+
+## 安全与隐私边界
+
+Pi Companion 在本机直接驱动 Agent 执行操作，设计上遵循最小权限与凭据隔离原则：
+
+- **三档权限控制**：
+  - **只读模式**：仅允许读取工作区内容，禁止修改文件或执行命令。
+  - **标准模式（默认）**：工作区内读写受控，访问工作区外部路径、执行命令或敏感操作时逐次请求用户确认。
+  - **完全访问**：仅限按单次任务显式开启并二次确认，跳过常规路径与命令确认（不会提权为系统管理员）。
+- **凭据隔离**：模型 Provider 的 API Key 与 OAuth 令牌由底层 Pi 认证存储管理，应用日志与诊断导出包均经过脱敏处理，不包含任何密钥。
+- **安全上报**：如发现安全隐患，请查阅 [安全政策 (SECURITY.md)](SECURITY.md)。
+
+---
+
+## 从源码构建与开发
+
+如果你希望从源码体验最新开发分支或参与贡献，可以使用仓库内置的一键脚本。
+
+### 1. 环境准备与快速启动
+
+开发环境需要 Windows 11 x64、.NET 10 SDK、Node.js 24、Visual Studio 2022 Build Tools（含 x64 C++ 工具链）以及全局安装的 `@earendil-works/pi-coding-agent@1.4.0`。
 
 ```powershell
 git clone https://github.com/Theochenxiyuan/pi-companion.git
 Set-Location pi-companion
+
+# 检查并自动补齐缺失的开发依赖
 .\scripts\bootstrap.ps1 -InstallMissing
 .\scripts\doctor.ps1
+
+# 构建并启动开发版
 .\scripts\run.ps1
 ```
 
-如果安装脚本提示新开终端，请关闭当前 PowerShell，在仓库目录重新运行 `bootstrap.ps1` 和 `doctor.ps1`。只想检查环境、不安装软件时，直接运行 `doctor.ps1`，或运行不带参数的 `bootstrap.ps1`。
-
-后续更新使用：
+日常拉取更新并运行：
 
 ```powershell
 .\scripts\update-dev.ps1
 .\scripts\run.ps1 -NoBuild
 ```
 
-更新脚本只接受 fast-forward，并会在工作区有未提交改动时停止，不会覆盖测试者的本地工作。首次配置 Provider、安全测试方式、Explorer 右键菜单和问题反馈流程见 [源码内测指南](docs/TESTER-GUIDE.md)。
-
-## 主要能力
-
-- 从应用或 Windows 11 资源管理器为指定目录创建任务。
-- 在多个工作区之间切换，并发运行不同目录中的任务。
-- 在 Agent Chat 中查看思考、工具调用、授权请求、问题和文件变更。
-- 通过桌面任务监视器跟踪运行状态，在任务需要操作时收到 Windows 通知。
-- 浏览工作区文件和本地 Git 状态，暂存变更并创建本地提交。
-- 创建、固定和复用任务模板；Agent 可读取当前上下文可见的模板，并在用户单次确认后创建带来源记录的模板；套用模板只填写任务草稿，由用户确认后发送。
-- 创建单次或周期定时任务；自定义任务可从模板快速填入，也可关联固定目标模板并在每次触发时使用其最新版本；Agent 可在逐次确认后为当前工作区或 Direct Chat 创建计划。
-- 管理模型 Provider、默认模型、推理等级、上下文压缩和重试策略。
-- 在设置的 MCP 页面管理个人或工作区服务，支持本地命令、远程地址、配置导入、浏览器登录和工具调用。
-- 支持只读、标准访问和按任务开启的完全访问权限。
-- 支持简体中文和英语界面。
-
-更完整的产品边界与技术设计见 [产品计划与技术规格](docs/pi-companion-product-technical-plan.md)。当前说明与历史阶段记录的区别见 [文档索引](docs/README.md)。
-
-## 项目状态
-
-当前代码覆盖桌面外壳、Agent Chat、任务持久化、多任务调度、定时任务、工作区与 Git 浏览、Provider 配置、MCP 服务管理、技能管理、任务模板、Explorer Command 和应用私有 Web Search Extension。
-
-尚未提供：
-
-- 面向最终用户的正式安装包与自动更新；
-- 代码签名和稳定版本兼容承诺；
-- 对 Windows 11 x64 以外平台的支持。
-
-## 环境要求
-
-- Windows 11 x64，Build 22000 或更高；
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)；
-- Node.js 24 和 npm 11；
-- Visual Studio 2022 Build Tools，并安装 x64 C++ 工具链；
-- Microsoft Edge WebView2 Runtime；
-- 开发运行时需要 Pi RPC 1.4.0 Runtime，以及所选模型服务的有效账号或 API Key。
-
-依赖版本由 `global.json`、npm lockfile 和 NuGet lockfile 固定。
-
-环境诊断结果也可以输出为便于 Agent 读取的 JSON：
+### 2. 完整构建、测试与打包
 
 ```powershell
-.\scripts\doctor.ps1 -Json
-```
-
-## 从源码构建
-
-在 PowerShell 中运行：
-
-```powershell
-git clone https://github.com/Theochenxiyuan/pi-companion.git
-Set-Location pi-companion
+# 运行全量 Release 构建与自动化测试（WebSearch 扩展 + Vue 前端 + .NET + C++ Explorer 冒烟测试）
 .\scripts\build.ps1 -Configuration Release
+
+# 依赖漏洞审计
+.\scripts\audit-dependencies.ps1
+
+# 生成自签名 MSIX 安装包与便携版 ZIP（输出至 artifacts/release/）
+.\scripts\package-release.ps1 -Version 0.5.0-preview -Configuration Release
 ```
 
-完整构建会：
-
-1. 恢复并测试 Web Search Extension；
-2. 类型检查、构建并测试 Vue Agent Chat；
-3. 运行 Pi Companion Extension 测试；
-4. 恢复、构建并测试 .NET 解决方案；
-5. 构建并冒烟测试 Explorer Command。
-
-## 开发运行
-
-开发构建会优先查找当前机器上全局安装的 Pi Runtime。也可以显式指定 Pi 和 Node 路径：
-
-```powershell
-.\scripts\build.ps1 -Configuration Debug
-.\scripts\run.ps1 -NoBuild `
-  -PiRuntimePath 'C:\path\to\pi-coding-agent\dist\bundle\cli.js' `
-  -NodeRuntimePath 'C:\Program Files\nodejs\node.exe'
-```
-
-也可为当前进程设置：
-
-```powershell
-$env:PI_COMPANION_PI_PATH = 'C:\path\to\pi-coding-agent\dist\bundle\cli.js'
-$env:PI_COMPANION_NODE_PATH = 'C:\Program Files\nodejs\node.exe'
-```
-
-这些路径和任何模型凭据都不应提交到仓库。
-
-## Explorer 右键菜单
-
-构建稀疏开发包：
-
-```powershell
-.\scripts\build-explorer-integration.ps1 -Configuration Release
-```
-
-开发包未签名。注册前需要在 Windows 开发者设置中允许开发人员模式或旁加载，然后运行：
+在开发环境中单独调试资源管理器右键菜单（需开启 Windows 开发人员模式）：
 
 ```powershell
 .\scripts\install-explorer-integration.ps1 -Configuration Release -NoBuild
-```
-
-移除开发注册：
-
-```powershell
+# 卸载开发版右键菜单注册
 .\scripts\uninstall-explorer-integration.ps1
 ```
 
-安装脚本不会替用户修改系统安全策略。
+---
 
-## 工程结构
+## 仓库结构与文档
 
 ```text
 src/
-  PiCompanion.Core/              领域模型、事件与任务投影
-  PiCompanion.Application/       Pi RPC、调度、持久化与工作区服务
-  PiCompanion.Extension/         工具权限、路径策略与交互工具
-  PiCompanion.WebSearchExtension/ Provider 原生搜索扩展
-  PiCompanion.Chat/              Vue 3 Agent Chat
-  PiCompanion.Desktop/           WPF 外壳、Monitor、托盘与 WebView Bridge
-  PiCompanion.ExplorerCommand/   Windows 11 Explorer Command
-  PiCompanion.Packaging/         开发包清单
+  PiCompanion.Core/                 领域模型、事件与任务投影
+  PiCompanion.Application/          Pi RPC 通信、调度、SQLite 持久化与工作区服务
+  PiCompanion.Extension/            工具权限控制、文件备份、MCP 与模型配置适配器
+  PiCompanion.WebSearchExtension/   内置官方 Provider 原生联网搜索扩展
+  PiCompanion.Chat/                 Vue 3 + TypeScript Agent Chat 界面
+  PiCompanion.Desktop/              WPF 桌面外壳、悬浮监视器、快速提问框与 WebView2 宿主
+  PiCompanion.ExplorerCommand/      Windows 11 C++ IExplorerCommand 右键菜单扩展
+  PiCompanion.Packaging/            MSIX 包清单模板
 tests/
-  PiCompanion.Core.Tests/
-  PiCompanion.Extension.Tests/
-  PiCompanion.ExplorerCommand.Smoke/
+  PiCompanion.Core.Tests/           .NET 核心与应用层测试
+  PiCompanion.ExplorerCommand.Smoke/ Explorer COM 扩展冒烟测试
 ```
 
-## 安全与隐私
-
-Pi Companion 会在本机运行 Agent，并可能按所选权限读取或修改文件、执行命令。完全访问不会获得管理员权限，但会取消工作区边界和逐次授权，因此只能按任务显式开启。
-
-- Provider 凭据由 Pi 自己的认证存储管理，Pi Companion 不回读或复制密钥。
-- 本地任务、日志、缓存和会话数据不会被纳入版本控制。
-- 导出的诊断包不包含 Provider 密钥。
-- 发现安全问题时请遵循 [安全政策](SECURITY.md)，不要在公开 Issue 中披露漏洞细节或凭据。
-
-## 参与贡献
-
-提交 Issue 或 Pull Request 前请阅读 [贡献指南](CONTRIBUTING.md)。所有改动都应通过：
-
-```powershell
-.\scripts\build.ps1 -Configuration Release
-.\scripts\audit-dependencies.ps1
-```
-
-内测中遇到问题时，可以使用 [内测问题模板](https://github.com/Theochenxiyuan/pi-companion/issues/new/choose)。公开反馈前请移除个人路径、Prompt、文件内容和凭据；诊断 ZIP 应先自行检查，并通过私下渠道发送。
-
-## 第三方组件
-
-应用私有 Web Search Extension 包含 MIT 许可的第三方组件。完整清单和保留声明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 及 [`src/PiCompanion.WebSearchExtension/legal/`](src/PiCompanion.WebSearchExtension/legal/)。
+更多文档：
+- [产品计划与技术规格](docs/pi-companion-product-technical-plan.md)
+- [源码内测与排障指南](docs/TESTER-GUIDE.md)
+- [内置 Pi 扩展说明](docs/included-pi-extensions.md)
+- [文档索引](docs/README.md)
+- [贡献指南](CONTRIBUTING.md) · [第三方组件声明](THIRD-PARTY-NOTICES.md)
 
 ## 许可证
 
-Pi Companion 以 [MIT License](LICENSE) 开源。
+本项目基于 [MIT License](LICENSE) 开源。

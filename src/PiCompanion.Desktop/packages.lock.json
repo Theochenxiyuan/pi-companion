@@ -46,7 +46,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.13, )",
-          "PiCompanion.Core": "[1.0.0, )",
+          "PiCompanion.Core": "[0.5.0-preview, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )"
         }
       },

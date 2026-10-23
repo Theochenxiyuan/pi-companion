@@ -6,5 +6,10 @@
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version Condition="'$(Version)' == ''">0.5.0-preview</Version>
+    <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">0.5.0.0</AssemblyVersion>
+    <FileVersion Condition="'$(FileVersion)' == ''">0.5.0.0</FileVersion>
+    <Company>Pi Companion</Company>
+    <Product>Pi Companion</Product>
   </PropertyGroup>
 </Project>

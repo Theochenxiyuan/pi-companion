@@ -21,7 +21,7 @@ if (!$NoBuild) {
 }
 
 $developmentPackages = Get-AppxPackage |
-    Where-Object { $_.Name -eq 'PiCompanion.Development' }
+    Where-Object { $_.Name -in @('PiCompanion.Development', 'PiCompanion') }
 foreach ($package in $developmentPackages) {
     Remove-AppxPackage -Package $package.PackageFullName
 }

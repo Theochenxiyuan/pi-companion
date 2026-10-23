@@ -110,8 +110,19 @@ public sealed class DesktopShell : IDisposable
         }
     }
 
-    public void HandleExplorerActivation(ExplorerActivationRequest request) =>
+    public void HandleExplorerActivation(ExplorerActivationRequest request)
+    {
+        if (string.Equals(
+            request.InvocationKind,
+            Activation.ExplorerActivationFactory.ActivateWindowInvocationKind,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            _chatWindow.ShowAndActivate();
+            return;
+        }
+
         _composerWindow.ShowActivation(request);
+    }
 
     public void Dispose()
     {
