@@ -14,6 +14,7 @@ import {
   toCustomProviderInfo,
   toModelsJsonProvider,
 } from './pi-models-config.mjs'
+import { WEB_SEARCH_PROVIDERS, getWebSearchIntegration } from './pi-web-search-support.mjs'
 
 const input = JSON.parse((await readStdin()).replace(/^\uFEFF/u, ''))
 const piEntry = input.piEntry
@@ -120,45 +121,12 @@ if (!streamedResult) {
 
 function getWebSearchSupport(model, builtInProviderIds) {
   if (!builtInProviderIds.has(model.provider)) return 'none'
-  if (model.provider === 'xiaomi' &&
-      model.api === 'openai-completions' &&
-      [
-        'mimo-v2.5',
-        'mimo-v2.5-pro',
-        'mimo-v2.5-pro-ultraspeed',
-        'mimo-v2.6-flash',
-        'mimo-v2.6-pro',
-        'mimo-v2.6-pro-ultraspeed',
-      ].includes(model.id)) return 'native'
-  if (model.provider === 'openai' && model.api === 'openai-responses') return 'native'
-  if (model.provider === 'azure' && model.api === 'azure-openai-responses') return 'native'
-  if (model.provider === 'google' && model.api === 'google-generative-ai') return 'native'
-  if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'native'
-  if (model.provider === 'openai-codex' && model.api === 'openai-codex-responses') return 'native'
-  if (model.provider === 'xai' && model.api === 'openai-responses') return 'native'
-  if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'native'
-  if (['opencode', 'opencode-go'].includes(model.provider) && model.api === 'openai-responses') return 'native'
-  if (model.provider === 'deepseek' && model.api === 'openai-completions') return 'native'
-  return 'none'
+  return getWebSearchIntegration(model) === 'none' ? 'none' : 'native'
 }
 
 function getProviderCapabilities(providerId, builtInProviderIds) {
   if (!builtInProviderIds.has(providerId)) return []
-  return [
-    'openai',
-    'openai-codex',
-    'azure',
-    'google',
-    'anthropic',
-    'xai',
-    'github-copilot',
-    'opencode',
-    'opencode-go',
-    'xiaomi',
-    'deepseek',
-  ].includes(providerId)
-    ? ['web-search']
-    : []
+  return WEB_SEARCH_PROVIDERS.includes(providerId) ? ['web-search'] : []
 }
 
 async function createSnapshot(refreshModels = false) {

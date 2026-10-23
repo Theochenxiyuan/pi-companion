@@ -74,9 +74,6 @@ test('only approved official providers advertise bundled native search', async (
     id: 'some-chat-model',
   }), 'none')
   for (const id of [
-    'mimo-v2.5',
-    'mimo-v2.5-pro',
-    'mimo-v2.5-pro-ultraspeed',
     'mimo-v2.6-flash',
     'mimo-v2.6-pro',
     'mimo-v2.6-pro-ultraspeed',
@@ -103,9 +100,14 @@ test('only approved official providers advertise bundled native search', async (
     id: 'mimo-v2.6-pro',
   }), 'none')
   assert.equal(extension.getPiCompanionWebSearchSupport({
-    provider: 'xiaomi-token-plan-cn',
+    provider: 'xiaomi',
     api: 'openai-completions',
     id: 'mimo-v2.5-pro',
+  }), 'none')
+  assert.equal(extension.getPiCompanionWebSearchSupport({
+    provider: 'xiaomi-token-plan-cn',
+    api: 'openai-completions',
+    id: 'mimo-v2.6-pro',
   }), 'none')
 })
 
@@ -132,9 +134,6 @@ test('MiMo search is injected into provider requests without exposing the compan
   const requestHandler = handlers.get('before_provider_request').at(-1)
   const sessionHandler = handlers.get('session_start').at(-1)
   for (const id of [
-    'mimo-v2.5',
-    'mimo-v2.5-pro',
-    'mimo-v2.5-pro-ultraspeed',
     'mimo-v2.6-flash',
     'mimo-v2.6-pro',
     'mimo-v2.6-pro-ultraspeed',

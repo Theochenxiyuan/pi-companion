@@ -1,17 +1,10 @@
 import type { Api, Model } from '@earendil-works/pi-ai'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import webSearchExtension from 'pi-web-search'
+import { getWebSearchIntegration } from '../../PiCompanion.Extension/pi-web-search-support.mjs'
 
 const WEB_SEARCH_TOOL = 'web_search'
 const URL_CONTEXT_TOOL = 'url_context'
-const MIMO_WEB_SEARCH_MODELS = new Set([
-  'mimo-v2.5',
-  'mimo-v2.5-pro',
-  'mimo-v2.5-pro-ultraspeed',
-  'mimo-v2.6-flash',
-  'mimo-v2.6-pro',
-  'mimo-v2.6-pro-ultraspeed',
-])
 const MIMO_WEB_SEARCH_TOOL = {
   type: WEB_SEARCH_TOOL,
   max_keyword: 3,
@@ -19,36 +12,12 @@ const MIMO_WEB_SEARCH_TOOL = {
 } as const
 
 export type PiCompanionWebSearchSupport = 'none' | 'native'
-type PiCompanionWebSearchIntegration = 'none' | 'companion-tool' | 'provider-request'
-
 type WebSearchModel = Pick<Model<Api>, 'provider' | 'api' | 'id'>
-
-function getPiCompanionWebSearchIntegration(
-  model: WebSearchModel | undefined,
-): PiCompanionWebSearchIntegration {
-  if (!model) return 'none'
-  if (model.provider === 'xiaomi' &&
-      model.api === 'openai-completions' &&
-      MIMO_WEB_SEARCH_MODELS.has(model.id)) {
-    return 'provider-request'
-  }
-  if (model.provider === 'openai' && model.api === 'openai-responses') return 'companion-tool'
-  if (model.provider === 'azure' && model.api === 'azure-openai-responses') return 'companion-tool'
-  if (model.provider === 'google' && model.api === 'google-generative-ai') return 'companion-tool'
-  if (model.provider === 'anthropic' && model.api === 'anthropic-messages') return 'companion-tool'
-  if (model.provider === 'openai-codex' && model.api === 'openai-codex-responses') return 'companion-tool'
-  if (model.provider === 'xai' && model.api === 'openai-responses') return 'companion-tool'
-  if (model.provider === 'github-copilot' && model.api === 'openai-responses') return 'companion-tool'
-  if ((model.provider === 'opencode' || model.provider === 'opencode-go') &&
-      model.api === 'openai-responses') return 'companion-tool'
-  if (model.provider === 'deepseek' && model.api === 'openai-completions') return 'companion-tool'
-  return 'none'
-}
 
 export function getPiCompanionWebSearchSupport(
   model: WebSearchModel | undefined,
 ): PiCompanionWebSearchSupport {
-  return getPiCompanionWebSearchIntegration(model) === 'none' ? 'none' : 'native'
+  return getWebSearchIntegration(model) === 'none' ? 'none' : 'native'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,7 +25,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function injectMimoWebSearch(payload: unknown, model: WebSearchModel | undefined) {
-  if (getPiCompanionWebSearchIntegration(model) !== 'provider-request' || !isRecord(payload)) {
+  if (getWebSearchIntegration(model) !== 'provider-request' || !isRecord(payload)) {
     return undefined
   }
 
@@ -83,7 +52,7 @@ function createPiCompanionToolManager(
     // provider. Keep that boundary intact after an in-session model switch.
     // URL Context is intentionally outside this release.
     current.delete(URL_CONTEXT_TOOL)
-    if (getPiCompanionWebSearchIntegration(model) !== 'companion-tool') {
+    if (getWebSearchIntegration(model) !== 'companion-tool') {
       current.delete(WEB_SEARCH_TOOL)
     } else if (webSearchWasRequested) {
       current.add(WEB_SEARCH_TOOL)
