@@ -81,7 +81,7 @@ $explorerSmokeExecutable = Join-Path $repositoryRoot "tests\PiCompanion.Explorer
 & $explorerSmokeExecutable $explorerCommandDll
 if ($LASTEXITCODE -ne 0) { throw "Explorer command COM smoke test failed with exit code $LASTEXITCODE." }
 
-& $dotnetCommand test $solutionPath --configuration $Configuration --no-build
+& $dotnetCommand test --solution $solutionPath --configuration $Configuration --no-build
 if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with exit code $LASTEXITCODE." }
 
 Write-Host "Pi Companion $Configuration desktop, Explorer command, and tests completed successfully."
