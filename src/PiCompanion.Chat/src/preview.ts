@@ -1,4 +1,5 @@
 import type {
+  McpSnapshot,
   SkillsLoaded,
   TaskHistoryEntry,
   TaskSnapshot,
@@ -157,6 +158,60 @@ export function createTaskHistoryPreview(): { history: TaskHistoryEntry[]; recyc
       statusText: '已完成', summary: '界面评审已归档', updatedAt: new Date(Date.now() - 259200000).toISOString(),
       deletedAt: new Date(Date.now() - 86400000).toISOString(),
     }],
+  }
+}
+
+export function createMcpSnapshotPreview(): McpSnapshot {
+  return {
+    globalRevision: 'preview',
+    projectRevision: null,
+    projectTrusted: false,
+    servers: [
+      {
+        name: 'magpie',
+        scope: 'global',
+        state: 'connected',
+        config: {
+          type: 'http',
+          url: 'http://127.0.0.1:3425/mcp/magpie/web-search',
+          exposure: 'direct',
+          timeout: 120,
+          enabled: true,
+        },
+        tools: [
+          {
+            name: 'web_search',
+            description: 'Search the web for current information: news, releases, documentation, prices, anything after your training or that you are unsure of. Returns what the pages found say, with their URLs.',
+          },
+          {
+            name: 'web_fetch',
+            description: 'Fetch a web page by its http(s) URL and return its text (an HTML page as Markdown, with its links).',
+          },
+        ],
+        error: null,
+      },
+      {
+        name: 'github',
+        scope: 'global',
+        state: 'failed',
+        config: { type: 'http', url: 'https://api.githubcopilot.com/mcp/', exposure: 'direct', enabled: true },
+        tools: [],
+        error: 'connect ECONNREFUSED 127.0.0.1:33422',
+      },
+      {
+        name: 'filesystem',
+        scope: 'global',
+        state: 'disabled',
+        config: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+          exposure: 'codemode',
+          enabled: false,
+        },
+        tools: [],
+        error: null,
+      },
+    ],
   }
 }
 

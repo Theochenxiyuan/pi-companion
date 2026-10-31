@@ -21,8 +21,11 @@ const send = value => process.stdout.write(`${JSON.stringify(value)}\n`)
 const connections = []
 let runtime
 let modelRuntime
+let credentialStore
 const overrideKeys = ['enabled', 'exposure', 'toolExposure']
 const isRecord = value => !!value && typeof value === 'object' && !Array.isArray(value)
+const hasAuthorizationHeader = config => Object.keys(config.headers ?? {})
+  .some(key => key.toLowerCase() === 'authorization')
 
 function resolveConfig(name, raw, scope, globals) {
   const isOverride = scope === 'project' && isRecord(raw) && raw.command === undefined && raw.url === undefined && raw.type === undefined
@@ -122,6 +125,25 @@ async function createConnection(entry) {
   return { connection, credentials }
 }
 
+async function credentialsStore() {
+  if (!credentialStore) {
+    runtime ??= await moduleAt('extensions/mcp/runtime.js')
+    const { FileAuthStorageBackend } = await moduleAt('core/auth-storage.js')
+    credentialStore = new runtime.McpOAuthCredentialStore(new FileAuthStorageBackend(join(agentDir, 'mcp-auth.json')), agentDir)
+  }
+  return credentialStore
+}
+
+async function storedLogin(config, serverName) {
+  if (!config.url || config.auth || hasAuthorizationHeader(config)) return false
+  if (!existsSync(join(agentDir, 'mcp-auth.json'))) return false
+  try {
+    return !!(await credentialsStore()).tokens(serverName, config.url)
+  } catch {
+    return false
+  }
+}
+
 async function probe(entry) {
   const { connection } = await createConnection(entry)
   let timer
@@ -163,7 +185,8 @@ async function snapshot() {
       else if (shadowed) status.state = 'overridden'
       else if (!entry) status = { state: 'failed', tools: [], error: '服务名称冲突，请修改名称。' }
       else if (config.enabled === false) status.state = 'disabled'
-      const server = { name, scope, config, isOverride: !!resolved.isOverride, inherited, overrideConfig: resolved.isOverride ? resolved.storedConfig : null, ...status }
+      const server = { name, scope, config, isOverride: !!resolved.isOverride, inherited, overrideConfig: resolved.isOverride ? resolved.storedConfig : null,
+        authenticated: await storedLogin(config, name), ...status }
       servers.push(server)
       if (status.state === 'unchecked' && input.check && (!input.name || input.name === name && input.scope === scope)) {
         checks.push(async () => {

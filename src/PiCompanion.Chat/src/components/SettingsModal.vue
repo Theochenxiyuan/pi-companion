@@ -1029,6 +1029,7 @@ function authLabel(provider: PiProviderInfo) {
           class="settings-scroll"
           :class="{
             'provider-scroll': activeTab === 'providers',
+            'mcp-scroll': activeTab === 'mcp',
             'recycle-empty-scroll': activeTab === 'recycle-bin' && recycleBinTasks.length === 0,
           }"
         >
@@ -1657,6 +1658,7 @@ function authLabel(provider: PiProviderInfo) {
 .settings-auto-save-status > i { width: 12px; height: 12px; border-color: var(--color-tone-8); border-top-color: var(--color-tone-12); }
 .settings-scroll { min-height: 0; padding: 26px clamp(20px, 3.5vw, 44px) 70px; overflow-y: auto; }
 .settings-scroll.provider-scroll { overflow: hidden; padding-bottom: 26px; }
+.settings-scroll.mcp-scroll { overflow: hidden; padding-bottom: 26px; }
 .settings-scroll.recycle-empty-scroll { display: grid; padding-block: 26px; place-items: center; }
 
 .settings-section { max-width: 760px; }

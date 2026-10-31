@@ -55,8 +55,7 @@ describe('MCP settings', () => {
   })
   it('saves only workspace choices for an inherited personal server', async () => {
     const wrapper = await ready()
-    const scope = wrapper.findAllComponents(UiSelect).find(select => select.props('ariaLabelText') === '保存位置')!
-    scope.vm.$emit('update:modelValue', 'project')
+    await wrapper.findAll('button').find(button => button.text() === '工作区')!.trigger('click')
     await wrapper.vm.$nextTick()
     const load = wrapper.emitted('request')!.at(-1)![0] as { requestId: string }
     const inherited: McpSnapshot = { ...snapshot, servers: [{ ...snapshot.servers[0]!, scope: 'project', isOverride: true, inherited: true, overrideConfig: {} }] }

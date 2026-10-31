@@ -27,6 +27,7 @@ export interface McpServer {
   isOverride?: boolean
   inherited?: boolean
   overrideConfig?: McpConfig | null
+  authenticated?: boolean
 }
 export interface McpSnapshot {
   servers: McpServer[]

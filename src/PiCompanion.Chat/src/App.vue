@@ -21,6 +21,7 @@ import type {
   PiOAuthLoginProgress,
   McpResult,
   McpLoginProgress,
+  McpSnapshot,
   PermissionMode,
   SettingsActionCompleted,
   SettingsSnapshot,
@@ -193,8 +194,16 @@ const settingsAction = ref<SettingsActionCompleted | null>(null)
 const piOAuthLoginProgress = ref<PiOAuthLoginProgress | null>(null)
 const mcpResult = ref<McpResult | null>(null)
 const mcpLoginProgress = ref<McpLoginProgress | null>(null)
+let previewMcpSnapshot: McpSnapshot | null = null
 
 function requestMcp(payload: Record<string, unknown>) {
+  if (previewMcpSnapshot) {
+    mcpResult.value = {
+      requestId: String(payload.requestId), workspaceId: payload.workspaceId as string | null,
+      action: String(payload.action), succeeded: true, snapshot: previewMcpSnapshot, message: '',
+    }
+    return
+  }
   if (postBridgeMessage('McpRequest', payload)) return
   mcpResult.value = {
     requestId: String(payload.requestId), workspaceId: payload.workspaceId as string | null,
@@ -752,6 +761,7 @@ onMounted(async () => {
   if (import.meta.env.DEV && (preview === 'transcript' || preview === 'performance' || preview === 'settings' || preview === 'commit-diff')) {
     const {
       createCommitDiffPreview,
+      createMcpSnapshotPreview,
       createPerformancePreview,
       createTaskHistoryPreview,
       createTranscriptPreview,
@@ -774,6 +784,7 @@ onMounted(async () => {
     if (preview === 'settings') {
       settingsOpen.value = true
       settingsAction.value = { message: t('设置已保存。'), succeeded: true }
+      previewMcpSnapshot = createMcpSnapshotPreview()
     }
     if (preview === 'commit-diff') {
       store.commitDiff = createCommitDiffPreview()

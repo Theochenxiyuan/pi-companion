@@ -20,7 +20,7 @@ public sealed record PiMcpRequest(
 
 public sealed record PiMcpTool(string Name, string Description);
 public sealed record PiMcpServer(string Name, string Scope, JsonElement Config, string State, IReadOnlyList<PiMcpTool> Tools, string? Error,
-    bool IsOverride = false, bool Inherited = false, JsonElement? OverrideConfig = null);
+    bool IsOverride = false, bool Inherited = false, JsonElement? OverrideConfig = null, bool Authenticated = false);
 public sealed record PiMcpSnapshot(IReadOnlyList<PiMcpServer> Servers, string GlobalRevision, string? ProjectRevision, bool ProjectTrusted);
 
 public sealed class PiMcpService(PiRuntimeResolver runtimeResolver, string helperPath)

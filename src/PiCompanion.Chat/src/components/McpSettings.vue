@@ -19,7 +19,7 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 const snapshot = ref<McpSnapshot | null>(null)
-const workspaceId = ref(props.activeWorkspaceId ?? '')
+const workspaceId = ref(props.activeWorkspaceId || props.workspaces[0]?.id || '')
 const scope = ref<McpScope>('global')
 const search = ref('')
 const selected = ref('')
@@ -46,19 +46,13 @@ const removeTarget = ref<McpServer | null>(null)
 const redirectUrl = ref('')
 const workspace = computed(() => props.workspaces.find(value => value.id === workspaceId.value))
 const trusted = computed(() => workspace.value?.trustStatus === 'trusted')
-const scopeOptions = computed(() => [
-  { value: 'global', label: t('个人') },
-  ...(workspace.value ? [{ value: 'project', label: t('工作区') }] : []),
-])
-const workspaceOptions = computed(() => [
-  { value: '', label: t('选择工作区') },
-  ...props.workspaces.map(value => ({ value: value.id, label: value.displayName || value.name })),
-])
+const workspaceOptions = computed(() =>
+  props.workspaces.map(value => ({ value: value.id, label: value.displayName || value.name })))
 const servers = computed(() => (snapshot.value?.servers ?? []).filter(server =>
   server.scope === scope.value && server.name.toLowerCase().includes(search.value.trim().toLowerCase())))
 const current = computed(() => servers.value.find(server => server.name === selected.value) ?? servers.value[0])
-const canSignIn = computed(() => !!current.value?.config.url && !current.value.config.auth &&
-  !Object.keys(current.value.config.headers ?? {}).some(key => key.toLowerCase() === 'authorization'))
+const canSignIn = computed(() => current.value?.state === 'needs-auth')
+const signedIn = computed(() => current.value?.authenticated === true && current.value.state !== 'needs-auth')
 const waiting = computed(() => pending.value?.action === 'login' && props.loginProgress?.requestId === pending.value.id)
 const canChange = computed(() => !pending.value && !!snapshot.value && (scope.value === 'global' || trusted.value))
 const statusLabels: Record<McpServer['state'], string> = {
@@ -79,6 +73,16 @@ function request(action: string, values: Record<string, unknown> = {}) {
 }
 
 function load(check = false) { request('list', { check }) }
+function selectScope(next: McpScope) {
+  if (pending.value || next === scope.value) return
+  if (next === 'project' && !workspaceId.value) workspaceId.value = props.workspaces[0]?.id ?? ''
+  scope.value = next
+}
+function selectServer(server: McpServer) {
+  if (pending.value) return
+  selected.value = server.name
+  editing.value = false
+}
 function changeKind(value: string) { if (kind.value !== value) { kind.value = value; pairs.value = [] } }
 function beginEdit(server?: McpServer) {
   if (!canChange.value) return
@@ -158,7 +162,6 @@ watch(() => props.result, result => {
   } else if (!result.canceled) message.value = result.message
 })
 watch([workspaceId, scope], () => {
-  if (scope.value === 'project' && !workspace.value) { scope.value = 'global'; return }
   editing.value = false; importing.value = false; selected.value = ''; snapshot.value = null; load()
 })
 watch(trusted, (value, previous) => { if (value && !previous && !pending.value) load() })
@@ -168,13 +171,19 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
 
 <template>
   <div class="mcp-settings">
-    <div class="mcp-toolbar">
-      <UiSelect v-model="scope" :options="scopeOptions" :disabled="!!pending" :ariaLabelText="t('保存位置')" />
-      <UiSelect v-model="workspaceId" :options="workspaceOptions" :disabled="!!pending" :ariaLabelText="t('工作区')" />
-      <UiButton :disabled="!!pending" @click="load(true)">{{ t('检查连接') }}</UiButton>
-      <UiButton :disabled="!canChange" @click="startImport">{{ t('导入') }}</UiButton>
+    <header class="mcp-toolbar">
+      <div v-if="workspaces.length" class="mcp-segments" role="group" :aria-label="t('保存位置')">
+        <UiButton variant="ghost" class="mcp-segment" :class="{ active: scope === 'global' }" :aria-pressed="scope === 'global'" :disabled="!!pending" @click="selectScope('global')">{{ t('个人') }}</UiButton>
+        <UiButton variant="ghost" class="mcp-segment" :class="{ active: scope === 'project' }" :aria-pressed="scope === 'project'" :disabled="!!pending" @click="selectScope('project')">{{ t('工作区') }}</UiButton>
+      </div>
+      <div v-if="scope === 'project'" class="mcp-workspace">
+        <UiSelect v-model="workspaceId" :options="workspaceOptions" :disabled="!!pending" :ariaLabelText="t('工作区')" />
+      </div>
+      <span class="mcp-toolbar-spacer" />
+      <UiButton variant="ghost" :disabled="!canChange" @click="startImport">{{ t('导入') }}</UiButton>
       <UiButton variant="primary" :disabled="!canChange" @click="beginEdit()">{{ t('添加服务') }}</UiButton>
-    </div>
+    </header>
+
     <div v-if="scope === 'project' && workspace && !trusted" class="mcp-trust">
       <span>{{ t('信任工作区后可使用这里的服务。') }}</span>
       <UiButton @click="emit('trustWorkspace', workspaceId)">{{ t('信任工作区') }}</UiButton>
@@ -183,110 +192,194 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
     <div v-if="pending" class="mcp-pending" role="status"><i class="ui-spinner" aria-hidden="true" />{{ t(pending.action === 'login' ? waiting ? '等待浏览器授权' : '正在登录' : '处理中') }}</div>
     <div v-if="pending?.action === 'login'" class="mcp-login">
       <details v-if="waiting"><summary>{{ t('浏览器未能返回？') }}</summary><div class="mcp-redirect"><UiInput v-model="redirectUrl" :placeholder="t('粘贴完整回调地址')" :aria-label="t('回调地址')" /><UiButton :disabled="!redirectUrl.trim()" @click="emit('submitRedirect', pending.id, redirectUrl)">{{ t('继续') }}</UiButton></div></details>
-      <UiButton @click="emit('cancelLogin', pending.id)">{{ t('取消登录') }}</UiButton>
+      <UiButton variant="ghost" @click="emit('cancelLogin', pending.id)">{{ t('取消登录') }}</UiButton>
     </div>
-    <section v-if="importing" class="mcp-editor">
-      <h2>{{ t('导入服务') }}</h2>
-      <template v-if="!importPreview">
-        <UiTextarea v-model="importText" rows="9" :aria-label="t('服务配置')" placeholder='{ "mcpServers": { … } }' />
-        <div class="mcp-actions"><UiButton @click="importing = false">{{ t('取消') }}</UiButton><UiButton variant="primary" :disabled="!importText.trim()" @click="reviewImport">{{ t('下一步') }}</UiButton></div>
-      </template>
-      <template v-else>
-        <ul class="mcp-import-list"><li v-for="(config, serverName) in importPreview" :key="serverName"><strong>{{ serverName }}</strong><span>{{ config.url || config.command }}</span></li></ul>
-        <div class="mcp-actions"><UiButton :disabled="!!pending" @click="importPreview = null">{{ t('返回') }}</UiButton><UiButton variant="primary" :disabled="!canChange" @click="request('import', { servers: importPreview, check: true })">{{ t('导入') }} {{ Object.keys(importPreview).length }}</UiButton></div>
-      </template>
-    </section>
-    <div v-else class="mcp-layout" :class="{ 'mcp-layout-single': !snapshot?.servers.length }">
+
+    <div class="mcp-layout" :class="{ 'mcp-layout-single': !snapshot?.servers.length }">
       <aside v-if="snapshot?.servers.length" class="mcp-list">
-        <UiInput v-model="search" :placeholder="t('搜索服务')" :aria-label="t('搜索服务')" />
-        <UiButton v-for="server in servers" :key="server.name" class="mcp-server" :class="{ selected: current?.name === server.name && !editing }" :disabled="!!pending" @click="selected = server.name; editing = false">
-          <strong>{{ server.name }}</strong><span class="mcp-state" :class="server.state">{{ t(statusLabels[server.state]) }}</span>
-        </UiButton>
-        <span v-if="!servers.length" class="mcp-muted">{{ t('暂无服务') }}</span>
+        <div class="mcp-list-toolbar">
+          <label class="mcp-search"><UiInput v-model="search" type="search" :placeholder="t('搜索服务')" :aria-label="t('搜索服务')" /></label>
+          <UiButton class="mcp-icon" variant="ghost" :disabled="!!pending" :aria-label="t('检查全部连接')" :title="t('检查全部连接')" @click="load(true)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a7 7 0 1 0 1 6" /><path d="M19 4v4h-4" /></svg>
+          </UiButton>
+        </div>
+        <div class="mcp-items">
+          <UiButton
+            v-for="server in servers"
+            :key="server.name"
+            type="button"
+            variant="ghost"
+            class="mcp-server"
+            :class="{ selected: current?.name === server.name && (!editing || original?.name === server.name) }"
+            :aria-pressed="current?.name === server.name && (!editing || original?.name === server.name)"
+            :disabled="!!pending"
+            @click="selectServer(server)"
+          >
+            <span class="mcp-server-text">
+              <strong>{{ server.name }}</strong>
+              <small>{{ t(statusLabels[server.state]) }}</small>
+            </span>
+            <i class="mcp-dot" :class="server.state" aria-hidden="true" />
+          </UiButton>
+        </div>
       </aside>
-      <form v-if="editing" class="mcp-editor" @submit.prevent="save">
-        <h2>{{ t(original ? '编辑服务' : '添加服务') }}</h2>
-        <label>{{ t('名称') }}<UiInput v-model="name" :disabled="!!original || !!pending" autocomplete="off" placeholder="my-service" /></label>
-        <template v-if="!original?.isOverride">
-          <div class="mcp-kind" role="group" :aria-label="t('连接方式')"><UiButton type="button" :class="{ active: kind === 'remote' }" :disabled="!!pending" @click="changeKind('remote')">{{ t('远程') }}</UiButton><UiButton type="button" :class="{ active: kind === 'local' }" :disabled="!!pending" @click="changeKind('local')">{{ t('本地') }}</UiButton></div>
-          <label v-if="kind === 'remote'">{{ t('服务地址') }}<UiInput v-model="url" :disabled="!!pending" placeholder="https://example.com/mcp" /></label>
-          <label v-else>{{ t('启动命令') }}<UiInput v-model="command" :disabled="!!pending" placeholder="npx -y @example/mcp-server" /></label>
-        </template>
-        <p v-else class="mcp-address">{{ t('个人服务') }} · {{ url || command }}</p>
-        <div class="mcp-enabled"><span>{{ t('启用') }}</span><UiSwitch v-model="enabled" :disabled="!!pending" :aria-label="t('启用服务')" /></div>
-        <details class="mcp-advanced"><summary>{{ t('高级设置') }}</summary>
-          <div class="mcp-advanced-content">
-          <template v-if="!original?.isOverride">
-          <label v-if="kind === 'local'">{{ t('运行目录') }}<UiInput v-model="directory" :disabled="!!pending" :placeholder="t('当前工作区')" /></label>
-          <div class="mcp-pairs"><span>{{ t(kind === 'local' ? '环境变量' : '请求头') }}</span><div v-for="(pair, index) in pairs" :key="index" class="mcp-pair"><UiInput v-model="pair.key" :disabled="!!pending" :aria-label="t('名称')" :placeholder="t('名称')" /><UiInput v-model="pair.value" :disabled="!!pending" :type="pair.revealed ? 'text' : 'password'" :aria-label="t('值')" :placeholder="t('值')" autocomplete="off" /><UiButton type="button" :aria-label="t(pair.revealed ? '隐藏' : '显示')" @click="pair.revealed = !pair.revealed">{{ pair.revealed ? '◉' : '○' }}</UiButton><UiButton type="button" :disabled="!!pending" :aria-label="t('移除')" @click="pairs.splice(index, 1)">×</UiButton></div><UiButton type="button" :disabled="!!pending" @click="pairs.push({ key: '', value: '', revealed: false })">{{ t('添加一项') }}</UiButton></div>
+
+      <div class="mcp-pane">
+        <section v-if="importing" class="mcp-editor">
+          <h2>{{ t('导入服务') }}</h2>
+          <template v-if="!importPreview">
+            <UiTextarea v-model="importText" rows="10" :aria-label="t('服务配置')" placeholder='{ "mcpServers": { … } }' />
+            <div class="mcp-actions"><UiButton variant="ghost" @click="importing = false">{{ t('取消') }}</UiButton><UiButton variant="primary" :disabled="!importText.trim()" @click="reviewImport">{{ t('下一步') }}</UiButton></div>
           </template>
-          <label>{{ t('调用方式') }}<UiSelect :ariaLabelText="t('调用方式')" v-model="exposure" :disabled="!!pending" :options="[{ value: 'deferred', label: t('按需加载') }, { value: 'direct', label: t('直接调用') }, { value: 'codemode', label: t('批量调用') }, { value: 'hidden', label: t('隐藏工具') }]" /></label>
-          <template v-if="!original?.isOverride">
-          <label>{{ t('等待时间（秒）') }}<UiInput v-model.number="timeout" type="number" min="1" max="3600" :disabled="!!pending" /></label>
-          <template v-if="kind === 'remote'"><label>{{ t('登录客户端 ID') }}<UiInput v-model="oauthClientId" :disabled="!!pending" autocomplete="off" /></label><label>{{ t('登录客户端密钥') }}<UiInput v-model="oauthClientSecret" type="password" :disabled="!!pending" autocomplete="off" /></label><label>{{ t('登录回调地址') }}<UiInput v-model="oauthCallbackUrl" :disabled="!!pending" placeholder="http://127.0.0.1:8080/callback" /></label></template>
+          <template v-else>
+            <ul class="mcp-import-list"><li v-for="(config, serverName) in importPreview" :key="serverName"><strong>{{ serverName }}</strong><span>{{ config.url || config.command }}</span></li></ul>
+            <div class="mcp-actions"><UiButton variant="ghost" :disabled="!!pending" @click="importPreview = null">{{ t('返回') }}</UiButton><UiButton variant="primary" :disabled="!canChange" @click="request('import', { servers: importPreview, check: true })">{{ t('导入') }} {{ Object.keys(importPreview).length }}</UiButton></div>
           </template>
+        </section>
+
+        <form v-else-if="editing" class="mcp-editor" @submit.prevent="save">
+          <h2>{{ t(original ? '编辑服务' : '添加服务') }}</h2>
+          <div class="mcp-field"><span class="mcp-label">{{ t('名称') }}</span><UiInput v-model="name" :disabled="!!original || !!pending" autocomplete="off" placeholder="my-service" /></div>
+          <template v-if="!original?.isOverride">
+            <div class="mcp-kind" role="group" :aria-label="t('连接方式')"><UiButton type="button" :class="{ active: kind === 'remote' }" :disabled="!!pending" @click="changeKind('remote')">{{ t('远程') }}</UiButton><UiButton type="button" :class="{ active: kind === 'local' }" :disabled="!!pending" @click="changeKind('local')">{{ t('本地') }}</UiButton></div>
+            <div v-if="kind === 'remote'" class="mcp-field"><span class="mcp-label">{{ t('服务地址') }}</span><UiInput v-model="url" :disabled="!!pending" placeholder="https://example.com/mcp" /></div>
+            <div v-else class="mcp-field"><span class="mcp-label">{{ t('启动命令') }}</span><UiInput v-model="command" :disabled="!!pending" placeholder="npx -y @example/mcp-server" /></div>
+          </template>
+          <p v-else class="mcp-address">{{ t('个人服务') }} · {{ url || command }}</p>
+          <div class="mcp-enabled"><span>{{ t('启用') }}</span><UiSwitch v-model="enabled" :disabled="!!pending" :aria-label="t('启用服务')" /></div>
+          <details class="mcp-advanced"><summary>{{ t('高级设置') }}</summary>
+            <div class="mcp-advanced-content">
+            <template v-if="!original?.isOverride">
+            <div v-if="kind === 'local'" class="mcp-field"><span class="mcp-label">{{ t('运行目录') }}</span><UiInput v-model="directory" :disabled="!!pending" :placeholder="t('当前工作区')" /></div>
+            <div class="mcp-pairs"><span class="mcp-label">{{ t(kind === 'local' ? '环境变量' : '请求头') }}</span><div v-for="(pair, index) in pairs" :key="index" class="mcp-pair"><UiInput v-model="pair.key" :disabled="!!pending" :aria-label="t('名称')" :placeholder="t('名称')" /><UiInput v-model="pair.value" :disabled="!!pending" :type="pair.revealed ? 'text' : 'password'" :aria-label="t('值')" :placeholder="t('值')" autocomplete="off" /><UiButton type="button" :aria-label="t(pair.revealed ? '隐藏' : '显示')" @click="pair.revealed = !pair.revealed">{{ pair.revealed ? '◉' : '○' }}</UiButton><UiButton type="button" :disabled="!!pending" :aria-label="t('移除')" @click="pairs.splice(index, 1)">×</UiButton></div><UiButton type="button" :disabled="!!pending" @click="pairs.push({ key: '', value: '', revealed: false })">{{ t('添加一项') }}</UiButton></div>
+            </template>
+            <div class="mcp-field"><span class="mcp-label">{{ t('调用方式') }}</span><UiSelect :ariaLabelText="t('调用方式')" v-model="exposure" :disabled="!!pending" :options="[{ value: 'deferred', label: t('按需加载') }, { value: 'direct', label: t('直接调用') }, { value: 'codemode', label: t('批量调用') }, { value: 'hidden', label: t('隐藏工具') }]" /></div>
+            <template v-if="!original?.isOverride">
+            <div class="mcp-field"><span class="mcp-label">{{ t('等待时间（秒）') }}</span><UiInput v-model.number="timeout" type="number" min="1" max="3600" :disabled="!!pending" /></div>
+            <template v-if="kind === 'remote'"><div class="mcp-field"><span class="mcp-label">{{ t('登录客户端 ID') }}</span><UiInput v-model="oauthClientId" :disabled="!!pending" autocomplete="off" /></div><div class="mcp-field"><span class="mcp-label">{{ t('登录客户端密钥') }}</span><UiInput v-model="oauthClientSecret" type="password" :disabled="!!pending" autocomplete="off" /></div><div class="mcp-field"><span class="mcp-label">{{ t('登录回调地址') }}</span><UiInput v-model="oauthCallbackUrl" :disabled="!!pending" placeholder="http://127.0.0.1:8080/callback" /></div></template>
+            </template>
+            </div>
+          </details>
+          <div class="mcp-actions"><UiButton variant="ghost" type="button" :disabled="!!pending" @click="editing = false">{{ t('取消') }}</UiButton><UiButton type="submit" variant="primary" :disabled="!canChange">{{ t('保存') }}</UiButton></div>
+        </form>
+
+        <section v-else-if="current" class="mcp-detail">
+          <header class="mcp-detail-head">
+            <div class="mcp-detail-title">
+              <h2>{{ current.name }}</h2>
+              <span class="mcp-status" :class="current.state"><i aria-hidden="true" />{{ t(statusLabels[current.state]) }}</span>
+            </div>
+            <UiSwitch :model-value="current.config.enabled !== false" :disabled="!canChange || current.state === 'overridden'" :aria-label="t('启用服务')" @update:model-value="request('toggle', { name: current.name, enabled: $event, check: $event })" />
+          </header>
+          <p class="mcp-address">{{ current.config.url || formatMcpCommand(current.config) }}</p>
+          <div class="mcp-actions mcp-detail-actions">
+            <UiButton :variant="current.state === 'connected' ? 'secondary' : 'primary'" :disabled="!!pending || current.state === 'untrusted' || current.state === 'overridden' || current.config.enabled === false" @click="request('list', { name: current.name, check: true })">{{ t('检查连接') }}</UiButton>
+            <UiButton variant="ghost" :disabled="!canChange" @click="beginEdit(current)">{{ t('编辑') }}</UiButton>
+            <UiButton v-if="canSignIn" variant="primary" :disabled="!canChange || current.config.enabled === false" @click="request('login', { name: current.name })">{{ t('登录') }}</UiButton>
+            <UiButton v-if="signedIn" variant="ghost" :disabled="!canChange" @click="request('logout', { name: current.name })">{{ t('退出登录') }}</UiButton>
+            <UiButton variant="ghost" class="mcp-remove" :disabled="!canChange || current.inherited" @click="removeTarget = current">{{ t(current.isOverride ? '恢复个人设置' : '移除') }}</UiButton>
           </div>
-        </details>
-        <div class="mcp-actions"><UiButton type="button" :disabled="!!pending" @click="editing = false">{{ t('取消') }}</UiButton><UiButton type="submit" variant="primary" :disabled="!canChange">{{ t('保存') }}</UiButton></div>
-      </form>
-      <section v-else-if="current" class="mcp-detail">
-        <div class="mcp-detail-heading"><h2>{{ current.name }}</h2><UiSwitch :model-value="current.config.enabled !== false" :disabled="!canChange || current.state === 'overridden'" :aria-label="t('启用服务')" @update:model-value="request('toggle', { name: current.name, enabled: $event, check: $event })" /></div>
-        <span class="mcp-state" :class="current.state">{{ t(statusLabels[current.state]) }}</span>
-        <p class="mcp-address">{{ current.config.url || formatMcpCommand(current.config) }}</p>
-        <div class="mcp-actions mcp-detail-actions"><UiButton :disabled="!canChange" @click="beginEdit(current)">{{ t('编辑') }}</UiButton><UiButton :disabled="!!pending || current.state === 'untrusted' || current.state === 'overridden' || current.config.enabled === false" @click="request('list', { name: current.name, check: true })">{{ t('检查连接') }}</UiButton><UiButton v-if="canSignIn" :disabled="!canChange || current.config.enabled === false" @click="request('login', { name: current.name })">{{ t('登录') }}</UiButton><UiButton :disabled="!canChange || current.inherited" class="mcp-delete" @click="removeTarget = current">{{ t(current.isOverride ? '恢复个人设置' : '移除') }}</UiButton></div>
-        <details v-if="current.error" class="mcp-connection-error"><summary>{{ t('连接详情') }}</summary><pre>{{ current.error }}</pre></details>
-        <details v-if="current.tools.length" class="mcp-tools"><summary>{{ t('工具') }} · {{ current.tools.length }}</summary><ul><li v-for="tool in current.tools" :key="tool.name"><strong>{{ tool.name }}</strong><p v-if="tool.description">{{ tool.description }}</p></li></ul></details>
-        <details v-if="canSignIn" class="mcp-account"><summary>{{ t('账号') }}</summary><UiButton :disabled="!canChange" @click="request('logout', { name: current.name })">{{ t('退出登录') }}</UiButton></details>
-      </section>
-      <div v-else-if="!pending" class="mcp-empty"><p>{{ t(search ? '没有匹配的服务' : '暂无服务') }}</p><UiButton variant="primary" :disabled="!canChange" @click="beginEdit()">{{ t('添加服务') }}</UiButton></div>
+          <section v-if="current.tools.length" class="mcp-section">
+            <h3>{{ t('可用工具') }}<span>{{ current.tools.length }}</span></h3>
+            <ul class="mcp-tool-list"><li v-for="tool in current.tools" :key="tool.name"><strong>{{ tool.name }}</strong><p v-if="tool.description">{{ tool.description }}</p></li></ul>
+          </section>
+          <section v-if="current.error" class="mcp-section">
+            <h3>{{ t('连接详情') }}</h3>
+            <pre class="mcp-pre">{{ current.error }}</pre>
+          </section>
+        </section>
+
+        <div v-else-if="!pending" class="mcp-empty">
+          <p>{{ t(search ? '没有匹配的服务' : '暂无服务') }}</p>
+          <UiButton variant="primary" :disabled="!canChange" @click="beginEdit()">{{ t('添加服务') }}</UiButton>
+        </div>
+      </div>
     </div>
-    <UiDialog v-if="removeTarget" :title="t(removeTarget.isOverride ? '恢复个人设置' : '移除服务')" content-class="mcp-confirm" @close="removeTarget = null"><h2>{{ t(removeTarget.isOverride ? '恢复个人设置' : '移除服务') }}</h2><p>{{ removeTarget.name }}</p><div class="mcp-actions"><UiButton :disabled="!!pending" @click="removeTarget = null">{{ t('取消') }}</UiButton><UiButton variant="danger" :disabled="!!pending" @click="request('delete', { name: removeTarget.name })">{{ t(removeTarget.isOverride ? '恢复' : '移除') }}</UiButton></div></UiDialog>
+
+    <UiDialog v-if="removeTarget" :title="t(removeTarget.isOverride ? '恢复个人设置' : '移除服务')" content-class="mcp-confirm" @close="removeTarget = null"><h2>{{ t(removeTarget.isOverride ? '恢复个人设置' : '移除服务') }}</h2><p>{{ removeTarget.name }}</p><div class="mcp-actions"><UiButton variant="ghost" :disabled="!!pending" @click="removeTarget = null">{{ t('取消') }}</UiButton><UiButton variant="danger" :disabled="!!pending" @click="request('delete', { name: removeTarget.name })">{{ t(removeTarget.isOverride ? '恢复' : '移除') }}</UiButton></div></UiDialog>
   </div>
 </template>
 
 <style scoped>
-.mcp-settings { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.mcp-settings :deep(.ui-button) { min-height: 34px; padding: 6px 10px; border-radius: 7px; font-size: 14px; line-height: 1.4; justify-content: center; }
-.mcp-settings :deep(.ui-input), .mcp-settings :deep(.ui-textarea) { box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 10px; border: 1px solid var(--color-border-default); border-radius: 7px; background: var(--color-bg-surface); color: var(--color-text-primary); font: inherit; font-size: 14px; line-height: 1.5; }
+.mcp-settings { display: flex; flex-direction: column; gap: 16px; height: 100%; min-height: 0; min-width: 0; }
+.mcp-settings :deep(.ui-button) { justify-content: center; gap: 6px; min-height: 34px; padding: 6px 12px; border-radius: 7px; font-size: var(--font-size-body-sm); line-height: 1.4; }
+.mcp-settings :deep(.ui-input), .mcp-settings :deep(.ui-textarea) { box-sizing: border-box; width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid var(--color-border-default); border-radius: 7px; outline: 0; background: var(--color-bg-surface); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-body-sm); line-height: 1.5; }
+.mcp-settings :deep(.ui-input:focus-visible), .mcp-settings :deep(.ui-textarea:focus-visible) { border-color: var(--color-tone-9); }
 .mcp-settings :deep(.ui-input::placeholder), .mcp-settings :deep(.ui-textarea::placeholder) { color: var(--color-text-tertiary); }
-.mcp-settings :deep(.ui-textarea) { resize: vertical; }
-.mcp-toolbar :deep(.ui-button--plain), .mcp-actions :deep(.ui-button--plain) { border-color: var(--color-border-default); }
-.mcp-toolbar, .mcp-actions, .mcp-kind, .mcp-login, .mcp-redirect { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.mcp-toolbar > :nth-child(2) { max-width: 200px; }
-.mcp-layout { display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr); gap: 22px; }
+.mcp-settings :deep(.ui-textarea) { min-height: 0; resize: vertical; }
+
+.mcp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.mcp-toolbar-spacer { flex: 1 1 auto; min-width: 8px; }
+.mcp-segments { display: inline-flex; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-tone-2); }
+.mcp-settings :deep(.mcp-segment) { min-height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-tertiary); font-size: var(--font-size-body-sm); }
+.mcp-settings :deep(.mcp-segment:hover:not(:disabled)) { background: transparent; color: var(--color-text-primary); }
+.mcp-settings :deep(.mcp-segment.active) { background: var(--color-bg-active); color: var(--color-text-primary); }
+.mcp-workspace { width: min(220px, 100%); }
+
+.mcp-layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 28px; flex: 1 1 auto; min-height: 0; }
 .mcp-layout-single { grid-template-columns: minmax(0, 1fr); }
-.mcp-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.mcp-list > .ui-input { width: 100%; margin-bottom: 6px; }
-.mcp-server { align-items: flex-start; flex-direction: column; height: auto; padding: 12px; text-align: left; gap: 5px; }
-.mcp-settings :deep(.ui-button.mcp-server) { padding: 12px; align-items: flex-start; }
-.mcp-server strong { overflow-wrap: anywhere; }
-.mcp-server.selected, .mcp-kind .active { background: var(--color-bg-active); }
-.mcp-state, .mcp-muted { color: var(--color-text-secondary); font-size: 13px; }
-.mcp-state.connected { color: var(--color-success-text); }
-.mcp-state.failed, .mcp-state.needs-auth, .mcp-error { color: var(--color-danger-text); }
-.mcp-detail, .mcp-editor { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.mcp-detail-heading, .mcp-enabled, .mcp-trust { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.mcp-settings h2 { margin: 0; font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
-.mcp-editor label { display: flex; flex-direction: column; gap: 7px; font-size: 14px; }
-.mcp-actions { justify-content: flex-end; }
-.mcp-detail-actions { justify-content: flex-start; }
-.mcp-delete { margin-left: auto; }
-.mcp-address { margin: 0; color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-summary { cursor: pointer; font-size: 14px; line-height: 1.6; }
+.mcp-list { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; padding-right: 14px; border-right: 1px solid var(--color-border-subtle); }
+.mcp-list-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 4px; }
+.mcp-search { display: flex; min-width: 0; }
+.mcp-settings :deep(.mcp-icon) { width: 34px; min-width: 34px; padding: 0; color: var(--color-text-secondary); }
+.mcp-settings :deep(.mcp-icon svg) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.mcp-items { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.mcp-settings :deep(.mcp-server) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 7px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--color-text-secondary); cursor: pointer; text-align: left; }
+.mcp-settings :deep(.mcp-server:hover) { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.mcp-settings :deep(.mcp-server.selected) { background: var(--color-bg-active); color: var(--color-text-primary); }
+.mcp-server-text { display: grid; min-width: 0; gap: 2px; }
+.mcp-server strong { overflow: hidden; font-size: var(--font-size-body); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.mcp-server small { overflow: hidden; color: var(--color-text-tertiary); font-size: var(--font-size-caption); text-overflow: ellipsis; white-space: nowrap; }
+.mcp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-tone-9); }
+.mcp-dot.connected { background: var(--color-success); box-shadow: 0 0 0 3px var(--color-success-halo); }
+.mcp-dot.failed, .mcp-dot.needs-auth { background: var(--color-danger); }
+
+.mcp-pane { min-width: 0; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.mcp-detail, .mcp-editor { display: flex; flex-direction: column; gap: 18px; max-width: 680px; min-width: 0; }
+.mcp-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.mcp-detail-title { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.mcp-settings h2 { margin: 0; color: var(--color-text-primary); font-size: var(--font-size-title-md); font-weight: var(--font-weight-semibold); line-height: 1.4; overflow-wrap: anywhere; }
+.mcp-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 99px; background: var(--color-bg-hover); color: var(--color-text-secondary); font-size: var(--font-size-caption); white-space: nowrap; }
+.mcp-status > i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .8; }
+.mcp-status.connected { background: var(--color-success-surface-emphasis); color: var(--color-success-emphasis); }
+.mcp-status.failed, .mcp-status.needs-auth { background: var(--color-danger-surface-emphasis); color: var(--color-danger-text); }
+.mcp-status.disabled, .mcp-status.unchecked { color: var(--color-text-tertiary); }
+.mcp-address { margin: -6px 0 0; color: var(--color-text-tertiary); font-family: var(--font-family-mono); font-size: var(--font-size-caption); line-height: 1.6; overflow-wrap: anywhere; }
+
+.mcp-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.mcp-detail-actions { justify-content: flex-start; margin-top: -4px; }
+.mcp-settings :deep(.mcp-remove) { margin-left: auto; color: var(--color-danger); }
+.mcp-settings :deep(.mcp-remove:hover:not(:disabled)) { background: var(--color-danger-surface-emphasis); color: var(--color-danger-text-strong); }
+
+.mcp-section { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--color-border-subtle); }
+.mcp-section h3 { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-body); font-weight: var(--font-weight-semibold); }
+.mcp-section h3 span { padding: 1px 7px; border-radius: 99px; background: var(--color-bg-hover); color: var(--color-text-tertiary); font-size: var(--font-size-micro); font-weight: var(--font-weight-regular); }
+.mcp-tool-list, .mcp-import-list { display: flex; flex-direction: column; gap: 14px; max-height: 360px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.mcp-tool-list strong { display: block; color: var(--color-text-primary); font-family: var(--font-family-mono); font-size: var(--font-size-body-sm); font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
+.mcp-tool-list p, .mcp-import-list span, .mcp-pre { margin: 4px 0 0; color: var(--color-text-tertiary); font-size: var(--font-size-caption); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mcp-pre { margin: 0; font-family: var(--font-family-mono); }
+
+.mcp-editor .mcp-field, .mcp-pairs { display: flex; flex-direction: column; gap: 7px; }
+.mcp-label { color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
+.mcp-kind { display: inline-flex; align-self: flex-start; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-tone-2); }
+.mcp-settings :deep(.mcp-kind button) { min-height: 30px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-tertiary); }
+.mcp-settings :deep(.mcp-kind button:hover) { color: var(--color-text-primary); }
+.mcp-settings :deep(.mcp-kind button.active) { background: var(--color-bg-active); color: var(--color-text-primary); }
+.mcp-enabled { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--color-border-subtle); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
+.mcp-advanced summary, .mcp-login summary { color: var(--color-text-secondary); cursor: pointer; font-size: var(--font-size-body-sm); }
 .mcp-advanced-content { display: flex; flex-direction: column; gap: 16px; padding-top: 14px; }
-.mcp-pairs > .ui-button { align-self: flex-start; }
-.mcp-pairs { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .mcp-pair { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(70px, 1.3fr) auto auto; gap: 6px; }
-.mcp-pair .ui-input { min-width: 0; width: 100%; }
-.mcp-pending { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 14px; }
-.mcp-error { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-.mcp-trust { padding: 12px 0; font-size: 14px; }
-.mcp-empty { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; min-height: 240px; color: var(--color-text-secondary); }
-.mcp-redirect { margin-top: 10px; }
-.mcp-import-list, .mcp-tools ul { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.mcp-import-list li { display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
-.mcp-import-list span, .mcp-tools p { color: var(--color-text-secondary); font-size: 14px; line-height: 1.6; margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.mcp-connection-error pre { font-family: inherit; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mcp-pair .ui-input { min-width: 0; }
+.mcp-pairs > .ui-button { align-self: flex-start; }
+.mcp-editor .mcp-actions { padding-top: 6px; }
+
+.mcp-pending { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
+.mcp-error { margin: 0; color: var(--color-danger-text); font-size: var(--font-size-body-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.mcp-trust { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--color-border-subtle); border-radius: 8px; color: var(--color-text-secondary); font-size: var(--font-size-body-sm); }
+.mcp-login { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.mcp-redirect { display: flex; gap: 8px; margin-top: 10px; }
+.mcp-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 100%; color: var(--color-text-tertiary); }
+.mcp-empty p { margin: 0; font-size: var(--font-size-body-sm); }
 :global(.mcp-confirm) { width: min(420px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--color-border-default); border-radius: 12px; background: var(--color-bg-elevated); color: var(--color-text-primary); }
-@media (max-width: 680px) { .mcp-layout { grid-template-columns: 1fr; } .mcp-list { max-height: 220px; overflow-y: auto; } .mcp-toolbar > :nth-child(2) { max-width: 150px; } }
+@media (max-width: 760px) { .mcp-layout { grid-template-columns: 1fr; } .mcp-list { max-height: 210px; border-right: 0; border-bottom: 1px solid var(--color-border-subtle); padding: 0 0 12px; } }
 </style>
