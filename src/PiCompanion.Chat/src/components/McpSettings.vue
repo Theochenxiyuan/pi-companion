@@ -23,7 +23,7 @@ const workspaceId = ref(props.activeWorkspaceId || props.workspaces[0]?.id || ''
 const scope = ref<McpScope>('global')
 const search = ref('')
 const selected = ref('')
-const pending = ref<{ id: string; action: string } | null>(null)
+const pending = ref<{ id: string; action: string; name?: string } | null>(null)
 const message = ref('')
 const editing = ref(false)
 const original = ref<McpServer | null>(null)
@@ -63,7 +63,7 @@ const statusLabels: Record<McpServer['state'], string> = {
 function request(action: string, values: Record<string, unknown> = {}) {
   if (pending.value) return
   const requestId = crypto.randomUUID()
-  pending.value = { id: requestId, action }
+  pending.value = { id: requestId, action, name: typeof values.name === 'string' ? values.name : undefined }
   message.value = ''
   emit('request', {
     requestId, action, scope: scope.value, workspaceId: workspaceId.value || null,
@@ -169,10 +169,17 @@ function keepCheckedResults(previous: McpSnapshot | null, next: McpSnapshot): Mc
 
 watch(() => props.result, result => {
   if (!result || result.requestId !== pending.value?.id) return
+  const request = pending.value
   pending.value = null
   redirectUrl.value = ''
   if (result.succeeded && result.snapshot) {
     snapshot.value = keepCheckedResults(snapshot.value, result.snapshot)
+    // A plain list answers before any probe runs; follow it with one check of
+    // everything so statuses appear without a click.
+    if (request.action === 'list' && !request.name &&
+        snapshot.value.servers.some(server => server.state === 'unchecked')) {
+      load(true)
+    }
     if (result.action === 'save' || result.action === 'import') {
       selected.value = result.action === 'import' ? Object.keys(importPreview.value ?? {})[0] ?? '' : name.value
       editing.value = false; importing.value = false
