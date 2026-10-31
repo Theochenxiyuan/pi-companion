@@ -53,6 +53,37 @@ describe('MCP settings', () => {
     expect(wrapper.text()).toContain('导入 1')
     wrapper.unmount()
   })
+  it('keeps earlier check results when another service is checked', async () => {
+    const twoServers: McpSnapshot = {
+      ...snapshot,
+      servers: [
+        { ...snapshot.servers[0]!, name: 'docs', state: 'connected', tools: [{ name: 'search', description: '' }] },
+        { ...snapshot.servers[0]!, name: 'other', state: 'unchecked', tools: [] },
+      ],
+    }
+    const wrapper = mount(McpSettings, { props: { workspaces: [workspace], activeWorkspaceId: workspace.id } })
+    const initial = wrapper.emitted('request')![0]![0] as { requestId: string }
+    await wrapper.setProps({ result: { requestId: initial.requestId, workspaceId: workspace.id, action: 'list', succeeded: true, snapshot: twoServers, message: '' } })
+    await wrapper.findAll('button').find(button => button.text().startsWith('other'))!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '检查连接')!.trigger('click')
+    const check = wrapper.emitted('request')!.at(-1)![0] as { requestId: string }
+    await wrapper.setProps({ result: {
+      requestId: check.requestId, workspaceId: workspace.id, action: 'list', succeeded: true, message: '',
+      snapshot: {
+        ...twoServers,
+        servers: [
+          { ...twoServers.servers[0]!, state: 'unchecked', tools: [] },
+          { ...twoServers.servers[1]!, state: 'connected', tools: [{ name: 'fetch', description: '' }] },
+        ],
+      },
+    } })
+    const docs = wrapper.findAll('button').find(button => button.text().startsWith('docs'))!
+    expect(docs.text()).toContain('可用')
+    expect(wrapper.findAll('button').find(button => button.text().startsWith('other'))!.text()).toContain('可用')
+    await docs.trigger('click')
+    expect(wrapper.text()).toContain('search')
+    wrapper.unmount()
+  })
   it('saves only workspace choices for an inherited personal server', async () => {
     const wrapper = await ready()
     await wrapper.findAll('button').find(button => button.text() === '工作区')!.trigger('click')

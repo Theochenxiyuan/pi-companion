@@ -148,12 +148,31 @@ function reviewImport() {
 
 function startImport() { importing.value = true; importText.value = ''; importPreview.value = null; editing.value = false; message.value = '' }
 
+// A snapshot only probes the servers the request asked about; the others come
+// back as unchecked. Keep the results already on screen instead of dropping
+// them, unless the server's configuration changed since it was checked.
+const probedStates = new Set<McpServer['state']>(['connected', 'failed', 'needs-auth'])
+function keepCheckedResults(previous: McpSnapshot | null, next: McpSnapshot): McpSnapshot {
+  if (!previous) return next
+  const checked = new Map(previous.servers.map(server => [`${server.scope}\u0000${server.name}`, server]))
+  return {
+    ...next,
+    servers: next.servers.map(server => {
+      if (server.state !== 'unchecked') return server
+      const last = checked.get(`${server.scope}\u0000${server.name}`)
+      if (!last || !probedStates.has(last.state)) return server
+      if (JSON.stringify(last.config) !== JSON.stringify(server.config)) return server
+      return { ...server, state: last.state, tools: last.tools, error: last.error }
+    }),
+  }
+}
+
 watch(() => props.result, result => {
   if (!result || result.requestId !== pending.value?.id) return
   pending.value = null
   redirectUrl.value = ''
   if (result.succeeded && result.snapshot) {
-    snapshot.value = result.snapshot
+    snapshot.value = keepCheckedResults(snapshot.value, result.snapshot)
     if (result.action === 'save' || result.action === 'import') {
       selected.value = result.action === 'import' ? Object.keys(importPreview.value ?? {})[0] ?? '' : name.value
       editing.value = false; importing.value = false
