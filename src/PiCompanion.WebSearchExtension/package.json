@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "pi-web-search": "^1.7.0",
-    "typebox": "1.4.2"
+    "typebox": "1.4.3"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "1.4.0",
