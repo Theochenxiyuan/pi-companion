@@ -170,6 +170,7 @@ function save() {
           </div>
           <div v-if="frequency === 'Weekly'" class="scheduled-weekdays" role="group" :aria-label="t('选择星期')"><UiButton v-for="day in [[1, '周一'], [2, '周二'], [4, '周三'], [8, '周四'], [16, '周五'], [32, '周六'], [64, '周日']]" :key="day[0]" variant="ghost" size="sm" type="button" :class="{ selected: daysOfWeek & Number(day[0]) }" :aria-pressed="Boolean(daysOfWeek & Number(day[0]))" @click="toggleDay(Number(day[0]))">{{ t(String(day[1])) }}</UiButton></div>
           <p class="scheduled-timezone-note">{{ t('时区：{timeZone}（自动设置）', { timeZone: timeZoneId }) }}</p>
+          <p class="scheduled-timezone-note">{{ t('Pi Companion 需要在后台运行才能准时触发；完全退出后会在下次启动时按错过策略处理。') }}</p>
           <UiSwitch v-model="isEnabled">{{ t('启用定时任务') }}</UiSwitch>
         </section>
       </div>

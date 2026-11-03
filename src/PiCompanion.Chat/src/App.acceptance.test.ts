@@ -135,9 +135,9 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(skillsView.find('.skills-tabs').exists()).toBe(false)
     expect(skillsView.text()).not.toContain('技能库')
     expect(skillsView.text()).toContain('导入技能')
-    expect(skillsView.findAll('.skill-card-footer button')).toHaveLength(3)
-    expect(skillsView.findAll('.skill-card-footer button')
-      .every(button => button.text() === '查看详情')).toBe(true)
+    expect(skillsView.findAll('.skill-card-main')).toHaveLength(3)
+    expect(skillsView.findAll('.skill-card-main')
+      .every(button => (button.attributes('aria-label') ?? '').endsWith('技能详情'))).toBe(true)
     expect(wrapper.get('.sidebar > nav .nav-row.selected').text()).toBe('自定义')
 
     await skillsView.get('.skills-import').trigger('click')
@@ -259,7 +259,7 @@ describe('Agent Chat stage 5 acceptance', () => {
 
     const releaseCard = skillsView.findAll('.skill-card')
       .find(card => card.text().includes('release-notes'))!
-    await releaseCard.get('.skill-card-footer button').trigger('click')
+    await releaseCard.get('.skill-card-main').trigger('click')
     await wrapper.get('.skill-remove-button').trigger('click')
     await wrapper.get('.skill-removal-confirm-backdrop .danger').trigger('click')
     const removalRequest = postMessage.mock.calls
@@ -308,7 +308,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     await scheduledNavigation.trigger('click')
     expect(wrapper.find('.scheduled-tasks-view').exists()).toBe(true)
     expect(wrapper.get('.management-location strong').text()).toBe('定时任务')
-    expect(wrapper.get('.scheduled-task-empty').text()).toContain('还没有定时任务')
+    expect(wrapper.find('.scheduled-task-empty, .management-loading-skeleton').exists()).toBe(true)
   })
 
   it('switches between skills and MCP inside the customization view', async () => {
@@ -338,9 +338,10 @@ describe('Agent Chat stage 5 acceptance', () => {
     await tabs[1]!.trigger('click')
     await nextTick()
     expect(wrapper.get('.customization-mcp-surface').find('.mcp-settings').exists()).toBe(true)
-    expect(wrapper.get('.management-topbar .location small').text())
-      .toBe('管理全局与工作区的 MCP 服务连接。')
+    expect(wrapper.find('.management-topbar .location small').exists()).toBe(false)
     expect(wrapper.find('.skills-import').exists()).toBe(false)
+    expect(wrapper.find('.mcp-import-button').exists()).toBe(true)
+    expect(wrapper.find('.mcp-add-button').exists()).toBe(true)
 
     const mcpRequest = postMessage.mock.calls
       .map(call => call[0])

@@ -110,12 +110,6 @@ const title = computed(() => {
   if (props.contextWorkspace) return t('{name} 的技能', { name: props.contextWorkspace.name })
   return t('自定义模块')
 })
-const contextDescription = computed(() => {
-  if (props.globalOnly) return t('Direct Chat 可用的全局技能。')
-  if (props.contextWorkspace) return t('当前工作区可用的全局与工作区技能。')
-  if (activeTab.value === 'mcp') return t('管理全局与工作区的 MCP 服务连接。')
-  return t('本机 Pi 与通用 Agent 原生目录中的全部技能。')
-})
 
 function diagnosticsForContext(diagnostics: SkillDiagnostic[]) {
   if (!hasContext.value) return diagnostics
@@ -283,11 +277,6 @@ const visibleSkills = computed(() => {
 
 const selectedSkill = computed(() =>
   props.snapshot?.skills.find(skill => skill.name === selectedSkillName.value) ?? null)
-const availableCount = computed(() =>
-  visibleSkills.value.filter(skill => {
-    const entry = primaryEntry(skill)
-    return Boolean(entry?.variant.isAvailable && isEffective(entry.installation))
-  }).length)
 const issueCount = computed(() =>
   visibleSkills.value.filter(skill =>
     relevantVariants(skill).length > 1 ||
@@ -295,6 +284,14 @@ const issueCount = computed(() =>
       !variant.isAvailable ||
       relevantInstallations(variant).some(installation =>
         diagnosticsForContext(installation.diagnostics).length > 0))).length)
+const subtitle = computed(() => {
+  if (activeTab.value === 'mcp' && !hasContext.value) return ''
+  const parts = [t('{count} 个技能', { count: visibleSkills.value.length })]
+  if (issueCount.value) parts.push(t('{count} 个有问题', { count: issueCount.value }))
+  return parts.join(' · ')
+})
+const mcpSettings = ref<InstanceType<typeof McpSettings> | null>(null)
+const mcpCanChange = computed(() => mcpSettings.value?.canChange ?? false)
 const importScopeOptions = computed(() => [
   { value: '', label: t('请选择导入范围') },
   { value: 'global', label: t('全局') },
@@ -509,7 +506,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         </UiButton>
         <div class="location management-location">
           <strong>{{ title }}</strong>
-          <small>{{ contextDescription }}</small>
+          <small v-if="subtitle">{{ subtitle }}</small>
         </div>
         <div
           v-if="!hasContext"
@@ -536,6 +533,22 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         </div>
       </div>
       <div class="skills-topbar-actions">
+        <template v-if="!hasContext && activeTab === 'mcp'">
+          <UiButton
+            class="mcp-import-button"
+            variant="secondary"
+            type="button"
+            :disabled="!mcpCanChange"
+            @click="mcpSettings?.startImport()"
+          >{{ t('导入') }}</UiButton>
+          <UiButton
+            class="mcp-add-button"
+            variant="primary"
+            type="button"
+            :disabled="!mcpCanChange"
+            @click="mcpSettings?.beginEdit()"
+          >{{ t('添加服务') }}</UiButton>
+        </template>
         <UiButton
           v-if="!hasContext && activeTab === 'skills'"
           class="skills-import"
@@ -554,10 +567,13 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           type="button"
           :disabled="loading"
           :aria-label="t('刷新技能')"
+          :title="snapshot
+            ? t('扫描于 {time}', { time: formattedTime(snapshot.scannedAt) })
+            : t('刷新技能')"
           @click="$emit('refresh')"
         >
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 7a6 6 0 1 0 .3 5.5" /><path d="M16 3v4h-4" /></svg>
-          {{ loading ? t('正在刷新…') : t('刷新') }}
+          <span>{{ loading ? t('正在刷新…') : t('刷新') }}</span>
         </UiButton>
         <AppMoreMenu
           :detail-level="detailLevel"
@@ -577,6 +593,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
         class="customization-mcp-surface"
       >
         <McpSettings
+          ref="mcpSettings"
           :workspaces="workspaces"
           :active-workspace-id="activeWorkspaceId"
           :result="mcpResult"
@@ -614,15 +631,6 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
       >
         <strong>{{ trustResult.succeeded ? t('工作区已受 Pi 信任') : t('工作区信任失败') }}</strong>
         <span>{{ trustResult.message }}</span>
-      </div>
-
-      <div class="skills-summary" aria-live="polite">
-        <span><strong>{{ visibleSkills.length }}</strong>{{ t('个技能') }}</span>
-        <span><strong>{{ availableCount }}</strong>{{ t('可用') }}</span>
-        <span v-if="issueCount"><strong>{{ issueCount }}</strong>{{ t('有问题') }}</span>
-        <time v-if="snapshot" :datetime="snapshot.scannedAt">
-          {{ t('扫描于 {time}', { time: formattedTime(snapshot.scannedAt) }) }}
-        </time>
       </div>
 
       <div class="skills-controls">
@@ -668,28 +676,36 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           class="surface-card surface-card--lg skill-card"
           :class="`skill-${skillTone(skill)}`"
         >
-          <header class="skill-card-header">
-            <div>
-              <h2 :title="skill.name">{{ skill.name }}</h2>
-              <span class="skill-status">{{ skillStatus(skill) }}</span>
+          <UiButton
+            class="skill-card-main"
+            type="button"
+            :aria-label="t('{name} 技能详情', { name: skill.name })"
+            @click="openDetails(skill)"
+          >
+            <header class="skill-card-header">
+              <div>
+                <h2 :title="skill.name">{{ skill.name }}</h2>
+                <span class="skill-status">{{ skillStatus(skill) }}</span>
+              </div>
+              <span
+                v-if="primaryEntry(skill)?.variant.disableModelInvocation"
+                class="skill-manual-badge"
+              >{{ t('仅用户手动') }}</span>
+            </header>
+            <p class="skill-description">
+              {{ primaryEntry(skill)?.variant.description || t('没有提供技能描述。') }}
+            </p>
+            <div class="skill-card-summary">
+              <span>{{ t('{count} 处安装', { count: installationCount(skill) }) }}</span>
+              <span>{{ t('{count} 种内容', { count: relevantVariants(skill).length }) }}</span>
+              <strong v-if="relevantVariants(skill).length > 1">{{ t('内容不同') }}</strong>
             </div>
-            <span
-              v-if="primaryEntry(skill)?.variant.disableModelInvocation"
-              class="skill-manual-badge"
-            >{{ t('仅用户手动') }}</span>
-          </header>
-          <p class="skill-description">
-            {{ primaryEntry(skill)?.variant.description || t('没有提供技能描述。') }}
-          </p>
-          <div class="skill-card-summary">
-            <span>{{ t('{count} 处安装', { count: installationCount(skill) }) }}</span>
-            <span>{{ t('{count} 种内容', { count: relevantVariants(skill).length }) }}</span>
-            <strong v-if="relevantVariants(skill).length > 1">{{ t('内容不同') }}</strong>
-          </div>
-          <footer class="skill-card-footer">
+          </UiButton>
+          <footer v-if="untrustedWorkspaceForSkill(skill)" class="skill-card-footer">
             <UiButton
-              v-if="untrustedWorkspaceForSkill(skill)"
               class="skill-trust-button"
+              variant="secondary"
+              size="sm"
               type="button"
               :disabled="Boolean(trustingWorkspaceId)"
               @click="trustWorkspace(untrustedWorkspaceForSkill(skill))"
@@ -698,7 +714,6 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
                 ? '正在信任…'
                 : '信任工作区') }}
             </UiButton>
-            <UiButton type="button" @click="openDetails(skill)">{{ t('查看详情') }}</UiButton>
           </footer>
         </article>
       </div>
@@ -825,6 +840,8 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
                   <UiButton
                     v-if="untrustedWorkspaceForInstallation(installation)"
                     class="skill-trust-button"
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     :disabled="Boolean(trustingWorkspaceId)"
                     @click="trustWorkspace(untrustedWorkspaceForInstallation(installation))"
@@ -837,6 +854,8 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
                   <UiButton
                     v-if="installation.removable"
                     class="skill-remove-button"
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     :disabled="removingInstallationId === installation.id"
                     @click="requestRemoval(selectedSkill, variant, installation)"
@@ -1062,20 +1081,19 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
 .customization-tab:hover { background: transparent; color: var(--color-text-primary); }
 .customization-tab.active { background: var(--color-bg-active); color: var(--color-text-primary); }
 .skills-content.mcp-content { overflow: hidden; padding-bottom: 24px; }
-.customization-mcp-surface { display: flex; flex-direction: column; width: min(100%, 1120px); height: 100%; min-height: 0; margin: 0 auto; }
+.customization-mcp-surface { display: flex; flex-direction: column; width: min(100%, var(--management-content-width)); height: 100%; min-height: 0; margin: 0 auto; }
 .skill-card { display: flex; flex-direction: column; }
 .skill-card .skill-description { flex: 1; }
 .skill-card-summary { display: flex; flex-wrap: wrap; gap: 7px 12px; padding: 0 16px 14px; color: var(--color-tone-10); font-size: var(--font-size-caption); }
 .skill-card-summary strong { color: var(--color-warning-text); font-weight: var(--font-weight-medium); }
 .skill-card-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 12px; border-top: 1px solid var(--color-tone-7); }
-.skill-card-footer button, .skill-remove-button { min-height: 32px; padding: 5px 11px; border: 1px solid var(--color-tone-8); border-radius: 7px; background: var(--color-tone-4); color: var(--color-tone-13); cursor: pointer; font-size: var(--font-size-body-sm); }
-.skill-card-footer button:hover, .skill-remove-button:hover { border-color: var(--color-tone-10); color: var(--color-tone-15); }
-.skill-trust-button { min-height: 32px; padding: 5px 11px; border: 1px solid var(--color-warning-border); border-radius: 7px; background: var(--color-warning-surface); color: var(--color-warning-text); cursor: pointer; font-size: var(--font-size-body-sm); }
+.skill-remove-button { align-self: start; border-color: var(--color-danger-border); color: var(--color-danger-text); }
+.skill-trust-button { border-color: var(--color-warning-border); background: var(--color-warning-surface); color: var(--color-warning-text); }
 .skill-trust-button:hover { filter: brightness(1.08); }
 .skill-trust-button:disabled { cursor: default; opacity: .6; }
 .skills-topbar-actions .skills-import { border-color: var(--color-tone-9); color: var(--color-tone-14); }
 .skills-topbar-actions .skills-import:disabled { cursor: wait; opacity: .55; }
-.skills-action-result { display: grid; width: min(100%, 1120px); gap: 3px; margin: 0 auto 14px; padding: 11px 13px; border: 1px solid var(--color-success-border); border-radius: 8px; background: var(--color-success-surface); color: var(--color-success-text); font-size: var(--font-size-caption); }
+.skills-action-result { display: grid; width: min(100%, var(--management-content-width)); gap: 3px; margin: 0 auto 14px; padding: 11px 13px; border: 1px solid var(--color-success-border); border-radius: 8px; background: var(--color-success-surface); color: var(--color-success-text); font-size: var(--font-size-caption); }
 .skills-action-result.failed { border-color: var(--color-danger-border); background: var(--color-danger-surface); color: var(--color-danger-text); }
 :global(.skill-detail-backdrop) { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 20px; background: var(--color-overlay-strong); backdrop-filter: blur(2px); }
 :global(.skill-detail-dialog) { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(860px, calc(100vw - 40px)); max-height: min(820px, calc(100vh - 40px)); overflow: hidden; border: 1px solid var(--color-tone-8); border-radius: 12px; background: var(--color-tone-3); box-shadow: 0 30px 90px var(--color-overlay-strong); }

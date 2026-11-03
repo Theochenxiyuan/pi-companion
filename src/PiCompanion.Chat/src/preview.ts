@@ -1,8 +1,10 @@
 import type {
   McpSnapshot,
+  ScheduledTask,
   SkillsLoaded,
   TaskHistoryEntry,
   TaskSnapshot,
+  TaskTemplate,
   TranscriptBlock,
   WorkspaceGitCommitDiff,
 } from '@/types/bridge'
@@ -265,6 +267,179 @@ export function createCommitDiffPreview(): WorkspaceGitCommitDiff {
       },
     ],
   }
+}
+
+const previewTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+
+function localInputValue(hours: number, minutes: number, dayOffset = 0) {
+  const date = new Date()
+  date.setDate(date.getDate() + dayOffset)
+  date.setHours(hours, minutes, 0, 0)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function laterToday() {
+  const date = new Date()
+  const later = new Date(date)
+  later.setHours(23, 30, 0, 0)
+  return later.getTime() > date.getTime()
+    ? later
+    : new Date(date.getTime() + 30 * 60_000)
+}
+
+export function createUserTaskTemplatesPreview(): TaskTemplate[] {
+  const timestamp = new Date().toISOString()
+  return [
+    {
+      id: 'preview-template-release',
+      name: '发布前检查',
+      prompt: '检查当前工作区的发布风险：待办、未提交改动、测试缺口和依赖版本，按严重程度列出需要处理的事项。',
+      targetKind: 'Workspace',
+      workspaceId: 'preview-workspace',
+      model: null,
+      thinkingLevel: null,
+      permissionMode: 'read-only',
+      isPinned: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      origin: 'User',
+      sourceTaskId: null,
+      sourceRunId: null,
+      isBuiltIn: false,
+    },
+    {
+      id: 'preview-template-changelog',
+      name: '整理最近的改动说明',
+      prompt: '阅读最近的提交和任务记录，按模块整理这次版本的变化，说明每个改动解决的问题、影响到的用户场景，以及需要回归验证的路径；最后附上仍然待确认的风险点和建议的验证顺序。',
+      targetKind: 'GeneralChat',
+      workspaceId: null,
+      model: null,
+      thinkingLevel: null,
+      permissionMode: 'read-only',
+      isPinned: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      origin: 'Agent',
+      sourceTaskId: 'preview-task',
+      sourceRunId: 'preview-run',
+      isBuiltIn: false,
+    },
+  ]
+}
+
+export function createScheduledTasksPreview(): ScheduledTask[] {
+  const timestamp = new Date().toISOString()
+  const dayOffset = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString()
+  return [
+    {
+      id: 'preview-schedule-daily',
+      name: '每日项目摘要',
+      isEnabled: true,
+      templateId: null,
+      prompt: '总结今天的工作进展，并列出明天需要推进的事项。',
+      targetKind: 'GeneralChat',
+      workspaceId: null,
+      model: null,
+      thinkingLevel: null,
+      permissionMode: null,
+      frequency: 'Daily',
+      localStartAt: localInputValue(9, 0),
+      daysOfWeek: 0,
+      timeZoneId: previewTimeZone,
+      nextRunAt: laterToday().toISOString(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastOccurrence: {
+        id: 'preview-occurrence-daily',
+        scheduledFor: timestamp,
+        status: 'Enqueued',
+        taskId: 'preview-task',
+        runId: 'preview-run',
+        error: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    {
+      id: 'preview-schedule-release',
+      name: '工作日发布检查',
+      isEnabled: true,
+      templateId: 'preview-template-release',
+      prompt: null,
+      targetKind: null,
+      workspaceId: null,
+      model: null,
+      thinkingLevel: null,
+      permissionMode: null,
+      frequency: 'Weekdays',
+      localStartAt: localInputValue(18, 30),
+      daysOfWeek: 0,
+      timeZoneId: 'America/New_York',
+      nextRunAt: dayOffset(1),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastOccurrence: {
+        id: 'preview-occurrence-release',
+        scheduledFor: timestamp,
+        status: 'Enqueued',
+        taskId: null,
+        runId: null,
+        error: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    {
+      id: 'preview-schedule-weekly',
+      name: '每周代码整理',
+      isEnabled: false,
+      templateId: null,
+      prompt: '整理这一周的代码改动，合并重复的待办，删掉已经完成的条目。',
+      targetKind: 'Workspace',
+      workspaceId: 'preview-workspace',
+      model: null,
+      thinkingLevel: null,
+      permissionMode: 'read-only',
+      frequency: 'Weekly',
+      localStartAt: localInputValue(10, 0),
+      daysOfWeek: 1 | 4 | 16,
+      timeZoneId: previewTimeZone,
+      nextRunAt: dayOffset(5),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastOccurrence: null,
+    },
+    {
+      id: 'preview-schedule-once',
+      name: '一次性迁移检查',
+      isEnabled: true,
+      templateId: null,
+      prompt: '检查迁移脚本在预览工作区的执行结果，列出失败的文件。',
+      targetKind: 'GeneralChat',
+      workspaceId: null,
+      model: null,
+      thinkingLevel: null,
+      permissionMode: null,
+      frequency: 'Once',
+      localStartAt: localInputValue(14, 0, 40),
+      daysOfWeek: 0,
+      timeZoneId: previewTimeZone,
+      nextRunAt: dayOffset(40),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastOccurrence: {
+        id: 'preview-occurrence-once',
+        scheduledFor: timestamp,
+        status: 'Failed',
+        taskId: null,
+        runId: null,
+        error: '模型服务暂时不可用',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+  ]
 }
 
 export function createSkillsPreview(

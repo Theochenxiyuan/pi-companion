@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { UiButton, UiInput } from '@/components/ui'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
+import TaskTemplateCard from '@/components/TaskTemplateCard.vue'
 import type { ScheduledTask, TaskTemplate, WorkspaceHistoryEntry } from '@/types/bridge'
 import { taskTemplateTargetLabel } from '@/utils/taskTemplates'
 import { useI18n } from '@/i18n'
@@ -13,6 +14,7 @@ const props = defineProps<{
   workspaces: WorkspaceHistoryEntry[]
   sidebarCollapsed: boolean
   detailLevel?: 'summary' | 'normal' | 'verbose'
+  loading?: boolean
 }>()
 
 defineEmits<{
@@ -44,11 +46,16 @@ const visibleTemplates = computed(() => props.templates.filter((template) => {
 const systemTemplates = computed(() => visibleTemplates.value.filter(template => template.isBuiltIn))
 const userTemplates = computed(() => visibleTemplates.value.filter(template => !template.isBuiltIn))
 const hasSearchResults = computed(() => visibleTemplates.value.length > 0)
+const systemCount = computed(() => props.templates.filter(template => template.isBuiltIn).length)
+const userCount = computed(() => props.templates.filter(template => !template.isBuiltIn).length)
+const subtitle = computed(() => t('{mine} 个我的模板 · {system} 个系统模板', {
+  mine: userCount.value,
+  system: systemCount.value,
+}))
+const showLoading = computed(() => Boolean(props.loading) && props.templates.length === 0)
 
-function preferenceRows(template: TaskTemplate) {
-  return [
-    { label: t('任务环境'), value: taskTemplateTargetLabel(template, props.workspaces, t) },
-  ]
+function targetLabel(template: TaskTemplate) {
+  return taskTemplateTargetLabel(template, props.workspaces, t)
 }
 
 function linkedScheduleCount(templateId: string) {
@@ -71,13 +78,13 @@ function linkedScheduleCount(templateId: string) {
         </UiButton>
         <div class="location management-location">
           <strong>{{ t('任务模板') }}</strong>
-          <span>{{ t('管理可复用的任务草稿，使用模板会新建任务。') }}</span>
+          <small>{{ subtitle }}</small>
         </div>
       </div>
       <div class="topbar-actions">
         <UiButton class="task-template-create" variant="secondary" size="md" type="button" @click="$emit('create')">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
-          {{ t('新建模板') }}
+          <span>{{ t('新建模板') }}</span>
         </UiButton>
         <AppMoreMenu
           :detail-level="detailLevel ?? 'normal'"
@@ -89,69 +96,66 @@ function linkedScheduleCount(templateId: string) {
     </header>
 
     <section class="management-content task-template-management-content">
-      <label class="management-search task-template-management-search">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
-        <UiInput v-model="search" type="search" :placeholder="t('搜索任务模板')" :aria-label="t('搜索任务模板')" />
-      </label>
+      <div class="task-template-management-search-row">
+        <label class="management-search task-template-management-search">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+          <UiInput v-model="search" type="search" :placeholder="t('搜索任务模板')" :aria-label="t('搜索任务模板')" />
+        </label>
+      </div>
 
-      <p v-if="!hasSearchResults" class="task-template-empty">{{ t('未找到匹配的模板。') }}</p>
+      <div
+        v-if="showLoading"
+        class="loading-skeleton management-loading-skeleton"
+        role="status"
+        :aria-label="t('正在读取任务模板…')"
+      >
+        <span v-for="index in 4" :key="index" class="loading-skeleton-row"></span>
+      </div>
 
-      <section v-if="systemTemplates.length" class="task-template-management-section">
-        <div class="task-template-management-heading">
-          <h2>{{ t('系统模板') }}</h2>
-          <span>{{ systemTemplates.length }}</span>
-        </div>
-        <div class="task-template-management-grid">
-          <article v-for="template in systemTemplates" :key="template.id" class="surface-card task-template-management-card system">
-            <header>
-              <strong>{{ template.name }}</strong>
-              <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
-            </header>
-            <p>{{ template.prompt }}</p>
-            <dl class="task-template-preferences">
-              <div v-for="row in preferenceRows(template)" :key="row.label">
-                <dt>{{ row.label }}</dt><dd :title="row.value">{{ row.value }}</dd>
-              </div>
-            </dl>
-            <footer>
-              <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制为我的模板') }}</UiButton>
-              <UiButton class="task-template-apply-button" variant="secondary" type="button" @click="$emit('apply', template)">{{ t('使用模板') }}</UiButton>
-            </footer>
-          </article>
-        </div>
-      </section>
+      <template v-else>
+        <p v-if="!hasSearchResults" class="task-template-empty">{{ t('未找到匹配的模板。') }}</p>
 
-      <section v-if="userTemplates.length || !normalizedSearch" class="task-template-management-section">
-        <div class="task-template-management-heading">
-          <h2>{{ t('我的模板') }}</h2>
-          <span>{{ userTemplates.length }}</span>
-        </div>
-        <div v-if="userTemplates.length" class="task-template-management-grid">
-          <article v-for="template in userTemplates" :key="template.id" class="surface-card task-template-management-card">
-            <header>
-              <strong><b v-if="template.isPinned" :title="t('已固定到新任务首页')" aria-label="t('已固定到新任务首页')">★</b>{{ template.name }}</strong>
-              <small v-if="linkedScheduleCount(template.id)">{{ t('被 {count} 个定时任务关联', { count: linkedScheduleCount(template.id) }) }}</small>
-              <em v-if="template.origin === 'Agent'" class="task-template-origin">{{ t('AI创建') }}</em>
-            </header>
-            <p>{{ template.prompt }}</p>
-            <dl class="task-template-preferences">
-              <div v-for="row in preferenceRows(template)" :key="row.label">
-                <dt>{{ row.label }}</dt><dd :title="row.value">{{ row.value }}</dd>
-              </div>
-            </dl>
-            <footer>
-              <UiButton variant="secondary" type="button" @click="$emit('edit', template)">{{ t('编辑') }}</UiButton>
-              <UiButton variant="secondary" type="button" @click="$emit('duplicate', template)">{{ t('复制') }}</UiButton>
-              <UiButton class="danger-action" variant="ghost" type="button" @click="$emit('delete', template)">{{ t('删除') }}</UiButton>
-              <UiButton class="task-template-apply-button" variant="secondary" type="button" @click="$emit('apply', template)">{{ t('使用模板') }}</UiButton>
-            </footer>
-          </article>
-        </div>
-        <div v-else-if="!normalizedSearch" class="task-template-management-empty">
-          <p>{{ t('还没有我的模板。') }}</p>
-          <UiButton class="task-template-create" variant="secondary" size="md" type="button" @click="$emit('create')">{{ t('新建模板') }}</UiButton>
-        </div>
-      </section>
+        <section v-if="userTemplates.length || !normalizedSearch" class="task-template-management-section">
+          <div class="task-template-management-heading">
+            <h2>{{ t('我的模板') }}</h2>
+            <span>{{ userTemplates.length }}</span>
+          </div>
+          <div v-if="userTemplates.length" class="task-template-management-grid">
+            <TaskTemplateCard
+              v-for="template in userTemplates"
+              :key="template.id"
+              :template="template"
+              :target-label="targetLabel(template)"
+              :linked-count="linkedScheduleCount(template.id)"
+              @edit="$emit('edit', $event)"
+              @duplicate="$emit('duplicate', $event)"
+              @delete="$emit('delete', $event)"
+              @apply="$emit('apply', $event)"
+            />
+          </div>
+          <div v-else class="task-template-management-empty">
+            <p>{{ t('还没有我的模板。') }}</p>
+            <UiButton variant="secondary" size="sm" type="button" @click="$emit('create')">{{ t('新建模板') }}</UiButton>
+          </div>
+        </section>
+
+        <section v-if="systemTemplates.length" class="task-template-management-section">
+          <div class="task-template-management-heading">
+            <h2>{{ t('系统模板') }}</h2>
+            <span>{{ systemTemplates.length }}</span>
+          </div>
+          <div class="task-template-management-grid">
+            <TaskTemplateCard
+              v-for="template in systemTemplates"
+              :key="template.id"
+              :template="template"
+              :target-label="targetLabel(template)"
+              @duplicate="$emit('duplicate', $event)"
+              @apply="$emit('apply', $event)"
+            />
+          </div>
+        </section>
+      </template>
     </section>
   </main>
 </template>

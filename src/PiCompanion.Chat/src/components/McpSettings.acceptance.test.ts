@@ -41,7 +41,8 @@ describe('MCP settings', () => {
   })
   it('previews imports before writing and keeps a failed operation editable', async () => {
     const wrapper = await ready()
-    await wrapper.findAll('button').find(button => button.text() === '导入')!.trigger('click')
+    wrapper.vm.startImport()
+    await wrapper.vm.$nextTick()
     await wrapper.get('textarea').setValue('{"mcpServers":{"local":{"command":"node","args":["server.mjs"]}}}')
     await wrapper.findAll('button').find(button => button.text() === '下一步')!.trigger('click')
     expect(wrapper.text()).toContain('local')

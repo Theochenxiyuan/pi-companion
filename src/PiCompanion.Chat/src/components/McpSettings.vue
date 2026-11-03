@@ -56,6 +56,7 @@ const canSignIn = computed(() => current.value?.state === 'needs-auth')
 const signedIn = computed(() => current.value?.authenticated === true && current.value.state !== 'needs-auth')
 const waiting = computed(() => pending.value?.action === 'login' && props.loginProgress?.requestId === pending.value.id)
 const canChange = computed(() => !pending.value && !!snapshot.value && (scope.value === 'global' || trusted.value))
+defineExpose({ startImport, beginEdit, canChange })
 const statusLabels: Record<McpServer['state'], string> = {
   unchecked: '未检查', connected: '可用', disabled: '已停用', untrusted: '需要信任',
   overridden: '工作区优先', 'needs-auth': '需要登录', failed: '连接失败',
@@ -199,17 +200,14 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
 
 <template>
   <div class="mcp-settings">
-    <header class="mcp-toolbar">
-      <div v-if="workspaces.length" class="mcp-segments" role="group" :aria-label="t('保存位置')">
+    <header v-if="workspaces.length" class="mcp-toolbar">
+      <div class="mcp-segments" role="group" :aria-label="t('保存位置')">
         <UiButton variant="ghost" class="mcp-segment" :class="{ active: scope === 'global' }" :aria-pressed="scope === 'global'" :disabled="!!pending" @click="selectScope('global')">{{ t('个人') }}</UiButton>
         <UiButton variant="ghost" class="mcp-segment" :class="{ active: scope === 'project' }" :aria-pressed="scope === 'project'" :disabled="!!pending" @click="selectScope('project')">{{ t('工作区') }}</UiButton>
       </div>
       <div v-if="scope === 'project'" class="mcp-workspace">
         <UiSelect v-model="workspaceId" :options="workspaceOptions" :disabled="!!pending" :ariaLabelText="t('工作区')" />
       </div>
-      <span class="mcp-toolbar-spacer" />
-      <UiButton variant="ghost" :disabled="!canChange" @click="startImport">{{ t('导入') }}</UiButton>
-      <UiButton variant="primary" :disabled="!canChange" @click="beginEdit()">{{ t('添加服务') }}</UiButton>
     </header>
 
     <div v-if="scope === 'project' && workspace && !trusted" class="mcp-trust">
@@ -337,7 +335,6 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
 .mcp-settings :deep(.ui-textarea) { min-height: 0; resize: vertical; }
 
 .mcp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.mcp-toolbar-spacer { flex: 1 1 auto; min-width: 8px; }
 .mcp-segments { display: inline-flex; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-tone-2); }
 .mcp-settings :deep(.mcp-segment) { min-height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-tertiary); font-size: var(--font-size-body-sm); }
 .mcp-settings :deep(.mcp-segment:hover:not(:disabled)) { background: transparent; color: var(--color-text-primary); }

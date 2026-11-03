@@ -39,12 +39,13 @@ describe('SkillsView management acceptance', () => {
     const globalSkill = wrapper.findAll('.skill-card')
       .find(card => card.text().includes('find-skills'))!
     expect(globalSkill.find('.skill-origin').exists()).toBe(false)
-    expect(globalSkill.findAll('.skill-card-footer button')).toHaveLength(1)
-    expect(globalSkill.get('.skill-card-footer button').text()).toBe('查看详情')
+    expect(globalSkill.find('.skill-card-footer').exists()).toBe(false)
+    expect(globalSkill.get('.skill-card-main').attributes('aria-label'))
+      .toBe('find-skills 技能详情')
     expect(globalSkill.text()).toContain('1 处安装')
     expect(globalSkill.text()).toContain('1 种内容')
 
-    await globalSkill.get('.skill-card-footer button').trigger('click')
+    await globalSkill.get('.skill-card-main').trigger('click')
     const dialog = wrapper.get('.skill-detail-dialog')
     expect(dialog.text()).toContain('1.2.0')
     expect(dialog.text()).toContain('MIT')
@@ -192,7 +193,7 @@ describe('SkillsView management acceptance', () => {
     expect(card.text()).toContain('2 种内容')
     expect(card.text()).toContain('内容不同')
 
-    await card.get('.skill-card-footer button').trigger('click')
+    await card.get('.skill-card-main').trigger('click')
     expect(wrapper.findAll('.skill-variant')).toHaveLength(2)
     expect(wrapper.findAll('.skill-installation')).toHaveLength(3)
     expect(wrapper.get('.skill-detail-dialog').text()).toContain('同名内容不一致')
@@ -227,7 +228,7 @@ describe('SkillsView management acceptance', () => {
     const card = wrapper.findAll('.skill-card')
       .find(candidate => candidate.text().includes('find-skills'))!
     expect(card.text()).toContain('1 处安装')
-    await card.get('.skill-card-footer button').trigger('click')
+    await card.get('.skill-card-main').trigger('click')
 
     const dialog = wrapper.get('.skill-detail-dialog')
     expect(dialog.findAll('.skill-installation-heading')).toHaveLength(0)
@@ -256,7 +257,7 @@ describe('SkillsView management acceptance', () => {
 
     const releaseCard = wrapper.findAll('.skill-card')
       .find(card => card.text().includes('release-notes'))!
-    await releaseCard.get('.skill-card-footer button').trigger('click')
+    await releaseCard.get('.skill-card-main').trigger('click')
     await wrapper.get('.skill-remove-button').trigger('click')
     expect(wrapper.get('.skill-removal-confirm-backdrop').text())
       .toContain('原内容将移到技能根目录中的可恢复位置')
@@ -338,7 +339,7 @@ describe('SkillsView management acceptance', () => {
     await card.get('.skill-trust-button').trigger('click')
     expect(wrapper.emitted('trustWorkspace')).toEqual([[workspace.id]])
 
-    await card.get('.skill-card-footer button:last-child').trigger('click')
+    await card.get('.skill-card-main').trigger('click')
     expect(wrapper.get('.skill-detail-dialog').text()).toContain('未信任工作区')
     expect(wrapper.get('.skill-diagnostics').text()).toContain('该工作区中的技能不会被加载')
   })
@@ -382,8 +383,7 @@ describe('SkillsView management acceptance', () => {
     expect(wrapper.find('.customization-mcp-surface').exists()).toBe(false)
 
     await tabs[1]!.trigger('click')
-    expect(wrapper.get('.management-location small').text())
-      .toBe('管理全局与工作区的 MCP 服务连接。')
+    expect(wrapper.find('.management-location small').exists()).toBe(false)
     expect(wrapper.get('.customization-tabs .customization-tab.active').text()).toBe('MCP')
     expect(wrapper.get('.customization-mcp-surface').find('.mcp-settings').exists()).toBe(true)
     expect(wrapper.find('.skills-grid').exists()).toBe(false)
@@ -395,7 +395,7 @@ describe('SkillsView management acceptance', () => {
     await wrapper.findAll('.customization-tab')[0]!.trigger('click')
     expect(wrapper.find('.skills-grid').exists()).toBe(true)
     expect(wrapper.get('.management-location small').text())
-      .toBe('本机 Pi 与通用 Agent 原生目录中的全部技能。')
+      .toBe('3 个技能 · 1 个有问题')
   })
 
   it('hides the customization tabs when a workspace context is active', () => {

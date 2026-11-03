@@ -763,8 +763,10 @@ onMounted(async () => {
       createCommitDiffPreview,
       createMcpSnapshotPreview,
       createPerformancePreview,
+      createScheduledTasksPreview,
       createTaskHistoryPreview,
       createTranscriptPreview,
+      createUserTaskTemplatesPreview,
     } = await import('@/preview')
     const taskHistoryPreview = createTaskHistoryPreview()
     store.connected = true
@@ -772,6 +774,8 @@ onMounted(async () => {
     store.historyTasks = taskHistoryPreview.history
     store.recentTasks = taskHistoryPreview.history
     store.recycleBinTasks = taskHistoryPreview.recycleBin
+    store.scheduledTasks = createScheduledTasksPreview()
+    store.taskTemplates = createUserTaskTemplatesPreview()
     store.workspaces = [{
       id: 'preview-workspace',
       name: 'pi-companion',
@@ -2943,6 +2947,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :workspaces="store.workspaces"
       :sidebar-collapsed="sidebarCollapsed"
       :detail-level="viewMode"
+      :loading="!store.connected"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
       @toggle-monitor="postBridgeMessage('ToggleMonitor')"
       @set-detail="setConversationDetailLevel"
@@ -2962,6 +2967,7 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :sidebar-collapsed="sidebarCollapsed"
       :detail-level="viewMode"
       :pending-action="scheduledTaskPending"
+      :loading="!store.connected"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
       @toggle-monitor="postBridgeMessage('ToggleMonitor')"
       @set-detail="setConversationDetailLevel"
