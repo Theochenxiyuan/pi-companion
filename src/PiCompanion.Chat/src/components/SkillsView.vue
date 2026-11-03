@@ -2,8 +2,11 @@
 import { computed, ref, watch } from 'vue'
 import { UiButton, UiDialog, UiInput, UiMenu, UiMenuItem, UiSelect } from '@/components/ui'
 import AppMoreMenu from '@/components/AppMoreMenu.vue'
+import McpSettings from '@/components/McpSettings.vue'
 import type {
   DiscoveredSkill,
+  McpLoginProgress,
+  McpResult,
   SkillContentVariant,
   SkillDiagnostic,
   SkillInstallation,
@@ -38,6 +41,9 @@ const props = withDefaults(defineProps<{
   importResult?: SkillImportCompleted | null
   trustingWorkspaceId?: string | null
   trustResult?: SkillWorkspaceTrustCompleted | null
+  activeWorkspaceId?: string
+  mcpResult?: McpResult | null
+  mcpLoginProgress?: McpLoginProgress | null
 }>(), {
   contextWorkspace: null,
   detailLevel: 'normal',
@@ -52,6 +58,9 @@ const props = withDefaults(defineProps<{
   importResult: null,
   trustingWorkspaceId: null,
   trustResult: null,
+  activeWorkspaceId: undefined,
+  mcpResult: null,
+  mcpLoginProgress: null,
 })
 
 const emit = defineEmits<{
@@ -74,10 +83,14 @@ const emit = defineEmits<{
   }]
   confirmImport: []
   cancelImport: []
+  mcpRequest: [payload: Record<string, unknown>]
+  cancelMcpLogin: [requestId: string]
+  submitMcpRedirect: [requestId: string, redirectUrl: string]
 }>()
 
 const { locale, t } = useI18n()
 const search = ref('')
+const activeTab = ref<'skills' | 'mcp'>('skills')
 const installationLocationFilter = ref('all')
 const installationSourceFilter = ref('all')
 const selectedSkillName = ref<string | null>(null)
@@ -95,11 +108,12 @@ const hasContext = computed(() => props.globalOnly || Boolean(props.contextWorks
 const title = computed(() => {
   if (props.globalOnly) return t('全局技能')
   if (props.contextWorkspace) return t('{name} 的技能', { name: props.contextWorkspace.name })
-  return t('技能')
+  return t('自定义模块')
 })
 const contextDescription = computed(() => {
   if (props.globalOnly) return t('Direct Chat 可用的全局技能。')
   if (props.contextWorkspace) return t('当前工作区可用的全局与工作区技能。')
+  if (activeTab.value === 'mcp') return t('管理全局与工作区的 MCP 服务连接。')
   return t('本机 Pi 与通用 Agent 原生目录中的全部技能。')
 })
 
@@ -497,10 +511,33 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           <strong>{{ title }}</strong>
           <small>{{ contextDescription }}</small>
         </div>
+        <div
+          v-if="!hasContext"
+          class="customization-tabs"
+          role="tablist"
+          :aria-label="t('自定义模块')"
+        >
+          <UiButton
+            class="customization-tab"
+            :class="{ active: activeTab === 'skills' }"
+            role="tab"
+            :aria-selected="activeTab === 'skills'"
+            type="button"
+            @click="activeTab = 'skills'"
+          >{{ t('技能') }}</UiButton>
+          <UiButton
+            class="customization-tab"
+            :class="{ active: activeTab === 'mcp' }"
+            role="tab"
+            :aria-selected="activeTab === 'mcp'"
+            type="button"
+            @click="activeTab = 'mcp'"
+          >MCP</UiButton>
+        </div>
       </div>
       <div class="skills-topbar-actions">
         <UiButton
-          v-if="!hasContext"
+          v-if="!hasContext && activeTab === 'skills'"
           class="skills-import"
           type="button"
           @click="openImportDialog"
@@ -512,6 +549,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           @click="$emit('clearContext')"
         >{{ t('查看全部技能') }}</UiButton>
         <UiButton
+          v-if="activeTab === 'skills' || hasContext"
           class="skills-refresh"
           type="button"
           :disabled="loading"
@@ -530,7 +568,26 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
       </div>
     </header>
 
-    <section class="management-content skills-content">
+    <section
+      class="management-content skills-content"
+      :class="{ 'mcp-content': activeTab === 'mcp' && !hasContext }"
+    >
+      <div
+        v-if="activeTab === 'mcp' && !hasContext"
+        class="customization-mcp-surface"
+      >
+        <McpSettings
+          :workspaces="workspaces"
+          :active-workspace-id="activeWorkspaceId"
+          :result="mcpResult"
+          :login-progress="mcpLoginProgress"
+          @request="$emit('mcpRequest', $event)"
+          @cancel-login="$emit('cancelMcpLogin', $event)"
+          @submit-redirect="(requestId, redirectUrl) => $emit('submitMcpRedirect', requestId, redirectUrl)"
+          @trust-workspace="$emit('trustWorkspace', $event)"
+        />
+      </div>
+      <template v-else>
       <div
         v-if="importResult"
         class="skills-action-result"
@@ -645,10 +702,11 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
           </footer>
         </article>
       </div>
+      </template>
     </section>
 
     <UiDialog
-      v-if="selectedSkill"
+      v-if="selectedSkill && (activeTab === 'skills' || hasContext)"
       :title="t('{name} 技能详情', { name: selectedSkill.name })"
       overlay-class="management-dialog-backdrop skill-detail-backdrop"
       :content-class="[
@@ -825,7 +883,7 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
     </UiDialog>
 
     <UiDialog
-      v-if="importOpen"
+      v-if="importOpen && (activeTab === 'skills' || hasContext)"
       :title="t('导入技能')"
       overlay-class="management-dialog-backdrop skill-import-backdrop"
       content-class="skill-import-dialog"
@@ -999,6 +1057,12 @@ function chooseImportSource(sourceKind: SkillImportSourceKind) {
 </template>
 
 <style scoped>
+.customization-tabs { display: inline-flex; flex: none; margin-left: 8px; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-tone-2); }
+.customization-tab { min-height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-tertiary); cursor: pointer; font-size: var(--font-size-body-sm); }
+.customization-tab:hover { background: transparent; color: var(--color-text-primary); }
+.customization-tab.active { background: var(--color-bg-active); color: var(--color-text-primary); }
+.skills-content.mcp-content { overflow: hidden; padding-bottom: 24px; }
+.customization-mcp-surface { display: flex; flex-direction: column; width: min(100%, 1120px); height: 100%; min-height: 0; margin: 0 auto; }
 .skill-card { display: flex; flex-direction: column; }
 .skill-card .skill-description { flex: 1; }
 .skill-card-summary { display: flex; flex-wrap: wrap; gap: 7px 12px; padding: 0 16px 14px; color: var(--color-tone-10); font-size: var(--font-size-caption); }

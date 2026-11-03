@@ -86,7 +86,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     await wrapper.get('.app-more-popover .ui-menu-item--danger').trigger('click')
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'ExitApplication' }))
 
-    for (const title of ['全部任务', '技能', '任务模板', '定时任务']) {
+    for (const title of ['全部任务', '自定义', '任务模板', '定时任务']) {
       const nav = wrapper.findAll('.sidebar > nav .nav-row').find(button => button.text() === title)!
       await nav.trigger('click')
       expect(wrapper.find('.app-brand').exists()).toBe(false)
@@ -110,7 +110,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     mountedWrappers.push(wrapper)
 
     const skillsNavigation = wrapper.findAll('.sidebar > nav .nav-row')
-      .find(button => button.text() === '技能')!
+      .find(button => button.text() === '自定义')!
     await skillsNavigation.trigger('click')
     const request = postMessage.mock.calls
       .map(call => call[0])
@@ -138,7 +138,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(skillsView.findAll('.skill-card-footer button')).toHaveLength(3)
     expect(skillsView.findAll('.skill-card-footer button')
       .every(button => button.text() === '查看详情')).toBe(true)
-    expect(wrapper.get('.sidebar > nav .nav-row.selected').text()).toBe('技能')
+    expect(wrapper.get('.sidebar > nav .nav-row.selected').text()).toBe('自定义')
 
     await skillsView.get('.skills-import').trigger('click')
     wrapper.getComponent(SkillsView).vm.$emit('beginImport', 'zip')
@@ -311,6 +311,51 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(wrapper.get('.scheduled-task-empty').text()).toContain('还没有定时任务')
   })
 
+  it('switches between skills and MCP inside the customization view', async () => {
+    const postMessage = vi.fn()
+    window.chrome = {
+      webview: {
+        postMessage,
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    }
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()] },
+    })
+    mountedWrappers.push(wrapper)
+
+    const customizationNavigation = wrapper.findAll('.sidebar > nav .nav-row')
+      .find(button => button.text() === '自定义')!
+    await customizationNavigation.trigger('click')
+
+    const tabs = wrapper.findAll('.customization-tab')
+    expect(tabs.map(tab => tab.text())).toEqual(['技能', 'MCP'])
+    expect(wrapper.get('.management-topbar .location strong').text()).toBe('自定义')
+    expect(wrapper.find('.customization-mcp-surface').exists()).toBe(false)
+
+    await tabs[1]!.trigger('click')
+    await nextTick()
+    expect(wrapper.get('.customization-mcp-surface').find('.mcp-settings').exists()).toBe(true)
+    expect(wrapper.get('.management-topbar .location small').text())
+      .toBe('管理全局与工作区的 MCP 服务连接。')
+    expect(wrapper.find('.skills-import').exists()).toBe(false)
+
+    const mcpRequest = postMessage.mock.calls
+      .map(call => call[0])
+      .find(message => message.type === 'McpRequest')
+    expect(mcpRequest).toEqual(expect.objectContaining({
+      protocolVersion: bridgeProtocolVersion,
+      type: 'McpRequest',
+      payload: expect.objectContaining({ action: 'list' }),
+    }))
+
+    await wrapper.findAll('.customization-tab')[0]!.trigger('click')
+    expect(wrapper.find('.customization-mcp-surface').exists()).toBe(false)
+    expect(wrapper.find('.skills-grid, .skills-loading-skeleton').exists()).toBe(true)
+  })
+
   it('round-trips an explicit workspace trust decision and refreshes skills', async () => {
     const postMessage = vi.fn()
     let bridgeListener: ((event: WebViewMessageEvent) => void) | undefined
@@ -328,7 +373,7 @@ describe('Agent Chat stage 5 acceptance', () => {
     mountedWrappers.push(wrapper)
 
     const skillsNavigation = wrapper.findAll('.sidebar > nav .nav-row')
-      .find(button => button.text() === '技能')!
+      .find(button => button.text() === '自定义')!
     await skillsNavigation.trigger('click')
     const loadRequest = postMessage.mock.calls
       .map(call => call[0])

@@ -7,6 +7,7 @@ const chinese: Record<string, string> = {
   '重命名操作': '重命名',
   '显示模型操作': '显示',
   '删除操作': '删除',
+  '自定义模块': '自定义',
 }
 
 const english: Record<string, string> = {
@@ -152,6 +153,8 @@ const english: Record<string, string> = {
   '任务历史': 'Task history',
   '全部任务': 'All tasks',
   '技能': 'Skills',
+  '自定义模块': 'Customization',
+  '管理全局与工作区的 MCP 服务连接。': 'Manage global and workspace MCP server connections.',
   '预置任务': 'Task presets',
   '任务模板': 'Task templates',
   '全部任务模板': 'All task templates',

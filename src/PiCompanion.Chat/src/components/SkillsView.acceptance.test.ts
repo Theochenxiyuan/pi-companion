@@ -361,6 +361,57 @@ describe('SkillsView management acceptance', () => {
     expect(wrapper.find('.skills-import').exists()).toBe(false)
   })
 
+  it('switches between skills and MCP in the customization view', async () => {
+    wrapper = mount(SkillsView, {
+      props: {
+        snapshot: createSkillsPreview(),
+        loading: false,
+        error: null,
+        sidebarCollapsed: false,
+        workspaces: [workspace],
+      },
+    })
+
+    expect(wrapper.get('.management-location strong').text()).toBe('自定义')
+    const tabs = wrapper.findAll('.customization-tab')
+    expect(tabs.map(tab => tab.text())).toEqual(['技能', 'MCP'])
+    expect(tabs[0]!.attributes('aria-selected')).toBe('true')
+    expect(tabs[1]!.attributes('aria-selected')).toBe('false')
+    expect(wrapper.find('.skills-grid').exists()).toBe(true)
+    expect(wrapper.find('.skills-import').exists()).toBe(true)
+    expect(wrapper.find('.customization-mcp-surface').exists()).toBe(false)
+
+    await tabs[1]!.trigger('click')
+    expect(wrapper.get('.management-location small').text())
+      .toBe('管理全局与工作区的 MCP 服务连接。')
+    expect(wrapper.get('.customization-tabs .customization-tab.active').text()).toBe('MCP')
+    expect(wrapper.get('.customization-mcp-surface').find('.mcp-settings').exists()).toBe(true)
+    expect(wrapper.find('.skills-grid').exists()).toBe(false)
+    expect(wrapper.find('.skills-import').exists()).toBe(false)
+    expect(wrapper.find('.skills-refresh').exists()).toBe(false)
+    expect(wrapper.find('.app-more-trigger').exists()).toBe(true)
+    expect(wrapper.get('.skills-content').classes()).toContain('mcp-content')
+
+    await wrapper.findAll('.customization-tab')[0]!.trigger('click')
+    expect(wrapper.find('.skills-grid').exists()).toBe(true)
+    expect(wrapper.get('.management-location small').text())
+      .toBe('本机 Pi 与通用 Agent 原生目录中的全部技能。')
+  })
+
+  it('hides the customization tabs when a workspace context is active', () => {
+    wrapper = mount(SkillsView, {
+      props: {
+        snapshot: createSkillsPreview(),
+        loading: false,
+        error: null,
+        sidebarCollapsed: false,
+        contextWorkspace: workspace,
+      },
+    })
+
+    expect(wrapper.find('.customization-tabs').exists()).toBe(false)
+  })
+
   it('imports only from the full page and requires an explicit destination', async () => {
     wrapper = mount(SkillsView, {
       props: {
