@@ -50,7 +50,8 @@ const workspaceOptions = computed(() =>
   props.workspaces.map(value => ({ value: value.id, label: value.displayName || value.name })))
 const servers = computed(() => (snapshot.value?.servers ?? []).filter(server =>
   server.scope === scope.value && server.name.toLowerCase().includes(search.value.trim().toLowerCase())))
-const current = computed(() => servers.value.find(server => server.name === selected.value) ?? servers.value[0])
+const current = computed(() =>
+  servers.value.find(server => server.name === selected.value) ?? servers.value[0])
 const canSignIn = computed(() => current.value?.state === 'needs-auth')
 const signedIn = computed(() => current.value?.authenticated === true && current.value.state !== 'needs-auth')
 const waiting = computed(() => pending.value?.action === 'login' && props.loginProgress?.requestId === pending.value.id)
@@ -59,6 +60,7 @@ const statusLabels: Record<McpServer['state'], string> = {
   unchecked: '未检查', connected: '可用', disabled: '已停用', untrusted: '需要信任',
   overridden: '工作区优先', 'needs-auth': '需要登录', failed: '连接失败',
 }
+const statusLabel = (state: McpServer['state']) => statusLabels[state]
 
 function request(action: string, values: Record<string, unknown> = {}) {
   if (pending.value) return
@@ -243,7 +245,7 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
           >
             <span class="mcp-server-text">
               <strong>{{ server.name }}</strong>
-              <small>{{ t(statusLabels[server.state]) }}</small>
+              <small>{{ t(statusLabel(server.state)) }}</small>
             </span>
             <i class="mcp-dot" :class="server.state" aria-hidden="true" />
           </UiButton>
@@ -293,7 +295,7 @@ onBeforeUnmount(() => { if (pending.value?.action === 'login') emit('cancelLogin
           <header class="mcp-detail-head">
             <div class="mcp-detail-title">
               <h2>{{ current.name }}</h2>
-              <span class="mcp-status" :class="current.state"><i aria-hidden="true" />{{ t(statusLabels[current.state]) }}</span>
+              <span class="mcp-status" :class="current.state"><i aria-hidden="true" />{{ t(statusLabel(current.state)) }}</span>
             </div>
             <UiSwitch :model-value="current.config.enabled !== false" :disabled="!canChange || current.state === 'overridden'" :aria-label="t('启用服务')" @update:model-value="request('toggle', { name: current.name, enabled: $event, check: $event })" />
           </header>
