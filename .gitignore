@@ -10,7 +10,7 @@ src/PiCompanion.WebSearchExtension/dist/
 *.suo
 *.log
 artifacts/
-
+.openchamber
 # Local runtimes, state, credentials, and packaging secrets
 .dotnet-cli/
 **/PiRuntime/

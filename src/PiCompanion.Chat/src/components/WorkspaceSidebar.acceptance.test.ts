@@ -17,7 +17,11 @@ const completedTask: TaskHistoryEntry = {
   deletedAt: null,
 }
 
-afterEach(() => setLocale('zh-CN'))
+afterEach(() => {
+  setLocale('zh-CN')
+  window.localStorage.removeItem('pi-companion:sidebar-task-list-mode')
+  window.localStorage.removeItem('pi-companion:sidebar-collapsed-workspaces')
+})
 
 describe('WorkspaceSidebar', () => {
   it('shows workspace presentation and the latest summary immediately instead of a native title', async () => {
@@ -114,5 +118,90 @@ describe('WorkspaceSidebar', () => {
     await completedButton!.trigger('click')
 
     expect(wrapper.emitted('selectTask')).toContainEqual([completedTask.id])
+  })
+
+  it('switches to workspace grouping with compact task rows and mode-specific hover cards', async () => {
+    const workspaceTask: TaskHistoryEntry = {
+      ...completedTask,
+      id: 'task-ws',
+      title: 'Refactor sidebar workspace grouping and hover behavior',
+      workspaceId: 'workspace-1',
+      summary: 'Grouped sidebar tasks by workspace with compact single-line rows.',
+      updatedAt: '2026-07-24T13:00:00.000Z',
+    }
+    const olderHistoryTask: TaskHistoryEntry = {
+      ...completedTask,
+      id: 'task-older',
+      title: 'Direct chat scratchpad note',
+      scopeKind: 'GeneralChat',
+      workingDirectory: 'C:\\Users\\test\\AppData\\Local\\PiCompanion\\GeneralChat',
+      summary: 'Saved a quick note in Direct Chat.',
+      updatedAt: '2026-07-24T11:00:00.000Z',
+    }
+    const wrapper = mount(WorkspaceSidebar, {
+      props: {
+        recentTasks: [workspaceTask],
+        historyTasks: [workspaceTask, olderHistoryTask],
+        selectedHistoryTask: olderHistoryTask,
+        currentTaskId: olderHistoryTask.id,
+        workspaces: [{
+          id: 'workspace-1',
+          name: 'Companion Core',
+          displayName: 'Companion Core',
+          workingDirectory: 'D:\\work\\pi-companion',
+          createdAt: '2026-07-24T10:00:00.000Z',
+          updatedAt: '2026-07-24T13:00:00.000Z',
+          taskCount: 1,
+          hasActiveTask: false,
+          iconKey: 'code',
+          colorKey: 'violet',
+        }],
+        view: 'chat',
+        width: 232,
+      },
+      global: { stubs: { Teleport: true } },
+    })
+
+    expect(wrapper.find('.selected-history-item').exists()).toBe(true)
+    expect(wrapper.get('.history-region > .section-label').text()).toBe('最近')
+
+    await wrapper.get('.history-mode-toggle').trigger('click')
+
+    expect(wrapper.emitted('requestFullHistory')).toBeTruthy()
+    expect(wrapper.get('.history-region > .section-label').text()).toBe('工作区')
+    expect(wrapper.find('.selected-history-item').exists()).toBe(false)
+
+    const groupNames = wrapper.findAll('.sidebar-workspace-name').map(node => node.text())
+    expect(groupNames).toEqual(['Companion Core', '直接对话'])
+
+    const compactRows = wrapper.findAll('.history-item-compact')
+    expect(compactRows).toHaveLength(2)
+    expect(compactRows[0]!.find('.history-meta').exists()).toBe(false)
+    expect(compactRows[0]!.find('.history-status.success').exists()).toBe(true)
+    expect(compactRows[0]!.get('strong').text()).toBe(workspaceTask.title)
+    expect(compactRows[1]!.classes()).toContain('current')
+
+    // Hovering a compact task row shows full task title + summary without repeating workspace path
+    await compactRows[0]!.trigger('pointerenter')
+    let card = wrapper.get('.recent-task-hover-card')
+    expect(card.classes()).toContain('recent-task-hover-card--task-only')
+    expect(card.get('.recent-task-hover-title').text()).toBe(workspaceTask.title)
+    expect(card.text()).toContain(workspaceTask.summary)
+    expect(card.text()).not.toContain('D:\\work\\pi-companion')
+
+    // Hovering a workspace group header shows workspace icon + name + path without task summary
+    const groupToggle = wrapper.get('.sidebar-workspace-toggle')
+    await groupToggle.trigger('pointerenter')
+    card = wrapper.get('.recent-task-hover-card')
+    expect(card.classes()).toContain('recent-task-hover-card--workspace-only')
+    expect(card.text()).toContain('Companion Core')
+    expect(card.text()).toContain('D:\\work\\pi-companion')
+    expect(card.find('.recent-task-hover-summary').exists()).toBe(false)
+
+    // Clicking the workspace + button emits newTaskInWorkspace
+    await wrapper.get('.sidebar-workspace-new-task').trigger('click')
+    expect(wrapper.emitted('newTaskInWorkspace')).toEqual([['workspace-1']])
+
+    wrapper.unmount()
   })
 })

@@ -1558,6 +1558,9 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     historyLoading.value = false
     taskHistoryLoadAllPending = false
     historyLoadedCount.value = (message.payload as { historyTasks?: TaskHistoryEntry[] }).historyTasks?.length ?? 0
+    if (historyHasMore.value && window.localStorage.getItem('pi-companion:sidebar-task-list-mode') === 'workspace') {
+      loadTaskHistory(true)
+    }
   } else if (message.type === 'SettingsUpdated') {
     const nextSettings = message.payload as SettingsSnapshot
     appearancePreview.value = null
@@ -1751,6 +1754,9 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     historyLoading.value = false
     taskHistoryLoadAllPending = false
     historyLoadedCount.value = (message.payload as { historyTasks?: TaskHistoryEntry[] }).historyTasks?.length ?? 0
+    if (historyHasMore.value && window.localStorage.getItem('pi-companion:sidebar-task-list-mode') === 'workspace') {
+      loadTaskHistory(true)
+    }
   } else if (message.type === 'ScheduledTasksUpdated') {
     clearScheduledTaskPending()
   } else if (message.type === 'BridgeError') {
@@ -2104,6 +2110,12 @@ function openConversationSkills() {
 
 function showNavigationView(view: Parameters<typeof showMainView>[0]) {
   showMainView(view)
+}
+
+function loadFullTaskHistoryForSidebar() {
+  if (historyHasMore.value) {
+    loadTaskHistory(true)
+  }
 }
 
 function loadTaskHistory(loadAll = false) {
@@ -2684,6 +2696,8 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
     >
     <WorkspaceSidebar
       :recent-tasks="visibleRecentTasks"
+      :history-tasks="store.historyTasks"
+      :history-loading="historyLoading"
       :workspaces="store.workspaces"
       :recent-task-subtitle="settingsSnapshot.values.tasks.recentTaskSubtitle"
       :selected-history-task="selectedHistoryTask"
@@ -2691,6 +2705,8 @@ function resolveInteraction(block: TranscriptBlock, approved: boolean, response?
       :view="mainView"
       :width="sidebarWidth"
       @new-task="beginNewTask"
+      @new-task-in-workspace="beginNewTaskInWorkspace"
+      @request-full-history="loadFullTaskHistoryForSidebar"
       @show-view="showNavigationView"
       @select-task="selectTask"
       @open-context-menu="openTaskContextMenu"
