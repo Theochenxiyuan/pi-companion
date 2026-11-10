@@ -14,5 +14,9 @@ indent_size = 4
 indent_style = space
 indent_size = 2
 
+# Windows PowerShell 5.1 reads BOM-less scripts with the system code page.
+[*.ps1]
+charset = utf-8-bom
+
 [*.md]
 trim_trailing_whitespace = false

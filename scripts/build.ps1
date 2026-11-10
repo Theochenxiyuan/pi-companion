@@ -14,6 +14,8 @@ $explorerSmokeProject = Join-Path $repositoryRoot 'tests\PiCompanion.ExplorerCom
 $localDotnet = Join-Path $env:LOCALAPPDATA 'PiCompanionTools\dotnet\dotnet.exe'
 $dotnetCommand = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else { (Get-Command dotnet).Source }
 
+& (Join-Path $PSScriptRoot 'check-script-encoding.ps1')
+
 Push-Location $webSearchExtensionDirectory
 try {
     & npm ci

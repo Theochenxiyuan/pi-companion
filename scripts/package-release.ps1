@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Version = '0.5.0-preview',
     [ValidateSet('Debug', 'Release')]
@@ -272,60 +272,12 @@ if (![string]::IsNullOrWhiteSpace($PfxPath) -or ![string]::IsNullOrWhiteSpace($s
 }
 
 $installScriptPath = Join-Path $artifactsRoot 'Install-PiCompanion.ps1'
-$installScriptContent = @'
-[CmdletBinding()]
-param(
-    [switch]$Launch
-)
-
-$ErrorActionPreference = 'Stop'
-$scriptDir = $PSScriptRoot
-$msixFile = Get-ChildItem -LiteralPath $scriptDir -Filter 'PiCompanion-*-win-x64.msix' | Select-Object -First 1
-$cerFile = Get-ChildItem -LiteralPath $scriptDir -Filter 'PiCompanion-*-win-x64.cer' | Select-Object -First 1
-
-if ($null -eq $msixFile) {
-    throw "未在当前目录找到 PiCompanion MSIX 安装包。"
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'templates\Install-PiCompanion.ps1') -Destination $installScriptPath -Force
+$parseErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile($installScriptPath, [ref]$null, [ref]$parseErrors)
+if ($parseErrors.Count -gt 0) {
+    throw "Install-PiCompanion.ps1 has syntax errors: $($parseErrors[0].Message) (line $($parseErrors[0].Extent.StartLineNumber))"
 }
-
-if ($null -ne $cerFile) {
-    $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($cerFile.FullName)
-    $trusted = Get-ChildItem -Path Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPeople -ErrorAction SilentlyContinue |
-        Where-Object { $_.Thumbprint -eq $cert.Thumbprint } |
-        Select-Object -First 1
-
-    if ($null -eq $trusted) {
-        Write-Host "正在请求管理员权限以信任预览版签名证书 ($($cert.Subject))..." -ForegroundColor Cyan
-        $importCmd = "Import-Certificate -FilePath '$($cerFile.FullName.Replace("'", "''"))' -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null"
-        $proc = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList @(
-            '-NoProfile',
-            '-ExecutionPolicy', 'Bypass',
-            '-Command', $importCmd
-        )
-        if ($proc.ExitCode -ne 0) {
-            throw "证书导入未完成（退出码 $($proc.ExitCode)）。"
-        }
-    }
-}
-
-foreach ($pkgName in @('PiCompanion.Development', 'PiCompanion')) {
-    Get-AppxPackage -Name $pkgName -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Host "正在移除旧版本 $($_.PackageFullName)..." -ForegroundColor Yellow
-        Remove-AppxPackage -Package $_.PackageFullName
-    }
-}
-
-Write-Host "正在安装 $($msixFile.Name)..." -ForegroundColor Cyan
-Add-AppxPackage -Path $msixFile.FullName
-
-Write-Host "Pi Companion 安装完成！可从开始菜单或 Windows 11 资源管理器右键菜单启动。" -ForegroundColor Green
-if ($Launch) {
-    $installed = Get-AppxPackage -Name 'PiCompanion' | Select-Object -First 1
-    if ($null -ne $installed) {
-        Start-Process "shell:AppsFolder\$($installed.PackageFamilyName)!PiCompanion"
-    }
-}
-'@
-[IO.File]::WriteAllText($installScriptPath, $installScriptContent, [Text.UTF8Encoding]::new($true))
 
 Write-Host "Building Portable ZIP archive..." -ForegroundColor Cyan
 $portableZipPath = Join-Path $artifactsRoot "PiCompanion-v$cleanVersion-win-x64-portable.zip"
