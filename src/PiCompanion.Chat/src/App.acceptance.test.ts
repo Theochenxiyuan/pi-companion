@@ -1732,8 +1732,8 @@ describe('Agent Chat stage 5 acceptance', () => {
     expect(sidebarTasks[0]!.text()).toContain(currentTask.title)
     expect(sidebarTasks[0]!.classes()).toContain('selected-history-item')
     expect(sidebarTasks.some(task => task.text().includes('最近任务 5'))).toBe(true)
-    expect(wrapper.get('.selected-history-item + .section-label').text()).toBe('最近')
-    expect(wrapper.get('.history-region > .section-label').text()).toBe('最近')
+    expect(wrapper.get('.selected-history-item + .section-label').text()).toBe('任务')
+    expect(wrapper.get('.history-region > .section-label').text()).toBe('任务')
     expect(wrapper.find('.history > .section-label').exists()).toBe(false)
     expect(wrapper.findAll('.history-item.current')).toHaveLength(1)
 

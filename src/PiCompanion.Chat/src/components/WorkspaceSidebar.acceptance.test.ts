@@ -20,6 +20,7 @@ const completedTask: TaskHistoryEntry = {
 afterEach(() => {
   setLocale('zh-CN')
   window.localStorage.removeItem('pi-companion:sidebar-task-list-mode')
+  window.localStorage.removeItem('pi-companion:sidebar-task-status-filter')
   window.localStorage.removeItem('pi-companion:sidebar-collapsed-workspaces')
 })
 
@@ -163,12 +164,26 @@ describe('WorkspaceSidebar', () => {
     })
 
     expect(wrapper.find('.selected-history-item').exists()).toBe(true)
-    expect(wrapper.get('.history-region > .section-label').text()).toBe('最近')
+    expect(wrapper.get('.history-heading > span').text()).toBe('任务')
 
     await wrapper.get('.history-mode-toggle').trigger('click')
+    const menuOptions = wrapper.get('.history-view-popover').findAll('[role="menuitemradio"]')
+    expect(wrapper.get('.history-view-popover').text()).toContain('分组方式')
+    expect(wrapper.get('.history-view-popover').text()).toContain('状态筛选')
+    expect(menuOptions.map(node => node.text())).toEqual([
+      expect.stringContaining('按工作区'),
+      expect.stringContaining('单列表'),
+      expect.stringContaining('全部'),
+      expect.stringContaining('进行中'),
+      expect.stringContaining('已完成'),
+      expect.stringContaining('已停止'),
+      expect.stringContaining('失败'),
+    ])
+
+    await menuOptions[0]!.trigger('click')
 
     expect(wrapper.emitted('requestFullHistory')).toBeTruthy()
-    expect(wrapper.get('.history-region > .section-label').text()).toBe('工作区')
+    expect(wrapper.get('.history-heading > span').text()).toBe('任务')
     expect(wrapper.find('.selected-history-item').exists()).toBe(false)
 
     const groupNames = wrapper.findAll('.sidebar-workspace-name').map(node => node.text())
@@ -201,6 +216,13 @@ describe('WorkspaceSidebar', () => {
     // Clicking the workspace + button emits newTaskInWorkspace
     await wrapper.get('.sidebar-workspace-new-task').trigger('click')
     expect(wrapper.emitted('newTaskInWorkspace')).toEqual([['workspace-1']])
+
+    // Filtering by active status shows empty state when all tasks are completed
+    await wrapper.get('.history-mode-toggle').trigger('click')
+    const activeFilterOption = wrapper.get('.history-view-popover').findAll('[role="menuitemradio"]')[3]
+    await activeFilterOption!.trigger('click')
+    expect(wrapper.findAll('.history-item-compact')).toHaveLength(0)
+    expect(wrapper.get('.history-empty').text()).toBe('没有匹配的任务')
 
     wrapper.unmount()
   })

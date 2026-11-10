@@ -6,6 +6,8 @@ import type {
 } from '@/types/bridge'
 import { activeTaskStatuses } from '@/utils/taskStatus'
 
+export type SidebarTaskStatusFilter = 'all' | 'active' | 'completed' | 'stopped' | 'failed'
+
 export interface SidebarWorkspaceGroup {
   key: string
   collapseKey: string
@@ -18,6 +20,17 @@ export interface SidebarWorkspaceGroup {
   hasActiveTask: boolean
   updatedAt: string
   tasks: TaskHistoryEntry[]
+}
+
+export function matchesSidebarTaskStatus(
+  task: TaskHistoryEntry,
+  statusFilter: SidebarTaskStatusFilter = 'all',
+) {
+  if (statusFilter === 'all') return true
+  if (statusFilter === 'active') return activeTaskStatuses.includes(task.status)
+  if (statusFilter === 'completed') return task.status === 'Completed'
+  if (statusFilter === 'stopped') return task.status === 'Interrupted'
+  return task.status === 'Failed'
 }
 
 function activityTime(task: TaskHistoryEntry) {
@@ -67,6 +80,7 @@ export function buildSidebarWorkspaceGroups(options: {
   historyTasks?: TaskHistoryEntry[]
   selectedHistoryTask?: TaskHistoryEntry | null
   workspaces?: WorkspaceHistoryEntry[]
+  statusFilter?: SidebarTaskStatusFilter
   directChatLabel: string
   directChatPath: string
 }): SidebarWorkspaceGroup[] {
@@ -81,7 +95,9 @@ export function buildSidebarWorkspaceGroups(options: {
     merged.set(options.selectedHistoryTask.id, options.selectedHistoryTask)
   }
 
+  const statusFilter = options.statusFilter ?? 'all'
   const sortedTasks = sortTasksByActivity([...merged.values()])
+    .filter((task) => matchesSidebarTaskStatus(task, statusFilter))
   const workspaces = options.workspaces ?? []
   const groups = new Map<string, SidebarWorkspaceGroup>()
 

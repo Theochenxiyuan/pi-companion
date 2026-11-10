@@ -1558,7 +1558,7 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     historyLoading.value = false
     taskHistoryLoadAllPending = false
     historyLoadedCount.value = (message.payload as { historyTasks?: TaskHistoryEntry[] }).historyTasks?.length ?? 0
-    if (historyHasMore.value && window.localStorage.getItem('pi-companion:sidebar-task-list-mode') === 'workspace') {
+    if (historyHasMore.value && sidebarNeedsFullHistory()) {
       loadTaskHistory(true)
     }
   } else if (message.type === 'SettingsUpdated') {
@@ -1754,7 +1754,7 @@ function consumeBridgeMessage(message: BridgeEnvelope) {
     historyLoading.value = false
     taskHistoryLoadAllPending = false
     historyLoadedCount.value = (message.payload as { historyTasks?: TaskHistoryEntry[] }).historyTasks?.length ?? 0
-    if (historyHasMore.value && window.localStorage.getItem('pi-companion:sidebar-task-list-mode') === 'workspace') {
+    if (historyHasMore.value && sidebarNeedsFullHistory()) {
       loadTaskHistory(true)
     }
   } else if (message.type === 'ScheduledTasksUpdated') {
@@ -2110,6 +2110,12 @@ function openConversationSkills() {
 
 function showNavigationView(view: Parameters<typeof showMainView>[0]) {
   showMainView(view)
+}
+
+function sidebarNeedsFullHistory() {
+  const mode = window.localStorage.getItem('pi-companion:sidebar-task-list-mode')
+  const filter = window.localStorage.getItem('pi-companion:sidebar-task-status-filter')
+  return mode === 'workspace' || Boolean(filter && filter !== 'all')
 }
 
 function loadFullTaskHistoryForSidebar() {

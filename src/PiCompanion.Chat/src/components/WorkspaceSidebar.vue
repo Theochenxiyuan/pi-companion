@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { UiButton } from '@/components/ui'
+import { DropdownMenuRadioGroup } from 'reka-ui'
+import { UiButton, UiMenu, UiMenuRadioItem } from '@/components/ui'
 import TaskHoverCard, {
   type HoverWorkspacePresentation,
   type TaskHoverCardMode,
@@ -12,7 +13,9 @@ import type { TaskHistoryEntry, WorkspaceHistoryEntry } from '@/types/bridge'
 import { formatRelativeTimestamp } from '@/utils/dateTime'
 import {
   buildSidebarWorkspaceGroups,
+  matchesSidebarTaskStatus,
   normalizeWorkspacePath,
+  type SidebarTaskStatusFilter,
   type SidebarWorkspaceGroup,
 } from '@/utils/taskHistory'
 import { taskStatusTone } from '@/utils/taskStatus'
@@ -21,6 +24,7 @@ import { useI18n } from '@/i18n'
 export type SidebarTaskListMode = 'recent' | 'workspace'
 
 const sidebarListModeStorageKey = 'pi-companion:sidebar-task-list-mode'
+const sidebarStatusFilterStorageKey = 'pi-companion:sidebar-task-status-filter'
 const sidebarCollapsedWorkspacesStorageKey = 'pi-companion:sidebar-collapsed-workspaces'
 const defaultWorkspaceTaskLimit = 5
 
@@ -55,9 +59,39 @@ const emit = defineEmits<{
   openSettings: []
 }>()
 
+const viewMenuOpen = ref(false)
 const listMode = ref<SidebarTaskListMode>(loadListMode())
+const statusFilter = ref<SidebarTaskStatusFilter>(loadStatusFilter())
 const collapsedWorkspaceKeys = ref(loadCollapsedWorkspaceKeys())
 const expandedTaskGroupKeys = ref(new Set<string>())
+
+const statusFilterOptions = computed<Array<{
+  value: SidebarTaskStatusFilter
+  label: string
+  tone?: string
+}>>(() => [
+  { value: 'all', label: t('全部') },
+  { value: 'active', label: t('进行中'), tone: 'running' },
+  { value: 'completed', label: t('已完成'), tone: 'success' },
+  { value: 'stopped', label: t('已停止'), tone: 'idle' },
+  { value: 'failed', label: t('失败'), tone: 'danger' },
+])
+
+const visibleSelectedHistoryTask = computed(() =>
+  props.selectedHistoryTask && matchesSidebarTaskStatus(props.selectedHistoryTask, statusFilter.value)
+    ? props.selectedHistoryTask
+    : null)
+
+const visibleRecentTasks = computed(() =>
+  statusFilter.value === 'all'
+    ? props.recentTasks
+    : props.recentTasks.filter(task => matchesSidebarTaskStatus(task, statusFilter.value)))
+
+const hasAnyTasks = computed(() =>
+  props.recentTasks.length > 0 || props.historyTasks.length > 0 || Boolean(props.selectedHistoryTask))
+
+const emptyTasksLabel = computed(() =>
+  statusFilter.value !== 'all' && hasAnyTasks.value ? t('没有匹配的任务') : t('暂无任务'))
 
 const workspaceGroups = computed(() =>
   buildSidebarWorkspaceGroups({
@@ -65,19 +99,24 @@ const workspaceGroups = computed(() =>
     historyTasks: props.historyTasks,
     selectedHistoryTask: props.selectedHistoryTask,
     workspaces: props.workspaces,
+    statusFilter: statusFilter.value,
     directChatLabel: t('直接对话'),
     directChatPath: t('由 Pi Companion 管理的隔离空间'),
   }))
 
 watch(
-  [listMode, () => props.recentTasks.length, () => props.historyTasks.length],
-  ([mode]) => {
-    if (mode === 'workspace') {
+  [listMode, statusFilter, () => props.recentTasks.length, () => props.historyTasks.length],
+  ([mode, filter]) => {
+    if (mode === 'workspace' || filter !== 'all') {
       emit('requestFullHistory')
     }
   },
   { immediate: true },
 )
+
+watch(viewMenuOpen, (open) => {
+  if (open) hideTaskHoverImmediately()
+})
 
 function loadListMode(): SidebarTaskListMode {
   if (typeof window === 'undefined') return 'recent'
@@ -86,11 +125,35 @@ function loadListMode(): SidebarTaskListMode {
     : 'recent'
 }
 
-function toggleListMode() {
+function setListMode(value: unknown) {
+  if (value !== 'recent' && value !== 'workspace') return
   hideTaskHoverImmediately()
-  const nextMode: SidebarTaskListMode = listMode.value === 'workspace' ? 'recent' : 'workspace'
-  listMode.value = nextMode
-  window.localStorage.setItem(sidebarListModeStorageKey, nextMode)
+  listMode.value = value
+  window.localStorage.setItem(sidebarListModeStorageKey, value)
+}
+
+function loadStatusFilter(): SidebarTaskStatusFilter {
+  if (typeof window === 'undefined') return 'all'
+  const stored = window.localStorage.getItem(sidebarStatusFilterStorageKey)
+  if (stored === 'active' || stored === 'completed' || stored === 'stopped' || stored === 'failed') {
+    return stored
+  }
+  return 'all'
+}
+
+function setStatusFilter(value: unknown) {
+  if (
+    value !== 'all' &&
+    value !== 'active' &&
+    value !== 'completed' &&
+    value !== 'stopped' &&
+    value !== 'failed'
+  ) {
+    return
+  }
+  hideTaskHoverImmediately()
+  statusFilter.value = value
+  window.localStorage.setItem(sidebarStatusFilterStorageKey, value)
 }
 
 function loadCollapsedWorkspaceKeys() {
@@ -281,46 +344,95 @@ onBeforeUnmount(() => {
 
     <div class="history-region">
       <UiButton
-        v-if="listMode === 'recent' && selectedHistoryTask"
+        v-if="listMode === 'recent' && visibleSelectedHistoryTask"
         class="history-item selected-history-item"
-        :class="{ current: view === 'chat' && selectedHistoryTask.id === currentTaskId }"
+        :class="{ current: view === 'chat' && visibleSelectedHistoryTask.id === currentTaskId }"
         type="button"
-        :aria-describedby="hoverMode === 'task-with-workspace' && hoveredTask?.id === selectedHistoryTask.id ? 'recent-task-hover-card' : undefined"
-        @pointerenter="showTaskHover($event, selectedHistoryTask, 'task-with-workspace')"
+        :aria-describedby="hoverMode === 'task-with-workspace' && hoveredTask?.id === visibleSelectedHistoryTask.id ? 'recent-task-hover-card' : undefined"
+        @pointerenter="showTaskHover($event, visibleSelectedHistoryTask, 'task-with-workspace')"
         @pointerleave="scheduleHideTaskHover"
-        @click="hideTaskHoverImmediately(); $emit('selectTask', selectedHistoryTask.id)"
-        @contextmenu.prevent.stop="hideTaskHoverImmediately(); $emit('openContextMenu', $event, selectedHistoryTask, false)"
+        @click="hideTaskHoverImmediately(); $emit('selectTask', visibleSelectedHistoryTask.id)"
+        @contextmenu.prevent.stop="hideTaskHoverImmediately(); $emit('openContextMenu', $event, visibleSelectedHistoryTask, false)"
       >
         <span class="history-copy">
-          <strong>{{ selectedHistoryTask.title }}</strong>
+          <strong>{{ visibleSelectedHistoryTask.title }}</strong>
           <span class="history-meta">
-            <span v-if="recentTaskSubtitle === 'latest-run'" class="history-state"><span class="history-status" :class="taskStatusTone(selectedHistoryTask.status)"></span><small>{{ latestRunStatus(selectedHistoryTask) }}</small></span>
-            <span v-else class="history-state"><small>{{ recentTaskWorkspaceName(selectedHistoryTask) }}</small></span>
-            <time v-if="formatRecentTaskTime(selectedHistoryTask.updatedAt)" class="history-updated" :datetime="selectedHistoryTask.updatedAt">{{ formatRecentTaskTime(selectedHistoryTask.updatedAt) }}</time>
+            <span v-if="recentTaskSubtitle === 'latest-run'" class="history-state"><span class="history-status" :class="taskStatusTone(visibleSelectedHistoryTask.status)"></span><small>{{ latestRunStatus(visibleSelectedHistoryTask) }}</small></span>
+            <span v-else class="history-state"><small>{{ recentTaskWorkspaceName(visibleSelectedHistoryTask) }}</small></span>
+            <time v-if="formatRecentTaskTime(visibleSelectedHistoryTask.updatedAt)" class="history-updated" :datetime="visibleSelectedHistoryTask.updatedAt">{{ formatRecentTaskTime(visibleSelectedHistoryTask.updatedAt) }}</time>
           </span>
         </span>
       </UiButton>
       <div class="section-label history-heading">
-        <span>{{ t(listMode === 'workspace' ? '工作区' : '最近') }}</span>
-        <UiButton
-          class="history-mode-toggle"
-          type="button"
-          :aria-pressed="listMode === 'workspace'"
-          :aria-label="t(listMode === 'workspace' ? '按最近排列' : '按工作区分组')"
-          :title="t(listMode === 'workspace' ? '按最近排列' : '按工作区分组')"
-          @click="toggleListMode"
+        <span>{{ t('任务') }}</span>
+        <UiMenu
+          v-model="viewMenuOpen"
+          class="history-view-menu"
+          content-class="history-view-popover"
+          :aria-label="t('任务列表选项')"
+          align="end"
         >
-          <svg v-if="listMode === 'workspace'" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
-          </svg>
-          <svg v-else viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 3.5h4.2l1.2 1.5H14v7.5H2z" />
-          </svg>
-        </UiButton>
+          <template #trigger="{ open: menuOpen }">
+            <UiButton
+              class="history-mode-toggle"
+              :class="{ active: listMode === 'workspace' || statusFilter !== 'all' }"
+              type="button"
+              :aria-expanded="menuOpen"
+              :aria-label="t('任务列表选项')"
+              :title="t('任务列表选项')"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 5h3.5M8.5 5H14M2 11h6.5M11.5 11H14" />
+                <circle cx="7" cy="5" r="1.5" />
+                <circle cx="10" cy="11" r="1.5" />
+              </svg>
+            </UiButton>
+          </template>
+          <div class="history-view-section-label">{{ t('分组方式') }}</div>
+          <DropdownMenuRadioGroup :model-value="listMode" @update:model-value="setListMode">
+            <UiMenuRadioItem value="workspace" class="history-view-option">
+              <span class="history-view-option-leading" aria-hidden="true">
+                <svg class="history-view-option-icon" viewBox="0 0 16 16">
+                  <path d="M2 3.5h4.2l1.2 1.5H14v7.5H2z" />
+                </svg>
+              </span>
+              <span class="history-view-option-label">{{ t('按工作区') }}</span>
+              <span class="history-view-option-check" aria-hidden="true">{{ listMode === 'workspace' ? '✓' : '' }}</span>
+            </UiMenuRadioItem>
+            <UiMenuRadioItem value="recent" class="history-view-option">
+              <span class="history-view-option-leading" aria-hidden="true">
+                <svg class="history-view-option-icon" viewBox="0 0 16 16">
+                  <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+                </svg>
+              </span>
+              <span class="history-view-option-label">{{ t('单列表') }}</span>
+              <span class="history-view-option-check" aria-hidden="true">{{ listMode === 'recent' ? '✓' : '' }}</span>
+            </UiMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <div class="history-view-separator" role="separator" />
+          <div class="history-view-section-label">{{ t('状态筛选') }}</div>
+          <DropdownMenuRadioGroup :model-value="statusFilter" @update:model-value="setStatusFilter">
+            <UiMenuRadioItem
+              v-for="option in statusFilterOptions"
+              :key="option.value"
+              :value="option.value"
+              class="history-view-option"
+            >
+              <span class="history-view-option-leading" aria-hidden="true">
+                <svg v-if="option.value === 'all'" class="history-view-option-icon" viewBox="0 0 16 16">
+                  <circle cx="8" cy="8" r="5" />
+                </svg>
+                <span v-else class="history-status" :class="option.tone"></span>
+              </span>
+              <span class="history-view-option-label">{{ option.label }}</span>
+              <span class="history-view-option-check" aria-hidden="true">{{ statusFilter === option.value ? '✓' : '' }}</span>
+            </UiMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </UiMenu>
       </div>
       <section v-if="listMode === 'recent'" class="history">
         <UiButton
-          v-for="task in recentTasks"
+          v-for="task in visibleRecentTasks"
           :key="task.id"
           class="history-item"
           :class="{ current: view === 'chat' && task.id === currentTaskId }"
@@ -340,7 +452,7 @@ onBeforeUnmount(() => {
             </span>
           </span>
         </UiButton>
-        <p v-if="recentTasks.length === 0" class="history-empty">{{ t('暂无任务') }}</p>
+        <p v-if="visibleRecentTasks.length === 0 && !visibleSelectedHistoryTask" class="history-empty">{{ emptyTasksLabel }}</p>
       </section>
       <section v-else class="history history-grouped" :aria-busy="historyLoading">
         <div
@@ -429,7 +541,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </template>
-        <p v-else class="history-empty">{{ t('暂无任务') }}</p>
+        <p v-else class="history-empty">{{ emptyTasksLabel }}</p>
       </section>
     </div>
 
