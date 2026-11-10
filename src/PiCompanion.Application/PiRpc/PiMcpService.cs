@@ -37,8 +37,25 @@ public sealed class PiMcpService(PiRuntimeResolver runtimeResolver, string helpe
         if (!Uri.TryCreate(redirectUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttp || !uri.IsLoopback)
             throw new InvalidOperationException("请粘贴浏览器中的完整回调地址。");
-        await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new { redirectUrl }, JsonOptions));
-        await process.StandardInput.FlushAsync();
+        StreamWriter input;
+        try
+        {
+            input = process.StandardInput;
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or InvalidOperationException)
+        {
+            throw new InvalidOperationException("登录已结束，请重新登录。");
+        }
+
+        // The helper can finish and be disposed as soon as it reads this line; RunAsync reports that outcome.
+        try
+        {
+            await input.WriteLineAsync(JsonSerializer.Serialize(new { redirectUrl }, JsonOptions));
+        }
+        catch (Exception exception) when (exception is ObjectDisposedException or IOException)
+        {
+            if (_logins.ContainsKey(requestId)) throw new InvalidOperationException("登录已结束，请重新登录。");
+        }
     }
 
     public async Task<PiMcpSnapshot> RunAsync(
