@@ -25,7 +25,7 @@
 
 ## 下载与安装
 
-系统要求：**Windows 11 x64（Build 22000 及以上）**，并已安装 Microsoft Edge WebView2 Runtime（Windows 11 默认自带）。Release 安装包已内置 .NET 运行时与私有的 Node.js + Pi 1.4.0 Runtime，无需额外部署开发环境。
+系统要求：**Windows 11 x64（Build 22000 及以上）**，并已安装 Microsoft Edge WebView2 Runtime（Windows 11 默认自带）。Release 安装包已内置 .NET 运行时与私有的 Node.js + Pi 1.5.1 Runtime，无需额外部署开发环境。
 
 前往 [**GitHub Releases**](https://github.com/Theochenxiyuan/pi-companion/releases) 下载最新版本：
 
@@ -69,7 +69,7 @@ Pi Companion 在本机直接驱动 Agent 执行操作，设计上遵循最小权
 
 ### 1. 环境准备与快速启动
 
-开发环境需要 Windows 11 x64、.NET 10 SDK、Node.js 24、Visual Studio 2022 Build Tools（含 x64 C++ 工具链）以及全局安装的 `@earendil-works/pi-coding-agent@1.4.0`。
+开发环境需要 Windows 11 x64、.NET 10 SDK、Node.js 24、Visual Studio 2022 Build Tools（含 x64 C++ 工具链）以及全局安装的 `@earendil-works/pi-coding-agent@1.5.1`。
 
 ```powershell
 git clone https://github.com/Theochenxiyuan/pi-companion.git

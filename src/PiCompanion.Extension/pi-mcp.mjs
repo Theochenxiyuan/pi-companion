@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
+import { findPackageJSON } from 'node:module'
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
 const iterator = lines[Symbol.asyncIterator]()
@@ -12,7 +13,8 @@ const entryDirectory = dirname(input.piEntry)
 const dist = basename(entryDirectory) === 'bundle' ? dirname(entryDirectory) : entryDirectory
 const moduleAt = relative => import(pathToFileURL(join(dist, relative)).href)
 const { getAgentDir } = await moduleAt('config.js')
-const { mcpNamespace, validateMcpServerConfig } = await moduleAt('core/mcp-servers.js')
+const { validateMcpServerConfig } = await moduleAt('core/mcp-servers.js')
+const { mcpNamespace } = await loadMcpClient()
 const { loadMcpConfig } = await moduleAt('extensions/mcp/config.js')
 const agentDir = input.agentDir ?? getAgentDir()
 const cwd = input.cwd ?? process.cwd()
@@ -26,6 +28,14 @@ const overrideKeys = ['enabled', 'exposure', 'toolExposure']
 const isRecord = value => !!value && typeof value === 'object' && !Array.isArray(value)
 const hasAuthorizationHeader = config => Object.keys(config.headers ?? {})
   .some(key => key.toLowerCase() === 'authorization')
+
+async function loadMcpClient() {
+  const legacy = await moduleAt('core/mcp-servers.js')
+  if (typeof legacy.mcpNamespace === 'function') return legacy
+  const packageJson = findPackageJSON('@earendil-works/pi-mcp', pathToFileURL(input.piEntry))
+  if (!packageJson) throw new Error('找不到 Pi 的 MCP 组件，请重新安装 Pi。')
+  return import(pathToFileURL(join(dirname(packageJson), 'dist', 'index.js')).href)
+}
 
 function resolveConfig(name, raw, scope, globals) {
   const isOverride = scope === 'project' && isRecord(raw) && raw.command === undefined && raw.url === undefined && raw.type === undefined

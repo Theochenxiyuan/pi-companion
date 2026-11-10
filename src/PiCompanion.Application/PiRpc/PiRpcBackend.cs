@@ -23,6 +23,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
     private const int MaximumWorkerCount = 2;
     private static readonly TimeSpan WarmWorkerIdleTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan WarmWorkerCleanupInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan GracefulShutdownTimeout = TimeSpan.FromSeconds(5);
     private const int MaximumNativeImageCount = 8;
     private const long MaximumNativeImageBytes = 10L * 1024 * 1024;
     private const long MaximumNativeImageTotalBytes = 24L * 1024 * 1024;
@@ -335,14 +336,12 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             if (!retained)
             {
                 context.ExpectedStop = true;
-                StopProcess(context);
-                await WaitForShutdownAsync(context).ConfigureAwait(false);
+                await ShutdownProcessAsync(context).ConfigureAwait(false);
             }
 
             if (evicted is not null)
             {
-                StopProcess(evicted);
-                await WaitForShutdownAsync(evicted).ConfigureAwait(false);
+                await ShutdownProcessAsync(evicted).ConfigureAwait(false);
             }
         }
         catch
@@ -1020,8 +1019,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             }
             finally
             {
-                StopProcess(context);
-                await WaitForShutdownAsync(context).ConfigureAwait(false);
+                await ShutdownProcessAsync(context).ConfigureAwait(false);
             }
         }
         finally
@@ -1102,8 +1100,19 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         foreach (var idle in warm)
         {
             idle.ExpectedStop = true;
-            StopProcess(idle);
-            DeleteRuntimeFiles(idle);
+        }
+
+        try
+        {
+            Task.WhenAll(warm.Select(ShutdownProcessAsync)).GetAwaiter().GetResult();
+        }
+        finally
+        {
+            foreach (var idle in warm)
+            {
+                StopProcess(idle);
+                DeleteRuntimeFiles(idle);
+            }
         }
     }
 
@@ -1162,11 +1171,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
             }
         }
 
-        foreach (var context in matches)
-        {
-            StopProcess(context);
-            WaitForShutdownAsync(context).GetAwaiter().GetResult();
-        }
+        Task.WhenAll(matches.Select(ShutdownProcessAsync)).GetAwaiter().GetResult();
     }
 
     private static bool HasWorkingDirectory(RunContext context, string workingDirectory) =>
@@ -1245,8 +1250,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
 
         foreach (var context in expired)
         {
-            StopProcess(context);
-            _ = WaitForShutdownAsync(context);
+            _ = ShutdownProcessAsync(context);
         }
     }
 
@@ -1663,10 +1667,9 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         foreach (var context in contexts)
         {
             context.ExpectedStop = true;
-            StopProcess(context);
         }
 
-        await Task.WhenAll(contexts.Select(WaitForShutdownAsync)).ConfigureAwait(false);
+        await Task.WhenAll(contexts.Select(ShutdownProcessAsync)).ConfigureAwait(false);
     }
 
     private async Task ConfigureReusedContextAsync(
@@ -2708,8 +2711,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
         {
             context.ExpectedStop = true;
             ClearCurrent(context);
-            StopProcess(context);
-            await WaitForShutdownAsync(context).ConfigureAwait(false);
+            await ShutdownProcessAsync(context).ConfigureAwait(false);
         }
         Emit(context, terminal.Kind, terminal.Status, terminal.Activity, terminal.Summary, terminalPayload);
         context.Completion.TrySetResult();
@@ -2742,8 +2744,7 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
 
         if (evicted is not null)
         {
-            StopProcess(evicted);
-            _ = WaitForShutdownAsync(evicted);
+            _ = ShutdownProcessAsync(evicted);
         }
 
         return true;
@@ -3227,6 +3228,25 @@ public sealed class PiRpcBackend : IAgentBackend, IAgentBackendPrewarmer, IAgent
                 _active.Remove(context.Request.RunId);
             }
         }
+    }
+
+    // Closing stdin lets Pi finish pending writes such as refreshed OAuth tokens before it exits.
+    private static async Task ShutdownProcessAsync(RunContext context)
+    {
+        if (context.Process is { } process)
+        {
+            try
+            {
+                process.StandardInput.Close();
+                await process.WaitForExitAsync().WaitAsync(GracefulShutdownTimeout).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is TimeoutException or InvalidOperationException or IOException)
+            {
+            }
+        }
+
+        StopProcess(context);
+        await WaitForShutdownAsync(context).ConfigureAwait(false);
     }
 
     private static void StopProcess(RunContext context)

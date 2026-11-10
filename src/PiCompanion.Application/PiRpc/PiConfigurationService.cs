@@ -400,9 +400,11 @@ public sealed class PiConfigurationService
             startInfo.ArgumentList.Add(argument);
         }
 
-        startInfo.ArgumentList.Add("--no-session");
+        startInfo.ArgumentList.Add("auth");
+        startInfo.ArgumentList.Add("login");
+        startInfo.ArgumentList.Add(providerId);
         _ = Process.Start(startInfo) ?? throw new InvalidOperationException("未能打开 Pi 登录终端。");
-        return $"已打开 Pi；请运行 /login {providerId}，完成后回到这里刷新状态。";
+        return "已在终端中打开登录，完成后回到这里刷新状态。";
     }
 
     private async Task<PiConfigurationSnapshot> InvokeAsync(object request, CancellationToken cancellationToken)
@@ -583,7 +585,7 @@ public sealed class PiConfigurationService
             RetryMaxDelayMilliseconds = legacySnapshot ? 60000 : snapshot.RetryMaxDelayMilliseconds,
             SteeringMode = string.IsNullOrWhiteSpace(snapshot.SteeringMode) ? "one-at-a-time" : snapshot.SteeringMode,
             FollowUpMode = string.IsNullOrWhiteSpace(snapshot.FollowUpMode) ? "one-at-a-time" : snapshot.FollowUpMode,
-            CacheWarming = snapshot.CacheWarming is "streaming" or "idle" ? snapshot.CacheWarming : "off",
+            CacheWarming = snapshot.CacheWarming is "off" or "streaming" or "idle" ? snapshot.CacheWarming : "idle",
             CustomProviders = snapshot.CustomProviders ?? [],
         };
     }

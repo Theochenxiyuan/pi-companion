@@ -1105,7 +1105,7 @@ const english: Record<string, string> = {
   '自动重试': 'Automatic retry',
   '遇到临时网络或服务问题时自动再试，减少手动重发。': 'Retry automatically after temporary network or service problems, reducing manual resubmission.',
   '提示缓存保活': 'Prompt cache warming',
-  '在长时间工具调用期间刷新 Provider 提示缓存；空闲保活可能产生额外费用。': 'Refresh provider prompt caches during long tool calls. Idle warming may incur additional charges.',
+  '预计能节省费用时刷新提示缓存；空闲时最长保持 30 分钟。': 'Refresh prompt caches when it is expected to save cost. Idle caches stay warm for up to 30 minutes.',
   '仅任务运行中': 'Only while tasks run',
   '任务空闲时也保活': 'Also while idle',
   '通知': 'Notifications',

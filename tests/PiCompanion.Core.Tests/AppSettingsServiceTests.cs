@@ -56,7 +56,7 @@ public sealed class AppSettingsServiceTests
             Assert.Equal(15, saved.Tasks.AutoStartLocalQueueDelaySeconds);
             Assert.Equal("openai-codex/gpt-5.6-sol", saved.Agent.DefaultModel);
             Assert.Equal("max", saved.Agent.DefaultThinkingLevel);
-            Assert.Equal("off", saved.Agent.CacheWarming);
+            Assert.Equal("idle", saved.Agent.CacheWarming);
             Assert.Equal(1024, saved.Agent.CompactionReserveTokens);
             Assert.Equal(262144, saved.Agent.CompactionKeepRecentTokens);
             Assert.Equal(20, saved.Agent.RetryMaxRetries);
